@@ -1,35 +1,24 @@
 # Stage 1: Build
 FROM node:20-alpine AS builder
 
-WORKDIR /app
-
-# Installer pnpm
-RUN npm install -g pnpm
-
-# Copier les fichiers de dépendances
-COPY pnpm-lock.yaml package.json ./
+WORKDIR /a# Copier les fichiers de dépendances
+COPY package.json package-lock.json* ./
 
 # Installer les dépendances
-RUN pnpm install --frozen-lockfile
+RUN npm install
 
 # Copier le code source
 COPY . .
-
-# Construire l'application
-RUN pnpm run build
-
+RUN npm run 
 # Stage 2: Runtime
 FROM node:20-alpine
 
 WORKDIR /app
 
-# Installer pnpm
-RUN npm install -g pnpm
-
-# Copier les dépendances du builder
+# Inbuild# Copier les dépendances du builder
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/pnpm-lock.yaml ./pnpm-lock.yaml
+COPY --from=builder /app/lock.yaml ./pnpm-lock.yaml
 
 # Copier les fichiers construits
 COPY --from=builder /app/dist ./dist
