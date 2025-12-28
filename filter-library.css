@@ -1,0 +1,306 @@
+/* Filter Library Styles */
+
+.filter-library {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1rem;
+  background: #1a1a1a;
+  color: #fff;
+  border-radius: 0.5rem;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+/* Category Tabs */
+.filter-categories {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #333;
+}
+
+.category-tab {
+  padding: 0.5rem 1rem;
+  background: transparent;
+  border: 1px solid #444;
+  border-radius: 2rem;
+  color: #aaa;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  font-size: 0.9rem;
+}
+
+.category-tab:hover {
+  border-color: #667eea;
+  color: #667eea;
+}
+
+.category-tab.active {
+  background: #667eea;
+  border-color: #667eea;
+  color: white;
+}
+
+/* Selected Filters */
+.selected-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.selected-filters h4 {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #aaa;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.filters-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.filter-tag {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #667eea;
+  padding: 0.4rem 0.8rem;
+  border-radius: 1rem;
+  font-size: 0.85rem;
+  color: white;
+}
+
+.filter-tag .remove-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: white;
+  padding: 0;
+}
+
+.filter-tag .remove-btn:hover {
+  background: rgba(255, 255, 255, 0.4);
+  transform: scale(1.1);
+}
+
+/* Filter Grid */
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 1rem;
+}
+
+.filter-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: transparent;
+  border: 2px solid transparent;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+  overflow: hidden;
+}
+
+.filter-item:hover {
+  transform: translateY(-2px);
+}
+
+.filter-item.selected {
+  border-color: #4a9eff;
+  box-shadow: 0 0 12px rgba(74, 158, 255, 0.4);
+}
+
+.filter-preview {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 0.25rem;
+  transition: all 0.2s ease;
+}
+
+.filter-item:hover .filter-preview {
+  transform: scale(1.05);
+}
+
+.filter-name {
+  font-size: 0.75rem;
+  text-align: center;
+  color: #aaa;
+  transition: color 0.2s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.filter-item:hover .filter-name {
+  color: #fff;
+}
+
+/* Scrollbar */
+.filter-library::-webkit-scrollbar {
+  width: 6px;
+}
+
+.filter-library::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+
+.filter-library::-webkit-scrollbar-thumb {
+  background: #667eea;
+  border-radius: 3px;
+}
+
+.filter-library::-webkit-scrollbar-thumb:hover {
+  background: #4a9eff;
+}
+
+.filter-categories::-webkit-scrollbar {
+  height: 4px;
+}
+
+.filter-categories::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.filter-categories::-webkit-scrollbar-thumb {
+  background: #667eea;
+  border-radius: 2px;
+}
+
+/* Mobile Optimizations */
+@media (max-width: 768px) {
+  .filter-library {
+    max-height: 400px;
+    padding: 0.75rem;
+    gap: 1rem;
+  }
+
+  .filter-grid {
+    grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .filter-name {
+    font-size: 0.7rem;
+  }
+
+  .category-tab {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.8rem;
+  }
+}
+
+/* Landscape Mode */
+@media (orientation: landscape) {
+  .filter-library {
+    max-height: 300px;
+  }
+
+  .filter-grid {
+    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+  }
+}
+
+/* Dark Mode */
+@media (prefers-color-scheme: dark) {
+  .filter-library {
+    background: #1a1a1a;
+    color: #fff;
+  }
+
+  .filter-categories {
+    border-bottom-color: #333;
+  }
+
+  .category-tab {
+    border-color: #444;
+    color: #aaa;
+  }
+
+  .filter-name {
+    color: #aaa;
+  }
+}
+
+/* Light Mode */
+@media (prefers-color-scheme: light) {
+  .filter-library {
+    background: #f5f5f5;
+    color: #000;
+  }
+
+  .filter-categories {
+    border-bottom-color: #ddd;
+  }
+
+  .category-tab {
+    border-color: #ddd;
+    color: #666;
+  }
+
+  .category-tab:hover {
+    border-color: #667eea;
+    color: #667eea;
+  }
+
+  .filter-name {
+    color: #666;
+  }
+
+  .filter-item:hover .filter-name {
+    color: #000;
+  }
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.filter-item {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Accessibility */
+.category-tab:focus,
+.filter-item:focus {
+  outline: 2px solid #4a9eff;
+  outline-offset: 2px;
+}
+
+.filter-tag .remove-btn:focus {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 1px;
+}
+
+/* Performance */
+.filter-preview {
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+.filter-item {
+  will-change: transform;
+  backface-visibility: hidden;
+}

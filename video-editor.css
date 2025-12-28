@@ -1,0 +1,410 @@
+/* Video Editor Styles */
+
+.video-editor-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #1a1a1a;
+  color: #fff;
+  gap: 1rem;
+  padding: 1rem;
+  overflow: hidden;
+}
+
+/* Preview Section */
+.editor-preview {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #000;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.preview-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.timeline-info {
+  position: absolute;
+  bottom: 1rem;
+  right: 1rem;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 0.5rem 1rem;
+  border-radius: 0.25rem;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9rem;
+}
+
+.timeline-info .separator {
+  margin: 0 0.5rem;
+  opacity: 0.5;
+}
+
+/* Timeline Container */
+.timeline-container {
+  background: #2a2a2a;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.timeline-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.timeline-header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.timeline-clips {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.timeline-clip {
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: 2px solid transparent;
+  border-radius: 0.25rem;
+  padding: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+}
+
+.timeline-clip:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.timeline-clip.selected {
+  border-color: #4a9eff;
+  box-shadow: 0 0 12px rgba(74, 158, 255, 0.6);
+}
+
+.clip-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+}
+
+.clip-number {
+  font-weight: bold;
+}
+
+.clip-duration {
+  opacity: 0.8;
+}
+
+.clip-actions {
+  display: flex;
+  gap: 0.25rem;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.timeline-clip:hover .clip-actions {
+  opacity: 1;
+}
+
+/* Clip Editor Panel */
+.clip-editor-panel {
+  background: #2a2a2a;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.clip-editor-panel h3 {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+}
+
+.editor-section {
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.editor-section label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.trim-controls {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.trim-slider,
+.control-slider {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: #444;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.trim-slider::-webkit-slider-thumb,
+.control-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #667eea;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.trim-slider::-webkit-slider-thumb:hover,
+.control-slider::-webkit-slider-thumb:hover {
+  background: #4a9eff;
+  transform: scale(1.2);
+}
+
+.trim-slider::-moz-range-thumb,
+.control-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #667eea;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s ease;
+}
+
+.trim-slider::-moz-range-thumb:hover,
+.control-slider::-moz-range-thumb:hover {
+  background: #4a9eff;
+  transform: scale(1.2);
+}
+
+.trim-slider::-moz-range-track,
+.control-slider::-moz-range-track {
+  background: transparent;
+  border: none;
+}
+
+.trim-controls span {
+  font-size: 0.85rem;
+  min-width: 50px;
+  text-align: right;
+  font-family: 'Courier New', monospace;
+}
+
+.editor-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.editor-actions button {
+  flex: 1;
+}
+
+/* Editor Controls */
+.editor-controls {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  padding: 1rem;
+  background: #2a2a2a;
+  border-radius: 0.5rem;
+}
+
+.editor-controls button {
+  flex: 1;
+  max-width: 150px;
+}
+
+/* Scrollbar Styling */
+.timeline-container::-webkit-scrollbar,
+.clip-editor-panel::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+
+.timeline-container::-webkit-scrollbar-track,
+.clip-editor-panel::-webkit-scrollbar-track {
+  background: #1a1a1a;
+  border-radius: 3px;
+}
+
+.timeline-container::-webkit-scrollbar-thumb,
+.clip-editor-panel::-webkit-scrollbar-thumb {
+  background: #667eea;
+  border-radius: 3px;
+}
+
+.timeline-container::-webkit-scrollbar-thumb:hover,
+.clip-editor-panel::-webkit-scrollbar-thumb:hover {
+  background: #4a9eff;
+}
+
+/* Mobile Optimizations */
+@media (max-width: 768px) {
+  .video-editor-container {
+    padding: 0.75rem;
+    gap: 0.75rem;
+  }
+
+  .timeline-container {
+    max-height: 150px;
+  }
+
+  .clip-editor-panel {
+    max-height: 200px;
+  }
+
+  .editor-controls {
+    flex-wrap: wrap;
+  }
+
+  .editor-controls button {
+    max-width: 100%;
+    flex: 1 1 calc(50% - 0.5rem);
+  }
+
+  .timeline-clip {
+    min-height: 60px;
+    padding: 0.4rem;
+  }
+
+  .clip-info {
+    font-size: 0.7rem;
+  }
+}
+
+/* Landscape Mode */
+@media (orientation: landscape) {
+  .video-editor-container {
+    flex-direction: row;
+  }
+
+  .editor-preview {
+    flex: 2;
+  }
+
+  .timeline-container,
+  .clip-editor-panel {
+    flex: 1;
+    max-height: none;
+  }
+
+  .editor-controls {
+    flex-direction: column;
+    width: 150px;
+  }
+
+  .editor-controls button {
+    max-width: 100%;
+  }
+}
+
+/* Animations */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.timeline-clip {
+  animation: slideIn 0.3s ease-out;
+}
+
+/* Dark Mode */
+@media (prefers-color-scheme: dark) {
+  .video-editor-container {
+    background: #1a1a1a;
+  }
+
+  .editor-preview {
+    background: #000;
+  }
+
+  .timeline-container,
+  .clip-editor-panel,
+  .editor-controls {
+    background: #2a2a2a;
+  }
+}
+
+/* Light Mode */
+@media (prefers-color-scheme: light) {
+  .video-editor-container {
+    background: #f5f5f5;
+    color: #000;
+  }
+
+  .editor-preview {
+    background: #fff;
+  }
+
+  .timeline-container,
+  .clip-editor-panel,
+  .editor-controls {
+    background: #e8e8e8;
+  }
+
+  .timeline-clip {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  }
+
+  .trim-slider,
+  .control-slider {
+    background: #ddd;
+  }
+
+  .timeline-info {
+    background: rgba(255, 255, 255, 0.9);
+    color: #000;
+  }
+}
+
+/* Accessibility */
+button:focus {
+  outline: 2px solid #4a9eff;
+  outline-offset: 2px;
+}
+
+.trim-slider:focus,
+.control-slider:focus {
+  outline: 2px solid #4a9eff;
+  outline-offset: 2px;
+}
+
+/* Performance */
+.timeline-clip,
+.preview-video {
+  will-change: transform;
+  backface-visibility: hidden;
+}
