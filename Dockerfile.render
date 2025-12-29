@@ -6,38 +6,32 @@ WORKDIR /app
 # Copier les fichiers de dépendances
 COPY package.json package-lock.json* ./
 
-# Installer les dépendances
+# Installer les dépendances (compatible Render)
 RUN npm install --legacy-peer-deps
 
 # Copier le code source
 COPY . .
 
-# Construire l'application (Vite + esbuild)
+# Build fullstack (Vite + esbuild)
 RUN npm run build
+
 
 # Stage 2: Runtime
 FROM node:20-alpine
 
 WORKDIR /app
 
-# Copier les dépendances du builder
+# Copier le build et les dépendances
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
-
-# Copier les fichiers construits
 COPY --from=builder /app/dist ./dist
 
-# Créer un utilisateur non-root
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nodejs -u 1001
+# Utilisateur non-root
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 USER nodejs
 
-# Exposer le port
+# Port utilisé par Render
 EXPOSE 3000
 
-# Healthcheck
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})" || exit 1
-
-# Démarrer l'application
+# Démarrage du serveur
 CMD ["node", "dist/index.js"]
