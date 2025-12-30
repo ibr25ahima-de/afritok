@@ -3,11 +3,15 @@ import express from "express";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
+
 import { registerOAuthRoutes } from "./oauth";
-import { appRouter } from "./routers";
+import { appRouter } from "../routers";
 import { createContext } from "./context";
-import { serveStatic, setupVite } from "./vite";
-import { handleStripeWebhook, testStripeWebhook } from "./webhook-endpoint";
+
+// ⚠️ CHEMIN CORRIGÉ ICI
+import { serveStatic, setupVite } from "../vite";
+
+import { handleStripeWebhook, testStripeWebhook } from "../webhook-endpoint";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -32,18 +36,22 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
 
-  // Webhook Stripe DOIT être AVANT express.json() pour avoir accès au raw body
-  app.post('/api/webhooks/stripe', express.raw({type: 'application/json'}), handleStripeWebhook);
-  app.post('/api/webhooks/stripe/test', express.json(), testStripeWebhook);
+  app.post(
+    "/api/webhooks/stripe",
+    express.raw({ type: "application/json" }),
+    handleStripeWebhook
+  );
+  app.post(
+    "/api/webhooks/stripe/test",
+    express.json(),
+    testStripeWebhook
+  );
 
-  // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-  // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
 
-  // tRPC API
   app.use(
     "/api/trpc",
     createExpressMiddleware({
@@ -52,7 +60,6 @@ async function startServer() {
     })
   );
 
-  // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
   } else {
@@ -62,12 +69,8 @@ async function startServer() {
   const preferredPort = parseInt(process.env.PORT || "3000");
   const port = await findAvailablePort(preferredPort);
 
-  if (port !== preferredPort) {
-    console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
-  }
-
   server.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}/`);
+    console.log(`Server running on http://localhost:${port}`);
   });
 }
 
