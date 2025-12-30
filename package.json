@@ -3,12 +3,10 @@
   "version": "1.0.0",
   "type": "module",
   "license": "MIT",
-  "scripts": {
-    "dev": "NODE_ENV=development tsx watch index.ts",
-    "build": "esbuild index.ts --platform=node --bundle --format=esm --outdir=dist",
-    "start": "NODE_ENV=production node dist/index.js"
-  },
-  "dependencies": {
+ "scripts": {
+  "dev": "NODE_ENV=development tsx index.ts",
+  "start": "NODE_ENV=production tsx index.ts"
+}, "dependencies": {
     "express": "^4.21.2",
     "dotenv": "^17.2.2",
     "@trpc/server": "^11.6.0"
