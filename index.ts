@@ -5,13 +5,12 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 
 import { registerOAuthRoutes } from "./oauth";
-import { appRouter } from "../routers";
 import { createContext } from "./context";
 
-// ⚠️ CHEMIN CORRIGÉ ICI
-import { serveStatic, setupVite } from "../vite";
-
-import { handleStripeWebhook, testStripeWebhook } from "../webhook-endpoint";
+// ✅ chemins corrigés
+import { appRouter } from "./routers";
+import { serveStatic, setupVite } from "./vite";
+import { handleStripeWebhook, testStripeWebhook } from "./webhook-endpoint";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -66,8 +65,7 @@ async function startServer() {
     serveStatic(app);
   }
 
-  const preferredPort = parseInt(process.env.PORT || "3000");
-  const port = await findAvailablePort(preferredPort);
+  const port = parseInt(process.env.PORT || "3000");
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);
