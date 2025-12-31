@@ -6,10 +6,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 
 import { registerOAuthRoutes } from "./oauth";
 import { createContext } from "./context";
-
-// ✅ chemins corrigés
 import { appRouter } from "./routers";
-import { serveStatic, setupVite } from "./vite";
 import { handleStripeWebhook, testStripeWebhook } from "./webhook-endpoint";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -28,7 +25,7 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
       return port;
     }
   }
-  throw new Error(`No available port found starting from ${startPort}`);
+  return startPort;
 }
 
 async function startServer() {
@@ -59,16 +56,12 @@ async function startServer() {
     })
   );
 
-  if (process.env.NODE_ENV === "development") {
-    await setupVite(app, server);
-  } else {
-    serveStatic(app);
-  }
-
-  const port = parseInt(process.env.PORT || "3000");
+  const port = await findAvailablePort(
+    parseInt(process.env.PORT || "3000")
+  );
 
   server.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}`);
+    console.log(`✅ Server running on port ${port}`);
   });
 }
 
