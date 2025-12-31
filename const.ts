@@ -1,4 +1,6 @@
-export { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+// Constantes définies directement ici (plus de shared/const)
+export const COOKIE_NAME = "afritok_session";
+export const ONE_YEAR_MS = 1000 * 60 * 60 * 24 * 365;
 
 export const APP_TITLE = import.meta.env.VITE_APP_TITLE || "App";
 
@@ -10,6 +12,7 @@ export const APP_LOGO =
 export const getLoginUrl = () => {
   const oauthPortalUrl = import.meta.env.VITE_OAUTH_PORTAL_URL;
   const appId = import.meta.env.VITE_APP_ID;
+
   const redirectUri = `${window.location.origin}/api/oauth/callback`;
   const state = btoa(redirectUri);
 
