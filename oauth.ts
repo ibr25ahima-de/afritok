@@ -1,8 +1,14 @@
-import { COOKIE_NAME, ONE_YEAR_MS } from "./shared/const";
 import type { Express, Request, Response } from "express";
-import * as db from "./db";
+import * as db from "../db";
 import { getSessionCookieOptions } from "./cookies";
 import { sdk } from "./sdk";
+
+/**
+ * Constantes locales
+ * (on ne dépend plus de @shared)
+ */
+const COOKIE_NAME = "afritok_session";
+const ONE_YEAR_MS = 1000 * 60 * 60 * 24 * 365;
 
 function getQueryParam(req: Request, key: string): string | undefined {
   const value = req.query[key];
@@ -42,6 +48,7 @@ export function registerOAuthRoutes(app: Express) {
       });
 
       const cookieOptions = getSessionCookieOptions(req);
+
       res.cookie(COOKIE_NAME, sessionToken, {
         ...cookieOptions,
         maxAge: ONE_YEAR_MS,
