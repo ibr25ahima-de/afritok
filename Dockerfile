@@ -8,6 +8,8 @@ RUN npm install
 
 COPY . .
 
-EXPOSE 3000
+# 🔴 IMPORTANT : on compile TypeScript
+RUN npm run build
 
-CMD ["node", "index.js"]
+# 🔴 On démarre le serveur compilé
+CMD ["node", "dist/server.js"]
