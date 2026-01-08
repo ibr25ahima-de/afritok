@@ -6,20 +6,20 @@ RUN apk add --no-cache unzip
 
 COPY afritok-complete_1.zip /app/
 
+# Dézip
 RUN unzip afritok-complete_1.zip
 
-# Affiche le contenu pour debug (important)
-RUN ls -la /app
+# Aller dans le frontend
+WORKDIR /app/upload/client
 
-# Aller dans le bon dossier automatiquement
-WORKDIR /app
-
-# Installer les dépendances (si package.json est à la racine extraite)
+# Installer les dépendances
 RUN npm install
 
-# Build
+# Build frontend
 RUN npm run build
 
-EXPOSE 3000
+# Render utilise le port 10000
+EXPOSE 10000
 
-CMD ["npm", "run", "preview"]
+# Lancer Vite sur le port Render
+CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "10000"]
