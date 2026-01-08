@@ -1,16 +1,25 @@
-# Image Node officielle
 FROM node:18-alpine
 
-# Dossier de travail
 WORKDIR /app
 
-# Installer unzip
 RUN apk add --no-cache unzip
 
-# Copier le zip dans le conteneur
 COPY afritok-complete_1.zip /app/
 
-# Dézipper l'application
-RUN unzip afritok-complete_1.zip && rm afritok-complete_1.zip
+RUN unzip afritok-complete_1.zip
 
-# Aller dans le dossier extrait (adapter
+# Affiche le contenu pour debug (important)
+RUN ls -la /app
+
+# Aller dans le bon dossier automatiquement
+WORKDIR /app
+
+# Installer les dépendances (si package.json est à la racine extraite)
+RUN npm install
+
+# Build
+RUN npm run build
+
+EXPOSE 3000
+
+CMD ["npm", "run", "preview"]
