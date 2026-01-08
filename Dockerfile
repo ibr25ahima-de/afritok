@@ -1,24 +1,16 @@
+# Image Node officielle
+FROM node:18-alpine
 
-# Utilise Node 20 Alpine (léger)
-FROM node:20-alpine
-
-# Définit le répertoire de travail
+# Dossier de travail
 WORKDIR /app
 
-# Copie package.json et package-lock.json
-COPY package.json package-lock.json* ./
+# Installer unzip
+RUN apk add --no-cache unzip
 
-# Installe les dépendances
-RUN npm install
+# Copier le zip dans le conteneur
+COPY afritok-complete_1.zip /app/
 
-# Copie tout le reste du projet
-COPY . .
+# Dézipper l'application
+RUN unzip afritok-complete_1.zip && rm afritok-complete_1.zip
 
-# Compile TypeScript
-RUN npm run build
-
-# Expose le port fourni par Render
-EXPOSE 3000
-
-# Commande pour démarrer l'application
-CMD ["node", "dist/index.js"]
+# Aller dans le dossier extrait (adapter
