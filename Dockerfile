@@ -1,25 +1,21 @@
-FROM node:18-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 
-RUN apk add --no-cache unzip
+# Copier les fichiers de dépendances
+COPY package*.json ./
 
-COPY afritok-complete_1.zip /app/
+# Installer les dépendances en ignorant les conflits de peer deps
+RUN npm install --legacy-peer-deps
 
-# Dézip
-RUN unzip afritok-complete_1.zip
+# Copier le reste du projet
+COPY . .
 
-# Aller dans le frontend
-WORKDIR /app/upload/client
-
-# Installer les dépendances
-RUN npm install
-
-# Build frontend
+# Build Vite
 RUN npm run build
 
-# Render utilise le port 10000
-EXPOSE 10000
+# Exposer le port (si preview ou serveur)
+EXPOSE 4173
 
-# Lancer Vite sur le port Render
-CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "10000"]
+# Lancer l’app
+CMD ["npm", "run", "preview"]
