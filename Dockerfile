@@ -1,21 +1,22 @@
 FROM node:20-alpine
 
+# Dossier de travail
 WORKDIR /app
 
-# Copier les fichiers de dépendances
-COPY package*.json ./
-
-# Installer les dépendances en ignorant les conflits de peer deps
-RUN npm install --legacy-peer-deps
-
-# Copier le reste du projet
+# Copier tout le projet
 COPY . .
 
-# Build Vite
+# Aller dans le frontend
+WORKDIR /app/upload/client
+
+# Installer les dépendances (sans conflit)
+RUN npm install --legacy-peer-deps
+
+# Build du frontend
 RUN npm run build
 
-# Exposer le port (si preview ou serveur)
-EXPOSE 4173
+# Exposer le port utilisé par Vite preview
+EXPOSE 10000
 
-# Lancer l’app
-CMD ["npm", "run", "preview"]
+# Lancer le frontend
+CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "10000"]
