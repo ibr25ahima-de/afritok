@@ -11,28 +11,14 @@ COPY afritok-complete_1.zip /app/app.zip
 RUN unzip app.zip && rm app.zip
 
 # =====================
-# BACKEND
+# BACKEND + FRONTEND (build commun)
 # =====================
 WORKDIR /app/upload/afritok
 RUN npm install --legacy-peer-deps
 RUN npm run build
-
-# =====================
-# FRONTEND
-# =====================
-WORKDIR /app/upload/afritok/client
-RUN npm install --legacy-peer-deps
-RUN npm run build
-
-# =====================
-# COPIE FRONTEND -> BACKEND
-# =====================
-RUN rm -rf /app/upload/afritok/public
-RUN cp -r /app/upload/afritok/client/dist/public /app/upload/afritok/public
 
 # =====================
 # LANCEMENT
 # =====================
-WORKDIR /app/upload/afritok
 EXPOSE 10000
 CMD ["npm", "start"]
