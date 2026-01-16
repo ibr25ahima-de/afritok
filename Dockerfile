@@ -1,4 +1,4 @@
-FROM node:20-alpine
+public node:20-alpine
 
 WORKDIR /app
 
@@ -25,7 +25,7 @@ RUN npm run build
 
 # Copier le build frontend vers le backend (public)
 RUN rm -rf /app/upload/afritok/public
-RUN cp -r dist /app/upload/afritok/public
+RUN cp -r dist/public /app/upload/afritok/public
 
 # =====================
 # LANCEMENT
