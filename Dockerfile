@@ -1,4 +1,5 @@
-public node:20-alpine
+
+FROM node:20-alpine
 
 WORKDIR /app
 
@@ -23,9 +24,11 @@ WORKDIR /app/upload/afritok/client
 RUN npm install --legacy-peer-deps
 RUN npm run build
 
-# Copier le build frontend vers le backend (public)
+# =====================
+# COPIE FRONTEND -> BACKEND
+# =====================
 RUN rm -rf /app/upload/afritok/public
-RUN cp -r dist/public /app/upload/afritok/public
+RUN cp -r /app/upload/afritok/client/dist/public /app/upload/afritok/public
 
 # =====================
 # LANCEMENT
