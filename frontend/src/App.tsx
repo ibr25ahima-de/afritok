@@ -32,25 +32,23 @@ function Router() {
 
   return (
     <Switch>
-      <Route path={"/"} component={Home} />
-      <Route path={"/feed"} component={Feed} />
-      <Route path={"/profile/:userId"} component={Profile} />
-      <Route path={"/monetization"} component={Monetization} />
-      <Route path={"/upload"} component={Upload} />
-      <Route path={"/search"} component={Search} />
-      <Route path={"/trending"} component={Trending} />
-      <Route path={"/edit-profile"} component={EditProfile} />
-      <Route path={"/my-videos"} component={MyVideos} />
-      <Route path={"/notifications"} component={Notifications} />
-      {user?.role === "admin" && <Route path={"/admin"} component={AdminDashboard} />}
-      <Route path={"/404"} component={NotFound} />
-      {/* Final fallback route */}
+      <Route path="/" component={Home} />
+      <Route path="/feed" component={Feed} />
+      <Route path="/profile/:userId" component={Profile} />
+      <Route path="/monetization" component={Monetization} />
+      <Route path="/upload" component={Upload} />
+      <Route path="/search" component={Search} />
+      <Route path="/trending" component={Trending} />
+      <Route path="/edit-profile" component={EditProfile} />
+      <Route path="/my-videos" component={MyVideos} />
+      <Route path="/notifications" component={Notifications} />
+      {user?.role === "admin" && <Route path="/admin" component={AdminDashboard} />}
       <Route component={NotFound} />
     </Switch>
   );
 }
 
-function App() {
+export default function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="dark">
@@ -64,17 +62,3 @@ function App() {
     </ErrorBoundary>
   );
 }
-
-export default App;
-import path from "path";
-import express from "express";
-
-const __dirname = new URL('.', import.meta.url).pathname;
-
-// 🔥 SERVIR LE FRONTEND BUILD
-app.use(express.static(path.join(__dirname, "../dist/public")));
-
-// 🔥 FALLBACK SPA (TRÈS IMPORTANT)
-app.get("*", (_req, res) => {
-  res.sendFile(path.join(__dirname, "../dist/public/index.html"));
-});
