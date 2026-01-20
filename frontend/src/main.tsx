@@ -59,3 +59,15 @@ createRoot(document.getElementById("root")!).render(
     </QueryClientProvider>
   </trpc.Provider>
 );
+import path from "path";
+import express from "express";
+
+const __dirname = new URL('.', import.meta.url).pathname;
+
+// 🔥 SERVIR LE FRONTEND BUILD
+app.use(express.static(path.join(__dirname, "../dist/public")));
+
+// 🔥 FALLBACK SPA (TRÈS IMPORTANT)
+app.get("*", (_req, res) => {
+  res.sendFile(path.join(__dirname, "../dist/public/index.html"));
+});
