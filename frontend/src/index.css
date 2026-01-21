@@ -1,55 +1,21 @@
-import { trpc } from "@/lib/trpc";
-import { UNAUTHED_ERR_MSG } from "@shared/const";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { httpBatchLink, TRPCClientError } from "@trpc/client";
-import { createRoot } from "react-dom/client";
-import superjson from "superjson";
-import App from "./App";
-import { getLoginUrl } from "./const";
-import "./index.css";
+import express from "express";
+import path from "path";
+import { fileURLToPath } from "url";
 
-const queryClient = new QueryClient();
+const app = express();
 
-const redirectToLoginIfUnauthorized = (error: unknown) => {
-  if (!(error instanceof TRPCClientError)) return;
-  if (typeof window === "undefined") return;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-  if (error.message !== UNAUTHED_ERR_MSG) return;
+// 🔥 SERVIR LE BUILD FRONTEND
+app.use(express.static(path.join(__dirname, "../dist/public")));
 
-  window.location.href = getLoginUrl();
-};
-
-queryClient.getQueryCache().subscribe(event => {
-  if (event.type === "updated" && event.action.type === "error") {
-    redirectToLoginIfUnauthorized(event.query.state.error);
-  }
+// 🔥 SPA FALLBACK — C'EST ÇA QUI MANQUAIT
+app.get("*", (_req, res) => {
+  res.sendFile(path.join(__dirname, "../dist/public/index.html"));
 });
 
-queryClient.getMutationCache().subscribe(event => {
-  if (event.type === "updated" && event.action.type === "error") {
-    redirectToLoginIfUnauthorized(event.mutation.state.error);
-  }
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => {
+  console.log("Server running on port", PORT);
 });
-
-const trpcClient = trpc.createClient({
-  links: [
-    httpBatchLink({
-      url: "/api/trpc",
-      transformer: superjson,
-      fetch(input, init) {
-        return fetch(input, {
-          ...(init ?? {}),
-          credentials: "include",
-        });
-      },
-    }),
-  ],
-});
-
-createRoot(document.getElementById("root")!).render(
-  <trpc.Provider client={trpcClient} queryClient={queryClient}>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
-  </trpc.Provider>
-);
