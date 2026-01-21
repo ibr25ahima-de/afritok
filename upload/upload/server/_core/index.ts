@@ -2,12 +2,17 @@ import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
+import path from "path";
+import { fileURLToPath } from "url";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
-import { serveStatic, setupVite } from "./vite";
+import { setupVite } from "./vite";
 import { handleStripeWebhook, testStripeWebhook } from "../webhook-endpoint";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -31,18 +36,32 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
-  
-  // Webhook Stripe DOIT être AVANT express.json() pour avoir accès au raw body
-  app.post('/api/webhooks/stripe', express.raw({type: 'application/json'}), handleStripeWebhook);
-  app.post('/api/webhooks/stripe/test', express.json(), testStripeWebhook);
-  
-  // Configure body parser with larger size limit for file uploads
+
+  // ===============================
+  // STRIPE WEBHOOKS
+  // ===============================
+  app.post(
+    "/api/webhooks/stripe",
+    express.raw({ type: "application/json" }),
+    handleStripeWebhook
+  );
+  app.post(
+    "/api/webhooks/stripe/test",
+    express.json(),
+    testStripeWebhook
+  );
+
+  // ===============================
+  // BODY PARSERS
+  // ===============================
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
-  
-  // OAuth callback under /api/oauth/callback
+
+  // ===============================
+  // AUTH + API
+  // ===============================
   registerOAuthRoutes(app);
-  // tRPC API
+
   app.use(
     "/api/trpc",
     createExpressMiddleware({
@@ -50,22 +69,33 @@ async function startServer() {
       createContext,
     })
   );
-  // development mode uses Vite, production mode uses static files
+
+  // ===============================
+  // DEV vs PROD
+  // ===============================
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
   } else {
-    serveStatic(app);
+    const publicPath = path.join(__dirname, "../../dist/public");
+
+    // Servir le frontend build
+    app.use(express.static(publicPath));
+
+    // ✅ FALLBACK SPA (LA CLÉ)
+    app.get("*", (req, res) => {
+      if (!req.path.startsWith("/api")) {
+        res.sendFile(path.join(publicPath, "index.html"));
+      } else {
+        res.status(404).json({ error: "API endpoint not found" });
+      }
+    });
   }
 
-  const preferredPort = parseInt(process.env.PORT || "3000");
+  const preferredPort = parseInt(process.env.PORT || "10000");
   const port = await findAvailablePort(preferredPort);
 
-  if (port !== preferredPort) {
-    console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
-  }
-
   server.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}/`);
+    console.log(`Server running on http://localhost:${port}`);
   });
 }
 
