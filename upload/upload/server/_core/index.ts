@@ -15,17 +15,6 @@ async function startServer() {
   const server = createServer(app);
 
   // ==============================
-  // 🔑 ENTRY POINT AUTH (OBLIGATOIRE)
-  // ==============================
-  app.get("/app-auth", (_req, res) => {
-    const oauthUrl = process.env.OAUTH_SERVER_URL;
-    if (!oauthUrl) {
-      return res.status(500).send("OAuth server not configured");
-    }
-    res.redirect(302, oauthUrl);
-  });
-
-  // ==============================
   // Stripe webhooks
   // ==============================
   app.post(
@@ -41,10 +30,10 @@ async function startServer() {
   );
 
   app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ extended: true }));
+  app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
   // ==============================
-  // OAuth callback
+  // OAuth routes (LOGIN + CALLBACK)
   // ==============================
   registerOAuthRoutes(app);
 
