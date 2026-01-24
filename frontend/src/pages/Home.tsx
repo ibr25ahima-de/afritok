@@ -1,13 +1,14 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
-import { APP_LOGO, APP_TITLE, getLoginUrl } from "@/const";
+import { APP_LOGO, APP_TITLE } from "@/const";
 import { Music, Users, TrendingUp, Zap } from "lucide-react";
 
 export default function Home() {
-  const { user, isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAuth();
   const [, navigate] = useLocation();
 
+  // Si déjà connecté → aller au feed
   if (isAuthenticated) {
     navigate("/feed");
     return null;
@@ -19,12 +20,25 @@ export default function Home() {
       <nav className="border-b border-purple-800/30 bg-slate-900/50 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            {APP_LOGO && <img src={APP_LOGO} alt={APP_TITLE} className="h-8 w-8" />}
-            <span className="text-xl font-bold text-white">{APP_TITLE}</span>
+            {APP_LOGO && (
+              <img
+                src={APP_LOGO}
+                alt={APP_TITLE}
+                className="h-8 w-8"
+              />
+            )}
+            <span className="text-xl font-bold text-white">
+              {APP_TITLE}
+            </span>
           </div>
-          <a href={getLoginUrl()} className="text-purple-400 hover:text-purple-300">
-            Sign In
-          </a>
+
+          {/* 🔐 Connexion SIMPLE (PAS OAUTH) */}
+          <span
+            onClick={() => navigate("/login")}
+            className="cursor-pointer text-purple-400 hover:text-purple-300"
+          >
+            Se connecter
+          </span>
         </div>
       </nav>
 
@@ -37,50 +51,69 @@ export default function Home() {
                 Create. Share. Earn.
               </h1>
               <p className="text-xl text-purple-200">
-                Afritok is the platform for African creators to share their stories, build communities, and earn money directly from their content.
+                Afritok est la plateforme des créateurs africains pour
+                partager leurs histoires, créer des communautés et
+                gagner de l’argent avec leur contenu.
               </p>
             </div>
 
             <div className="flex gap-4">
               <Button
-                onClick={() => window.location.href = getLoginUrl()}
+                onClick={() => navigate("/login")}
                 className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-6 text-lg"
               >
-                Get Started
+                Commencer
               </Button>
+
               <Button
                 variant="outline"
                 className="border-purple-400 text-purple-400 hover:bg-purple-900/20 px-8 py-6 text-lg"
               >
-                Learn More
+                En savoir plus
               </Button>
             </div>
           </div>
 
           {/* Feature Grid */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="bg-purple-900/30 border border-purple-800/50 rounded-lg p-6 hover:border-purple-600/50 transition">
+            <div className="bg-purple-900/30 border border-purple-800/50 rounded-lg p-6">
               <Music className="w-8 h-8 text-purple-400 mb-3" />
-              <h3 className="font-semibold text-white mb-2">Create Videos</h3>
-              <p className="text-sm text-purple-200">Share your creativity with the world</p>
+              <h3 className="font-semibold text-white mb-2">
+                Créer des vidéos
+              </h3>
+              <p className="text-sm text-purple-200">
+                Partage ta créativité avec le monde
+              </p>
             </div>
 
-            <div className="bg-purple-900/30 border border-purple-800/50 rounded-lg p-6 hover:border-purple-600/50 transition">
+            <div className="bg-purple-900/30 border border-purple-800/50 rounded-lg p-6">
               <Users className="w-8 h-8 text-purple-400 mb-3" />
-              <h3 className="font-semibold text-white mb-2">Build Community</h3>
-              <p className="text-sm text-purple-200">Connect with your audience</p>
+              <h3 className="font-semibold text-white mb-2">
+                Construire une communauté
+              </h3>
+              <p className="text-sm text-purple-200">
+                Connecte-toi avec ton public
+              </p>
             </div>
 
-            <div className="bg-purple-900/30 border border-purple-800/50 rounded-lg p-6 hover:border-purple-600/50 transition">
+            <div className="bg-purple-900/30 border border-purple-800/50 rounded-lg p-6">
               <TrendingUp className="w-8 h-8 text-purple-400 mb-3" />
-              <h3 className="font-semibold text-white mb-2">Grow Your Reach</h3>
-              <p className="text-sm text-purple-200">Reach millions of viewers</p>
+              <h3 className="font-semibold text-white mb-2">
+                Développer ton audience
+              </h3>
+              <p className="text-sm text-purple-200">
+                Atteins des millions de vues
+              </p>
             </div>
 
-            <div className="bg-purple-900/30 border border-purple-800/50 rounded-lg p-6 hover:border-purple-600/50 transition">
+            <div className="bg-purple-900/30 border border-purple-800/50 rounded-lg p-6">
               <Zap className="w-8 h-8 text-purple-400 mb-3" />
-              <h3 className="font-semibold text-white mb-2">Earn Money</h3>
-              <p className="text-sm text-purple-200">Get paid in your local currency</p>
+              <h3 className="font-semibold text-white mb-2">
+                Gagner de l’argent
+              </h3>
+              <p className="text-sm text-purple-200">
+                Paiement simple et local
+              </p>
             </div>
           </div>
         </div>
@@ -89,9 +122,11 @@ export default function Home() {
       {/* Footer */}
       <div className="border-t border-purple-800/30 bg-slate-900/50 mt-20">
         <div className="max-w-7xl mx-auto px-4 py-8 text-center text-purple-300 text-sm">
-          <p>&copy; 2025 Afritok. Empowering African creators worldwide.</p>
+          <p>
+            &copy; 2025 Afritok. Empowering African creators worldwide.
+          </p>
         </div>
       </div>
     </div>
   );
-}
+              }
