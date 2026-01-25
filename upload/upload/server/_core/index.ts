@@ -9,7 +9,10 @@ const __dirname = new URL(".", import.meta.url).pathname;
 const app = express();
 const server = createServer(app);
 
-app.use(express.json());
+// ======================
+// MIDDLEWARES
+// ======================
+app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 // ======================
@@ -19,7 +22,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
 const OTP_STORE = new Map<string, string>();
 
 // ======================
-// AUTH — REQUEST OTP
+// AUTH — DEMANDE OTP
 // ======================
 app.post("/api/auth/request-otp", (req, res) => {
   const { phone } = req.body;
@@ -28,20 +31,21 @@ app.post("/api/auth/request-otp", (req, res) => {
     return res.status(400).json({ error: "Phone number required" });
   }
 
-  // Générer code 6 chiffres
+  // Code OTP 6 chiffres
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-  // Stockage temporaire (simple & efficace)
+  // Stockage temporaire (simple, efficace)
   OTP_STORE.set(phone, otp);
 
-  console.log(`[OTP] ${phone} => ${otp}`); // 📌 visible dans les logs Render
+  // 📌 Visible dans Render Logs
+  console.log(`[OTP] ${phone} => ${otp}`);
 
-  // PLUS TARD: SMS (Twilio, Africa’s Talking, etc.)
+  // Plus tard : SMS réel (Africa’s Talking, Twilio…)
   return res.json({ success: true });
 });
 
 // ======================
-// AUTH — VERIFY OTP
+// AUTH — VÉRIFICATION OTP
 // ======================
 app.post("/api/auth/verify-otp", (req, res) => {
   const { phone, code } = req.body;
@@ -56,8 +60,10 @@ app.post("/api/auth/verify-otp", (req, res) => {
     return res.status(401).json({ error: "Invalid code" });
   }
 
+  // Nettoyage OTP
   OTP_STORE.delete(phone);
 
+  // Création session JWT
   const token = jwt.sign(
     { phone },
     JWT_SECRET,
@@ -85,6 +91,9 @@ app.get("*", (_req, res) => {
   res.sendFile(path.join(publicDir, "index.html"));
 });
 
+// ======================
+// START SERVER
+// ======================
 const PORT = Number(process.env.PORT || 10000);
 server.listen(PORT, () => {
   console.log(`Afritok running on http://localhost:${PORT}`);
