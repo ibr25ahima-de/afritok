@@ -1,1 +1,49 @@
 
+import type { Request, Response, Express } from "express";
+import * as db from "../db";
+import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { getSessionCookieOptions } from "../_core/cookies";
+import jwt from "jsonwebtoken";
+
+export function registerAuthRoutes(app: Express) {
+  app.post("/api/auth/login", async (req: Request, res: Response) => {
+    const { phone } = req.body;
+
+    if (!phone) {
+      return res.status(400).json({ error: "Phone is required" });
+    }
+
+    try {
+      // 1️⃣ Créer ou récupérer l'utilisateur
+      const user = await db.upsertUser({
+        phone,
+        name: null,
+        email: null,
+        loginMethod: "phone",
+        lastSignedIn: new Date(),
+      });
+
+      // 2️⃣ Créer un token de session simple
+      const token = jwt.sign(
+        { userId: user.id, phone },
+        process.env.JWT_SECRET || "dev_secret",
+        { expiresIn: "365d" }
+      );
+
+      // 3️⃣ Stocker la session dans un cookie
+      res.cookie(
+        COOKIE_NAME,
+        token,
+        {
+          ...getSessionCookieOptions(req),
+          maxAge: ONE_YEAR_MS,
+        }
+      );
+
+      return res.status(200).json({ success: true });
+    } catch (err) {
+      console.error("[AUTH LOGIN ERROR]", err);
+      return res.status(500).json({ error: "Login failed" });
+    }
+  });
+}
