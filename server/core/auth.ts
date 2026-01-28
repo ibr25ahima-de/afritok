@@ -1,65 +1,76 @@
-import { z } from "zod";
+import express from "express";
 import jwt from "jsonwebtoken";
-import { publicProcedure, router } from "../trpc";
+
+const router = express.Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
 
-// Stockage OTP temporaire (simple, sans DB pour l’instant)
+// Stockage OTP temporaire (mémoire)
+// ⚠️ OK pour démarrage / MVP
 const OTP_STORE = new Map<string, string>();
 
-export const authRouter = router({
-  // ======================
-  // REQUEST OTP
-  // ======================
-  requestOtp: publicProcedure
-    .input(
-      z.object({
-        phone: z.string().min(6),
-      })
-    )
-    .mutation(async ({ input }) => {
-      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+/**
+ * 📲 Demande OTP
+ * POST /api/auth/request-otp
+ */
+router.post("/request-otp", (req, res) => {
+  const { phone } = req.body;
 
-      OTP_STORE.set(input.phone, otp);
+  if (!phone || phone.length < 6) {
+    return res.status(400).json({ error: "Invalid phone number" });
+  }
 
-      // Visible dans les logs Render
-      console.log(`[OTP] ${input.phone} => ${otp}`);
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  OTP_STORE.set(phone, otp);
 
-      return { success: true };
-    }),
+  // Visible dans les logs Render (temporaire)
+  console.log(`[OTP] ${phone} => ${otp}`);
 
-  // ======================
-  // VERIFY OTP
-  // ======================
-  verifyOtp: publicProcedure
-    .input(
-      z.object({
-        phone: z.string().min(6),
-        code: z.string().length(6),
-      })
-    )
-    .mutation(async ({ input, ctx }) => {
-      const validCode = OTP_STORE.get(input.phone);
-
-      if (validCode !== input.code) {
-        throw new Error("Invalid OTP code");
-      }
-
-      OTP_STORE.delete(input.phone);
-
-      const token = jwt.sign(
-        { phone: input.phone },
-        JWT_SECRET,
-        { expiresIn: "30d" }
-      );
-
-      ctx.res.cookie("afritok_session", token, {
-        httpOnly: true,
-        sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
-        maxAge: 30 * 24 * 60 * 60 * 1000,
-      });
-
-      return { success: true };
-    }),
+  return res.json({ success: true });
 });
+
+/**
+ * ✅ Vérification OTP
+ * POST /api/auth/verify-otp
+ */
+router.post("/verify-otp", (req, res) => {
+  const { phone, code } = req.body;
+
+  if (!phone || !code) {
+    return res.status(400).json({ error: "Missing phone or code" });
+  }
+
+  const validCode = OTP_STORE.get(phone);
+
+  if (validCode !== code) {
+    return res.status(401).json({ error: "Invalid OTP code" });
+  }
+
+  OTP_STORE.delete(phone);
+
+  const token = jwt.sign(
+    { phone },
+    JWT_SECRET,
+    { expiresIn: "30d" }
+  );
+
+  res.cookie("afritok_session", token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+  });
+
+  return res.json({ success: true });
+});
+
+/**
+ * 🚪 Déconnexion
+ * POST /api/auth/logout
+ */
+router.post("/logout", (_req, res) => {
+  res.clearCookie("afritok_session");
+  res.json({ success: true });
+});
+
+export default router;
