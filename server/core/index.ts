@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
+import cookieParser from "cookie-parser";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 
 import { appRouter } from "../routers";
@@ -28,6 +29,9 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
+  // ✅ Cookies (OBLIGATOIRE pour auth OTP / JWT)
+  app.use(cookieParser());
+
   // ✅ tRPC API
   app.use(
     "/api/trpc",
@@ -44,7 +48,7 @@ async function startServer() {
     serveStatic(app);
   }
 
-  // ✅ PORT OBLIGATOIRE (Render compatible)
+  // ✅ PORT obligatoire (Render)
   const port = Number(process.env.PORT);
   if (!port) {
     throw new Error("PORT environment variable is not defined");
