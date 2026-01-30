@@ -1,4 +1,4 @@
-import { useAuth } from "@/_core/hooks/useAuth";
+import { useAuth } from "@/core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 import { ArrowLeft, TrendingUp, Video, Flame } from "lucide-react";
@@ -29,8 +29,16 @@ export default function Trending() {
               <ArrowLeft className="w-6 h-6" />
             </button>
             <div className="flex items-center gap-2">
-              {APP_LOGO && <img src={APP_LOGO} alt={APP_TITLE} className="h-8 w-8" />}
-              <span className="text-xl font-bold text-white">{APP_TITLE}</span>
+              {APP_LOGO && (
+                <img
+                  src={APP_LOGO}
+                  alt={APP_TITLE}
+                  className="h-8 w-8"
+                />
+              )}
+              <span className="text-xl font-bold text-white">
+                {APP_TITLE}
+              </span>
             </div>
           </div>
           <div className="flex items-center gap-2 text-purple-400">
@@ -56,8 +64,12 @@ export default function Trending() {
               >
                 <div className="flex items-start justify-between mb-3">
                   <div>
-                    <p className="text-orange-400 font-bold text-lg">#{index + 1}</p>
-                    <p className="text-purple-400 font-semibold text-lg">#{hashtag.tag}</p>
+                    <p className="text-orange-400 font-bold text-lg">
+                      #{index + 1}
+                    </p>
+                    <p className="text-purple-400 font-semibold text-lg">
+                      #{hashtag.tag}
+                    </p>
                   </div>
                   <Flame className="w-5 h-5 text-orange-400" />
                 </div>
@@ -76,7 +88,8 @@ export default function Trending() {
             Most Liked Videos
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {trendingVideosQuery.data && trendingVideosQuery.data.length > 0 ? (
+            {trendingVideosQuery.data &&
+            trendingVideosQuery.data.length > 0 ? (
               trendingVideosQuery.data.map((video) => (
                 <div
                   key={video.id}
@@ -105,15 +118,9 @@ export default function Trending() {
                       {video.title || "Untitled"}
                     </h3>
                     <div className="flex gap-4 text-sm text-purple-300">
-                      <span className="flex items-center gap-1">
-                        ❤️ {video.likes || 0}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        💬 {video.comments || 0}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        👁️ {video.views || 0}
-                      </span>
+                      <span>❤️ {video.likes || 0}</span>
+                      <span>💬 {video.comments || 0}</span>
+                      <span>👁️ {video.views || 0}</span>
                     </div>
                   </div>
                 </div>
@@ -128,4 +135,4 @@ export default function Trending() {
       </div>
     </div>
   );
-}
+        }
