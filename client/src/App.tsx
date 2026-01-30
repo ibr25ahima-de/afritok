@@ -1,23 +1,26 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
-import ErrorBoundary from "./components/ErrorBoundary";
-import { ThemeProvider } from "./contexts/ThemeContext";
-import { NotificationProvider } from "./contexts/NotificationContext";
-import Home from "./pages/Home";
-import Feed from "./pages/Feed";
-import Profile from "./pages/Profile";
-import Monetization from "./pages/Monetization";
-import AdminDashboard from "./pages/AdminDashboard";
-import Upload from "./pages/Upload";
-import Search from "./pages/Search";
-import Trending from "./pages/Trending";
-import EditProfile from "./pages/EditProfile";
-import MyVideos from "./pages/MyVideos";
-import Notifications from "./pages/Notifications";
-import { useAuth } from "./core/hooks/useAuth"; // ✅ CHEMIN CORRIGÉ
 import { Loader2 } from "lucide-react";
+
+import ErrorBoundary from "@/components/ErrorBoundary";
+import { ThemeProvider } from "@/contexts/ThemeContext";
+import { NotificationProvider } from "@/contexts/NotificationContext";
+
+import Home from "@/pages/Home";
+import Feed from "@/pages/Feed";
+import Profile from "@/pages/Profile";
+import Monetization from "@/pages/Monetization";
+import AdminDashboard from "@/pages/AdminDashboard";
+import Upload from "@/pages/Upload";
+import Search from "@/pages/Search";
+import Trending from "@/pages/Trending";
+import EditProfile from "@/pages/EditProfile";
+import MyVideos from "@/pages/MyVideos";
+import Notifications from "@/pages/Notifications";
+import NotFound from "@/pages/NotFound";
+
+import { useAuth } from "@/_core/hooks/useAuth"; // ✅ CHEMIN DÉFINITIF
 
 function Router() {
   const { user, loading } = useAuth();
@@ -25,7 +28,7 @@ function Router() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="animate-spin w-8 h-8" />
+        <Loader2 className="w-8 h-8 animate-spin" />
       </div>
     );
   }
@@ -42,16 +45,18 @@ function Router() {
       <Route path="/edit-profile" component={EditProfile} />
       <Route path="/my-videos" component={MyVideos} />
       <Route path="/notifications" component={Notifications} />
+
       {user?.role === "admin" && (
         <Route path="/admin" component={AdminDashboard} />
       )}
+
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
   );
 }
 
-function App() {
+export default function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="dark">
@@ -64,6 +69,4 @@ function App() {
       </ThemeProvider>
     </ErrorBoundary>
   );
-}
-
-export default App;
+        }
