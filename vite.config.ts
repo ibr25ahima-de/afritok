@@ -1,15 +1,21 @@
 import react from "@vitejs/plugin-react";
-import path from "path";
+import tailwindcss from "@tailwindcss/vite";
+import { jsxLocPlugin } from "@builder.io/vite-plugin-jsx-loc";
+import path from "node:path";
 import { defineConfig } from "vite";
-import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
 
 export default defineConfig({
   plugins: [
     react(),
-    vitePluginManusRuntime(),
+    tailwindcss(),
+    jsxLocPlugin(),
   ],
 
   root: path.resolve(import.meta.dirname, "client"),
+
+  envDir: path.resolve(import.meta.dirname),
+
+  publicDir: path.resolve(import.meta.dirname, "client", "public"),
 
   resolve: {
     alias: {
@@ -19,12 +25,8 @@ export default defineConfig({
     },
   },
 
-  envDir: path.resolve(import.meta.dirname),
-
-  publicDir: path.resolve(import.meta.dirname, "client", "public"),
-
   build: {
-    outDir: path.resolve(import.meta.dirname, "dist", "public"),
+    outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
   },
 
