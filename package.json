@@ -26,7 +26,13 @@
 
     "wouter": "^3.9.0",
     "lucide-react": "^0.453.0",
-    "sonner": "^2.0.7"
+    "sonner": "^2.0.7",
+
+    "next-themes": "^0.3.0",
+    "@radix-ui/react-tooltip": "^1.1.7",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^2.5.4"
   },
 
   "devDependencies": {
