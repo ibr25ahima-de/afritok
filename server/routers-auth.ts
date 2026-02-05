@@ -13,75 +13,19 @@ import { sdk } from "./_core/sdk";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { COOKIE_NAME } from "@shared/const";
 
-/**
- * Phone OTP Authentication Router
- * Handles phone number verification and OTP-based login flow
- */
+// 🔒 Normalisation unique du téléphone
+const normalizePhone = (phone: string) => phone.replace(/\D/g, "");
+
 export const authRouter = router({
-  /**
-   * Request OTP - Send a 6-digit code to the user's phone
-   * Step 1 of the login flow
-   */
   requestOtp: publicProcedure
     .input(
       z.object({
-        phone: z.string().min(10, "Phone number too short").max(20, "Phone number too long"),
+        phone: z.string().min(10).max(25),
       })
     )
     .mutation(async ({ input }) => {
       try {
-        // Clean phone number (remove all non-digits)
-        const phone = input.phone.replace(/\D/g, "");
-
-        if (phone.length < 10) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "Invalid phone number format",
-          });
-        }
-
-        // Generate random 6-digit OTP
-        const code = Math.floor(100000 + Math.random() * 900000).toString();
-
-        // Store OTP in database (expires in 10 minutes)
-        await createOTP(phone, code, 10);
-
-        // Log for development (in production, send via SMS)
-        console.log(`[Auth] OTP for ${phone}: ${code}`);
-
-        return {
-          success: true,
-          message: "OTP sent successfully",
-          // In development, return the code for testing
-          // In production, remove this and send via SMS instead
-          code: process.env.NODE_ENV === "development" ? code : undefined,
-        };
-      } catch (error) {
-        if (error instanceof TRPCError) throw error;
-        console.error("[Auth] Failed to request OTP:", error);
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Failed to send OTP",
-        });
-      }
-    }),
-
-  /**
-   * Verify OTP - Validate the code and create a session
-   * Step 2 of the login flow
-   */
-  verifyOtp: publicProcedure
-    .input(
-      z.object({
-        phone: z.string().min(10).max(20),
-        code: z.string().length(6, "OTP must be 6 digits"),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      try {
-        // Clean phone number
-        const phone = input.phone.replace(/\D/g, "");
-        const code = input.code.trim();
+        const phone = normalizePhone(input.phone);
 
         if (phone.length < 10) {
           throw new TRPCError({
@@ -90,101 +34,99 @@ export const authRouter = router({
           });
         }
 
-        // Get valid OTP from database
+        const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+        await createOTP(phone, code, 10);
+
+        console.log(`[Auth] OTP generated for ${phone}: ${code}`);
+
+        return {
+          success: true,
+          phone, // ✅ RENVOI DU TÉLÉPHONE NORMALISÉ AU FRONT
+          code: process.env.NODE_ENV === "development" ? code : undefined,
+        };
+      } catch (err) {
+        console.error("[Auth] requestOtp error:", err);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to send OTP",
+        });
+      }
+    }),
+
+  verifyOtp: publicProcedure
+    .input(
+      z.object({
+        phone: z.string(),
+        code: z.string().length(6),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      try {
+        const phone = normalizePhone(input.phone);
+        const code = input.code.trim();
+
         const otp = await getValidOTP(phone);
 
         if (!otp) {
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message: "OTP expired or not found. Please request a new one.",
+            message: "OTP expired or invalid",
           });
         }
 
-        // Check attempt limit (max 5 attempts)
         if (otp.attempts >= 5) {
           await deleteOTP(otp.id);
           throw new TRPCError({
             code: "TOO_MANY_REQUESTS",
-            message: "Too many failed attempts. Please request a new OTP.",
+            message: "Too many attempts",
           });
         }
 
-        // Verify OTP code
         if (otp.code !== code) {
           await incrementOTPAttempts(otp.id);
-          const remainingAttempts = 5 - (otp.attempts + 1);
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message: `Invalid OTP. ${remainingAttempts} attempts remaining.`,
+            message: "Invalid OTP",
           });
         }
 
-        // OTP is valid - get or create user
         let user = await getUserByPhone(phone);
 
         if (!user) {
-          // Auto-create user on first successful login
           await upsertUser({
             phone,
-            name: null,
-            email: null,
             loginMethod: "phone_otp",
             role: "user",
             lastSignedIn: new Date(),
           });
-
-          // Fetch the newly created user
           user = await getUserByPhone(phone);
-
-          if (!user) {
-            throw new TRPCError({
-              code: "INTERNAL_SERVER_ERROR",
-              message: "Failed to create user account",
-            });
-          }
-
-          console.log(`[Auth] New user created: ${user.id} (${phone})`);
         } else {
-          // Update last signed in for existing user
           await upsertUser({
             id: user.id,
             lastSignedIn: new Date(),
           });
         }
 
-        // Delete used OTP
         await deleteOTP(otp.id);
 
-        // Create JWT session token
-        const sessionToken = await sdk.createSessionToken(user.id, phone);
+        const token = await sdk.createSessionToken(user!.id, phone);
 
-        // Set session cookie
         const cookieOptions = getSessionCookieOptions(ctx.req);
-        ctx.res.cookie(COOKIE_NAME, sessionToken, {
+        ctx.res.cookie(COOKIE_NAME, token, {
           ...cookieOptions,
-          maxAge: 1000 * 60 * 60 * 24 * 365, // 1 year
+          maxAge: 1000 * 60 * 60 * 24 * 365,
         });
-
-        console.log(`[Auth] User ${user.id} logged in successfully`);
 
         return {
           success: true,
-          message: "Login successful",
-          user: {
-            id: user.id,
-            phone: user.phone,
-            name: user.name,
-            email: user.email,
-            role: user.role,
-            avatarUrl: user.avatarUrl,
-          },
+          user,
         };
-      } catch (error) {
-        if (error instanceof TRPCError) throw error;
-        console.error("[Auth] Failed to verify OTP:", error);
+      } catch (err) {
+        console.error("[Auth] verifyOtp error:", err);
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
-          message: "Failed to verify OTP",
+          message: "OTP verification failed",
         });
       }
     }),
