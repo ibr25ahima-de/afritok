@@ -263,3 +263,28 @@ export async function isFollowing(
 
   return result.length > 0;
 }
+// ============================================
+// RESTORED EARNINGS & WITHDRAWALS FUNCTIONS
+// ============================================
+
+export async function getUserEarnings(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(earnings)
+    .where(eq(earnings.userId, userId))
+    .orderBy(earnings.createdAt);
+}
+
+export async function getUserWithdrawals(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(withdrawals)
+    .where(eq(withdrawals.userId, userId))
+    .orderBy(withdrawals.createdAt);
+}
