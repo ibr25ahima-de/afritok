@@ -178,3 +178,88 @@ export async function cleanupExpiredOTPs(): Promise<void> {
 
   console.log("[OTP] Expired OTPs cleaned");
       }
+// ============================================
+// RESTORED FUNCTIONS REQUIRED BY routers.ts
+// ============================================
+
+export async function getVideoById(videoId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db
+    .select()
+    .from(videos)
+    .where(eq(videos.id, videoId))
+    .limit(1);
+
+  return result[0];
+}
+
+export async function getUserLike(userId: number, videoId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db
+    .select()
+    .from(likes)
+    .where(and(eq(likes.userId, userId), eq(likes.videoId, videoId)))
+    .limit(1);
+
+  return result[0];
+}
+
+export async function getVideoComments(videoId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(comments)
+    .where(eq(comments.videoId, videoId))
+    .orderBy(comments.createdAt);
+}
+
+export async function getFollowerCount(userId: number) {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const result = await db
+    .select()
+    .from(followers)
+    .where(eq(followers.followingId, userId));
+
+  return result.length;
+}
+
+export async function getFollowingCount(userId: number) {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const result = await db
+    .select()
+    .from(followers)
+    .where(eq(followers.followerId, userId));
+
+  return result.length;
+}
+
+export async function isFollowing(
+  followerId: number,
+  followingId: number
+) {
+  const db = await getDb();
+  if (!db) return false;
+
+  const result = await db
+    .select()
+    .from(followers)
+    .where(
+      and(
+        eq(followers.followerId, followerId),
+        eq(followers.followingId, followingId)
+      )
+    )
+    .limit(1);
+
+  return result.length > 0;
+}
