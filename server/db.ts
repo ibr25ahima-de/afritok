@@ -18,15 +18,13 @@ let _db: ReturnType<typeof drizzle> | null = null;
 let _initialized = false;
 
 /**
- * Create required tables automatically at server startup
- * This replaces drizzle-kit push (works on Render + phone)
+ * Initialize database tables automatically (NO drizzle-kit)
  */
 async function initDatabase() {
   if (_initialized || !process.env.DATABASE_URL) return;
 
   const connection = await mysql.createConnection(process.env.DATABASE_URL);
 
-  // 🔥 OTP TABLE (CRITICAL)
   await connection.execute(`
     CREATE TABLE IF NOT EXISTS otps (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -41,16 +39,16 @@ async function initDatabase() {
   `);
 
   await connection.end();
-
   _initialized = true;
-  console.log("[Database] Tables initialized successfully");
+
+  console.log("[Database] OTP table initialized");
 }
 
-// Lazily create the drizzle instance
+// Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      await initDatabase(); // 👈 AUTO TABLE CREATION
+      await initDatabase(); // 👈 AJOUT UNIQUE
       _db = drizzle(process.env.DATABASE_URL);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
@@ -59,10 +57,6 @@ export async function getDb() {
   }
   return _db;
 }
-
-/* =========================================================
-   USERS
-========================================================= */
 
 export async function upsertUser(user: Partial<InsertUser>): Promise<void> {
   if (!user.id && !user.phone) {
@@ -73,6 +67,9 @@ export async function upsertUser(user: Partial<InsertUser>): Promise<void> {
   if (!db) return;
 
   const values: Partial<InsertUser> = {};
+  if (user.id) values.id = user.id;
+  if (user.phone) values.phone = user.phone;
+
   const updateSet: Record<string, unknown> = {};
 
   const textFields = [
@@ -101,16 +98,51 @@ export async function upsertUser(user: Partial<InsertUser>): Promise<void> {
   });
 }
 
-export async function getUserByPhone(phone: string) {
+export async function getUserById(userId: number) {
   const db = await getDb();
-  if (!db) return undefined;
-  const res = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
-  return res[0];
+  if (!db) return;
+  const result = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  return result[0];
 }
 
-/* =========================================================
-   OTP
-========================================================= */
+export async function getUserByPhone(phone: string) {
+  const db = await getDb();
+  if (!db) return;
+  const result = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
+  return result[0];
+}
+
+// =====================
+// VIDEOS
+// =====================
+
+export async function getUserVideos(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(videos).where(eq(videos.userId, userId));
+}
+
+export async function getVideoById(videoId: number) {
+  const db = await getDb();
+  if (!db) return;
+  const result = await db.select().from(videos).where(eq(videos.id, videoId)).limit(1);
+  return result[0];
+}
+
+export async function getFeedVideos(limit = 20, offset = 0) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(videos)
+    .where(eq(videos.isPublic, true))
+    .limit(limit)
+    .offset(offset);
+}
+
+// =====================
+// OTP
+// =====================
 
 function formatDateForMySQL(date: Date): string {
   return date.toISOString().slice(0, 19).replace("T", " ");
@@ -133,42 +165,40 @@ export async function createOTP(
     expiresAt: formatDateForMySQL(expiresAt) as any,
   });
 
-  console.log(`[OTP] Generated for ${phone}: ${code}`);
+  console.log(`[OTP] Created for ${phone}: ${code}`);
 }
 
-export async function getValidOTP(
-  phone: string
-): Promise<InsertOTP | undefined> {
+export async function getValidOTP(phone: string): Promise<InsertOTP | undefined> {
   const db = await getDb();
   if (!db) return;
 
   const now = formatDateForMySQL(new Date());
 
-  const res = await db
+  const result = await db
     .select()
     .from(otps)
     .where(and(eq(otps.phone, phone), gt(otps.expiresAt, now as any)))
-    .orderBy((o) => o.createdAt)
     .limit(1);
 
-  return res[0];
+  return result[0];
 }
 
-export async function deleteOTP(id: number) {
+export async function deleteOTP(otpId: number): Promise<void> {
   const db = await getDb();
   if (!db) return;
-  await db.delete(otps).where(eq(otps.id, id));
+  await db.delete(otps).where(eq(otps.id, otpId));
+  console.log(`[OTP] Deleted ${otpId}`);
 }
 
-export async function incrementOTPAttempts(id: number) {
+export async function incrementOTPAttempts(otpId: number): Promise<void> {
   const db = await getDb();
   if (!db) return;
 
-  const otp = await db.select().from(otps).where(eq(otps.id, id)).limit(1);
+  const otp = await db.select().from(otps).where(eq(otps.id, otpId)).limit(1);
   if (!otp[0]) return;
 
   await db
     .update(otps)
     .set({ attempts: otp[0].attempts + 1 })
-    .where(eq(otps.id, id));
-}
+    .where(eq(otps.id, otpId));
+                    }
