@@ -202,3 +202,138 @@ export async function incrementOTPAttempts(otpId: number): Promise<void> {
     .set({ attempts: otp[0].attempts + 1 })
     .where(eq(otps.id, otpId));
                     }
+// =====================
+// FOLLOWERS
+// =====================
+
+export async function getFollowerCount(userId: number) {
+  const db = await getDb();
+  if (!db) return 0;
+  const result = await db
+    .select()
+    .from(followers)
+    .where(eq(followers.followingId, userId));
+  return result.length;
+}
+
+export async function getFollowingCount(userId: number) {
+  const db = await getDb();
+  if (!db) return 0;
+  const result = await db
+    .select()
+    .from(followers)
+    .where(eq(followers.followerId, userId));
+  return result.length;
+}
+
+export async function isFollowing(
+  followerId: number,
+  followingId: number
+) {
+  const db = await getDb();
+  if (!db) return false;
+
+  const result = await db
+    .select()
+    .from(followers)
+    .where(
+      and(
+        eq(followers.followerId, followerId),
+        eq(followers.followingId, followingId)
+      )
+    )
+    .limit(1);
+
+  return result.length > 0;
+}
+
+// =====================
+// EARNINGS
+// =====================
+
+export async function getUserEarnings(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(earnings)
+    .where(eq(earnings.userId, userId))
+    .orderBy((e) => e.createdAt);
+}
+
+export async function getUserWithdrawals(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(withdrawals)
+    .where(eq(withdrawals.userId, userId))
+    .orderBy((w) => w.createdAt);
+        // =====================
+// FOLLOWERS
+// =====================
+
+export async function getFollowerCount(userId: number) {
+  const db = await getDb();
+  if (!db) return 0;
+  const result = await db
+    .select()
+    .from(followers)
+    .where(eq(followers.followingId, userId));
+  return result.length;
+}
+
+export async function getFollowingCount(userId: number) {
+  const db = await getDb();
+  if (!db) return 0;
+  const result = await db
+    .select()
+    .from(followers)
+    .where(eq(followers.followerId, userId));
+  return result.length;
+}
+
+export async function isFollowing(
+  followerId: number,
+  followingId: number
+) {
+  const db = await getDb();
+  if (!db) return false;
+
+  const result = await db
+    .select()
+    .from(followers)
+    .where(
+      and(
+        eq(followers.followerId, followerId),
+        eq(followers.followingId, followingId)
+      )
+    )
+    .limit(1);
+
+  return result.length > 0;
+}
+
+// =====================
+// EARNINGS
+// =====================
+
+export async function getUserEarnings(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(earnings)
+    .where(eq(earnings.userId, userId))
+    .orderBy((e) => e.createdAt);
+}
+
+export async function getUserWithdrawals(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(withdrawals)
+    .where(eq(withdrawals.userId, userId))
+    .orderBy((w) => w.createdAt);
+}                                   }
