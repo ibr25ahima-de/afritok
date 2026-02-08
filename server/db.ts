@@ -1,13 +1,56 @@
 import { eq, and, gt, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, videos, likes, comments, followers, earnings, withdrawals, otps, InsertOTP } from "../drizzle/schema";
+import mysql from "mysql2/promise";
+import {
+  InsertUser,
+  users,
+  videos,
+  likes,
+  comments,
+  followers,
+  earnings,
+  withdrawals,
+  otps,
+  InsertOTP,
+} from "../drizzle/schema";
 
 let _db: ReturnType<typeof drizzle> | null = null;
+let _initialized = false;
 
-// Lazily create the drizzle instance so local tooling can run without a DB.
+/**
+ * Create required tables automatically at server startup
+ * This replaces drizzle-kit push (works on Render + phone)
+ */
+async function initDatabase() {
+  if (_initialized || !process.env.DATABASE_URL) return;
+
+  const connection = await mysql.createConnection(process.env.DATABASE_URL);
+
+  // 🔥 OTP TABLE (CRITICAL)
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS otps (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      phone VARCHAR(32) NOT NULL,
+      code VARCHAR(10) NOT NULL,
+      attempts INT NOT NULL DEFAULT 0,
+      expires_at DATETIME NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_phone (phone),
+      INDEX idx_expires (expires_at)
+    );
+  `);
+
+  await connection.end();
+
+  _initialized = true;
+  console.log("[Database] Tables initialized successfully");
+}
+
+// Lazily create the drizzle instance
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
+      await initDatabase(); // 👈 AUTO TABLE CREATION
       _db = drizzle(process.env.DATABASE_URL);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
@@ -17,304 +60,115 @@ export async function getDb() {
   return _db;
 }
 
+/* =========================================================
+   USERS
+========================================================= */
+
 export async function upsertUser(user: Partial<InsertUser>): Promise<void> {
   if (!user.id && !user.phone) {
     throw new Error("User id or phone is required for upsert");
   }
 
   const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot upsert user: database not available");
-    return;
+  if (!db) return;
+
+  const values: Partial<InsertUser> = {};
+  const updateSet: Record<string, unknown> = {};
+
+  const textFields = [
+    "name",
+    "email",
+    "loginMethod",
+    "phone",
+    "bio",
+    "avatarUrl",
+    "country",
+    "currency",
+  ] as const;
+
+  for (const field of textFields) {
+    if (user[field] !== undefined) {
+      const v = user[field] ?? null;
+      values[field] = v;
+      updateSet[field] = v;
+    }
   }
 
-  try {
-    const values: Partial<InsertUser> = {};
-    if (user.id) values.id = user.id;
-    if (user.phone) values.phone = user.phone;
+  if (!values.lastSignedIn) values.lastSignedIn = new Date();
 
-    const updateSet: Record<string, unknown> = {};
-
-    const textFields = ["name", "email", "loginMethod", "phone", "bio", "avatarUrl", "country", "currency"] as const;
-    type TextField = (typeof textFields)[number];
-
-    const assignNullable = (field: TextField) => {
-      const value = user[field];
-      if (value === undefined) return;
-      const normalized = value ?? null;
-      values[field] = normalized;
-      updateSet[field] = normalized;
-    };
-
-    textFields.forEach(assignNullable);
-
-    if (user.lastSignedIn !== undefined) {
-      values.lastSignedIn = user.lastSignedIn;
-      updateSet.lastSignedIn = user.lastSignedIn;
-    }
-    if (user.role !== undefined) {
-      values.role = user.role;
-      updateSet.role = user.role;
-    }
-
-    if (!values.lastSignedIn) {
-      values.lastSignedIn = new Date();
-    }
-
-    if (Object.keys(updateSet).length === 0) {
-      updateSet.lastSignedIn = new Date();
-    }
-
-    if (Object.keys(values).length === 0) {
-      return;
-    }
-
-    await db.insert(users).values(values as InsertUser).onDuplicateKeyUpdate({
-      set: updateSet,
-    });
-  } catch (error) {
-    console.error("[Database] Failed to upsert user:", error);
-    throw error;
-  }
-}
-
-export async function getUserById(userId: number) {
-  const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot get user: database not available");
-    return undefined;
-  }
-
-  const result = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-
-  return result.length > 0 ? result[0] : undefined;
+  await db.insert(users).values(values as InsertUser).onDuplicateKeyUpdate({
+    set: updateSet,
+  });
 }
 
 export async function getUserByPhone(phone: string) {
   const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot get user: database not available");
-    return undefined;
-  }
-
-  const result = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
-
-  return result.length > 0 ? result[0] : undefined;
-}
-
-// Video queries
-export async function getUserVideos(userId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(videos).where(eq(videos.userId, userId)).orderBy((v) => v.createdAt);
-}
-
-export async function getVideoById(videoId: number) {
-  const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(videos).where(eq(videos.id, videoId)).limit(1);
-  return result.length > 0 ? result[0] : undefined;
+  const res = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
+  return res[0];
 }
 
-export async function getFeedVideos(limit: number = 20, offset: number = 0) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(videos).where(eq(videos.isPublic, true)).orderBy((v) => v.createdAt).limit(limit).offset(offset);
-}
+/* =========================================================
+   OTP
+========================================================= */
 
-// Like queries
-export async function getUserLike(userId: number, videoId: number) {
-  const db = await getDb();
-  if (!db) return undefined;
-  const result = await db.select().from(likes).where(and(eq(likes.userId, userId), eq(likes.videoId, videoId))).limit(1);
-  return result.length > 0 ? result[0] : undefined;
-}
-
-// Comment queries
-export async function getVideoComments(videoId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(comments).where(eq(comments.videoId, videoId)).orderBy((c) => c.createdAt);
-}
-
-// Follower queries
-export async function getFollowerCount(userId: number) {
-  const db = await getDb();
-  if (!db) return 0;
-  const result = await db.select().from(followers).where(eq(followers.followingId, userId));
-  return result.length;
-}
-
-export async function getFollowingCount(userId: number) {
-  const db = await getDb();
-  if (!db) return 0;
-  const result = await db.select().from(followers).where(eq(followers.followerId, userId));
-  return result.length;
-}
-
-export async function isFollowing(followerId: number, followingId: number) {
-  const db = await getDb();
-  if (!db) return false;
-  const result = await db.select().from(followers).where(and(eq(followers.followerId, followerId), eq(followers.followingId, followingId))).limit(1);
-  return result.length > 0;
-}
-
-// Earnings queries
-export async function getUserEarnings(userId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(earnings).where(eq(earnings.userId, userId)).orderBy((e) => e.createdAt);
-}
-
-export async function getUserWithdrawals(userId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(withdrawals).where(eq(withdrawals.userId, userId)).orderBy((w) => w.createdAt);
-}
-
-// ============================================
-// OTP FUNCTIONS FOR PHONE AUTHENTICATION
-// ============================================
-
-/**
- * Format a JavaScript Date to MySQL datetime format (YYYY-MM-DD HH:mm:ss)
- * @param date - JavaScript Date object
- * @returns Formatted string for MySQL
- */
 function formatDateForMySQL(date: Date): string {
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(date.getUTCDate()).padStart(2, '0');
-  const hours = String(date.getUTCHours()).padStart(2, '0');
-  const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-  const seconds = String(date.getUTCSeconds()).padStart(2, '0');
-  
-  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+  return date.toISOString().slice(0, 19).replace("T", " ");
 }
 
-/**
- * Create a new OTP for phone authentication
- * @param phone - Phone number
- * @param code - 6-digit OTP code
- * @param expiresInMinutes - Expiration time in minutes (default: 10)
- */
-export async function createOTP(phone: string, code: string, expiresInMinutes: number = 10): Promise<void> {
+export async function createOTP(
+  phone: string,
+  code: string,
+  expiresInMinutes = 10
+): Promise<void> {
   const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot create OTP: database not available");
-    return;
-  }
+  if (!db) return;
 
-  try {
-    const expiresAtDate = new Date(Date.now() + expiresInMinutes * 60 * 1000);
-    // Format the date to MySQL format: YYYY-MM-DD HH:mm:ss
-    const expiresAtFormatted = formatDateForMySQL(expiresAtDate);
-    
-    await db.insert(otps).values({
-      phone,
-      code,
-      expiresAt: expiresAtFormatted as any,
-      attempts: 0,
-    });
-    console.log(`[OTP] Created OTP for ${phone}, expires at ${expiresAtFormatted}`);
-  } catch (error) {
-    console.error("[Database] Failed to create OTP:", error);
-    throw error;
-  }
+  const expiresAt = new Date(Date.now() + expiresInMinutes * 60_000);
+
+  await db.insert(otps).values({
+    phone,
+    code,
+    attempts: 0,
+    expiresAt: formatDateForMySQL(expiresAt) as any,
+  });
+
+  console.log(`[OTP] Generated for ${phone}: ${code}`);
 }
 
-/**
- * Get the latest valid (non-expired) OTP for a phone number
- * @param phone - Phone number
- * @returns OTP object or undefined if not found or expired
- */
-export async function getValidOTP(phone: string): Promise<InsertOTP | undefined> {
+export async function getValidOTP(
+  phone: string
+): Promise<InsertOTP | undefined> {
   const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot get OTP: database not available");
-    return undefined;
-  }
+  if (!db) return;
 
-  try {
-    const now = new Date();
-    const nowFormatted = formatDateForMySQL(now);
-    
-    const result = await db
-      .select()
-      .from(otps)
-      .where(and(eq(otps.phone, phone), gt(otps.expiresAt, nowFormatted as any)))
-      .orderBy((o) => o.createdAt)
-      .limit(1);
+  const now = formatDateForMySQL(new Date());
 
-    return result.length > 0 ? result[0] : undefined;
-  } catch (error) {
-    console.error("[Database] Failed to get OTP:", error);
-    throw error;
-  }
+  const res = await db
+    .select()
+    .from(otps)
+    .where(and(eq(otps.phone, phone), gt(otps.expiresAt, now as any)))
+    .orderBy((o) => o.createdAt)
+    .limit(1);
+
+  return res[0];
 }
 
-/**
- * Delete an OTP by ID (used after successful verification)
- * @param otpId - OTP ID
- */
-export async function deleteOTP(otpId: number): Promise<void> {
+export async function deleteOTP(id: number) {
   const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot delete OTP: database not available");
-    return;
-  }
-
-  try {
-    await db.delete(otps).where(eq(otps.id, otpId));
-    console.log(`[OTP] Deleted OTP ${otpId}`);
-  } catch (error) {
-    console.error("[Database] Failed to delete OTP:", error);
-    throw error;
-  }
+  if (!db) return;
+  await db.delete(otps).where(eq(otps.id, id));
 }
 
-/**
- * Increment OTP attempt counter (for rate limiting)
- * @param otpId - OTP ID
- */
-export async function incrementOTPAttempts(otpId: number): Promise<void> {
+export async function incrementOTPAttempts(id: number) {
   const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot increment OTP attempts: database not available");
-    return;
-  }
+  if (!db) return;
 
-  try {
-    const otp = await db.select().from(otps).where(eq(otps.id, otpId)).limit(1);
-    if (otp.length > 0) {
-      const newAttempts = otp[0].attempts + 1;
-      await db.update(otps).set({ attempts: newAttempts }).where(eq(otps.id, otpId));
-      console.log(`[OTP] Incremented attempts for OTP ${otpId} to ${newAttempts}`);
-    }
-  } catch (error) {
-    console.error("[Database] Failed to increment OTP attempts:", error);
-    throw error;
-  }
-}
+  const otp = await db.select().from(otps).where(eq(otps.id, id)).limit(1);
+  if (!otp[0]) return;
 
-/**
- * Clean up expired OTPs from database
- * Should be called periodically to maintain database health
- */
-export async function cleanupExpiredOTPs(): Promise<void> {
-  const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot cleanup OTPs: database not available");
-    return;
-  }
-
-  try {
-    const now = new Date();
-    const nowFormatted = formatDateForMySQL(now);
-    
-    const result = await db.delete(otps).where(lt(otps.expiresAt, nowFormatted as any));
-    console.log(`[OTP] Cleaned up expired OTPs`);
-  } catch (error) {
-    console.error("[Database] Failed to cleanup OTPs:", error);
-  }
+  await db
+    .update(otps)
+    .set({ attempts: otp[0].attempts + 1 })
+    .where(eq(otps.id, id));
 }
