@@ -27,16 +27,17 @@ async function initDatabase() {
 
   const connection = await mysql.createConnection(process.env.DATABASE_URL);
 
+  // 🔥 NOMS ALIGNÉS AVEC DRIZZLE
   await connection.execute(`
     CREATE TABLE IF NOT EXISTS otps (
       id INT AUTO_INCREMENT PRIMARY KEY,
-      phone VARCHAR(32) NOT NULL,
-      code VARCHAR(10) NOT NULL,
+      phone VARCHAR(20) NOT NULL,
+      code VARCHAR(6) NOT NULL,
       attempts INT NOT NULL DEFAULT 0,
-      expires_at DATETIME NOT NULL,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      expiresAt DATETIME NOT NULL,
+      createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       INDEX idx_phone (phone),
-      INDEX idx_expires (expires_at)
+      INDEX idx_expiresAt (expiresAt)
     );
   `);
 
@@ -69,60 +70,10 @@ export async function upsertUser(user: Partial<InsertUser>) {
   });
 }
 
-export async function getUserById(userId: number) {
-  const db = await getDb();
-  if (!db) return;
-  return (await db.select().from(users).where(eq(users.id, userId)).limit(1))[0];
-}
-
 export async function getUserByPhone(phone: string) {
   const db = await getDb();
   if (!db) return;
   return (await db.select().from(users).where(eq(users.phone, phone)).limit(1))[0];
-}
-
-/* =====================
-   VIDEOS
-===================== */
-
-export async function getUserVideos(userId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(videos).where(eq(videos.userId, userId));
-}
-
-export async function getVideoById(videoId: number) {
-  const db = await getDb();
-  if (!db) return;
-  return (await db.select().from(videos).where(eq(videos.id, videoId)).limit(1))[0];
-}
-
-export async function getFeedVideos(limit = 20, offset = 0) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(videos).limit(limit).offset(offset);
-}
-
-/* =====================
-   LIKES & COMMENTS
-===================== */
-
-export async function getUserLike(userId: number, videoId: number) {
-  const db = await getDb();
-  if (!db) return;
-  return (
-    await db
-      .select()
-      .from(likes)
-      .where(and(eq(likes.userId, userId), eq(likes.videoId, videoId)))
-      .limit(1)
-  )[0];
-}
-
-export async function getVideoComments(videoId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(comments).where(eq(comments.videoId, videoId));
 }
 
 /* =====================
@@ -188,58 +139,4 @@ export async function incrementOTPAttempts(otpId: number) {
     .update(otps)
     .set({ attempts: otp.attempts + 1 })
     .where(eq(otps.id, otpId));
-}
-
-/* =====================
-   FOLLOWERS
-===================== */
-
-export async function getFollowerCount(userId: number) {
-  const db = await getDb();
-  if (!db) return 0;
-  return (
-    await db.select().from(followers).where(eq(followers.followingId, userId))
-  ).length;
-}
-
-export async function getFollowingCount(userId: number) {
-  const db = await getDb();
-  if (!db) return 0;
-  return (
-    await db.select().from(followers).where(eq(followers.followerId, userId))
-  ).length;
-}
-
-export async function isFollowing(followerId: number, followingId: number) {
-  const db = await getDb();
-  if (!db) return false;
-
-  return (
-    await db
-      .select()
-      .from(followers)
-      .where(
-        and(
-          eq(followers.followerId, followerId),
-          eq(followers.followingId, followingId)
-        )
-      )
-      .limit(1)
-  ).length > 0;
-}
-
-/* =====================
-   EARNINGS
-===================== */
-
-export async function getUserEarnings(userId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(earnings).where(eq(earnings.userId, userId));
-}
-
-export async function getUserWithdrawals(userId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(withdrawals).where(eq(withdrawals.userId, userId));
-}
+        }
