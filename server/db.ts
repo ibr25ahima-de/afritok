@@ -104,6 +104,28 @@ export async function getFeedVideos(limit = 20, offset = 0) {
 }
 
 /* =====================
+   LIKES & COMMENTS
+===================== */
+
+export async function getUserLike(userId: number, videoId: number) {
+  const db = await getDb();
+  if (!db) return;
+  return (
+    await db
+      .select()
+      .from(likes)
+      .where(and(eq(likes.userId, userId), eq(likes.videoId, videoId)))
+      .limit(1)
+  )[0];
+}
+
+export async function getVideoComments(videoId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(comments).where(eq(comments.videoId, videoId));
+}
+
+/* =====================
    OTP
 ===================== */
 
@@ -220,4 +242,4 @@ export async function getUserWithdrawals(userId: number) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(withdrawals).where(eq(withdrawals.userId, userId));
-          }
+}
