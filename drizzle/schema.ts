@@ -43,16 +43,17 @@ export type InsertUser = typeof users.$inferInsert;
 
 /**
  * =========================
- * OTPs (FIX CRITIQUE ICI)
+ * OTPs (VERSION STABLE MYSQL)
  * =========================
  */
 export const otps = mysqlTable("otps", {
+  // IMPORTANT: laisser autoincrement + primaryKey
   id: int("id").autoincrement().primaryKey(),
 
   phone: varchar("phone", { length: 20 }).notNull(),
   code: varchar("code", { length: 6 }).notNull(),
 
-  // 🔴 FIX MYSQL : PAS DE MILLISECONDS
+  // Compatible MySQL (pas de millisecondes)
   expiresAt: timestamp("expiresAt", { mode: "string" }).notNull(),
 
   attempts: int("attempts").default(0).notNull(),
