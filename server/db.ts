@@ -225,3 +225,23 @@ export async function getUserWithdrawals(userId: number) {
   if (!db) return [];
   return db.select().from(withdrawals).where(eq(withdrawals.userId, userId));
     }
+export async function isFollowing(
+  followerId: number,
+  followingId: number
+): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+
+  const result = await db
+    .select()
+    .from(followers)
+    .where(
+      and(
+        eq(followers.followerId, followerId),
+        eq(followers.followingId, followingId)
+      )
+    )
+    .limit(1);
+
+  return result.length > 0;
+}
