@@ -43,21 +43,22 @@ export type InsertUser = typeof users.$inferInsert;
 
 /**
  * =========================
- * OTPs (VERSION STABLE MYSQL)
+ * OTPs — VERSION FINALE STABLE
  * =========================
  */
 export const otps = mysqlTable("otps", {
-  // IMPORTANT: laisser autoincrement + primaryKey
   id: int("id").autoincrement().primaryKey(),
 
   phone: varchar("phone", { length: 20 }).notNull(),
   code: varchar("code", { length: 6 }).notNull(),
 
-  // Compatible MySQL (pas de millisecondes)
-  expiresAt: timestamp("expiresAt", { mode: "string" }).notNull(),
+  // 🔥 CORRECTION CRITIQUE (match MySQL)
+  expiresAt: timestamp("expires_at", { mode: "string" }).notNull(),
 
   attempts: int("attempts").default(0).notNull(),
-  createdAt: timestamp("createdAt", { mode: "string" }).defaultNow().notNull(),
+
+  // 🔥 CORRECTION CRITIQUE (match MySQL)
+  createdAt: timestamp("created_at", { mode: "string" }).defaultNow().notNull(),
 });
 
 export type OTP = typeof otps.$inferSelect;
