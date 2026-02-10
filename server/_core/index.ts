@@ -8,6 +8,10 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { handleStripeWebhook, testStripeWebhook } from "../webhook-endpoint";
 
+// AJOUT DRIZZLE
+import { db } from "../db";
+import { migrate } from "drizzle-orm/mysql2/migrator";
+
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
     const server = net.createServer();
@@ -30,16 +34,21 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
-  
-  // Webhook Stripe DOIT être AVANT express.json() pour avoir accès au raw body
+
+  // CREER LES TABLES AUTOMATIQUEMENT
+  try {
+    await migrate(db, { migrationsFolder: "./drizzle" });
+    console.log("Migrations exécutées");
+  } catch (e) {
+    console.error("Erreur migration", e);
+  }
+
   app.post('/api/webhooks/stripe', express.raw({type: 'application/json'}), handleStripeWebhook);
   app.post('/api/webhooks/stripe/test', express.json(), testStripeWebhook);
-  
-  // Configure body parser with larger size limit for file uploads
+
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
-  
-  // tRPC API
+
   app.use(
     "/api/trpc",
     createExpressMiddleware({
@@ -47,7 +56,7 @@ async function startServer() {
       createContext,
     })
   );
-  // development mode uses Vite, production mode uses static files
+
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
   } else {
