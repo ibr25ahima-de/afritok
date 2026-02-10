@@ -19,7 +19,7 @@ let _db: ReturnType<typeof drizzle> | null = null;
 let _initialized = false;
 
 /* =====================
-   INIT DATABASE
+INIT DATABASE
 ===================== */
 
 async function initDatabase() {
@@ -27,56 +27,6 @@ async function initDatabase() {
 
   const connection = await mysql.createConnection(process.env.DATABASE_URL);
 
-  // USERS
-  await connection.execute(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INT AUTO_INCREMENT PRIMARY KEY
-    );
-  `);
-
-  // VIDEOS
-  await connection.execute(`
-    CREATE TABLE IF NOT EXISTS videos (
-      id INT AUTO_INCREMENT PRIMARY KEY
-    );
-  `);
-
-  // LIKES
-  await connection.execute(`
-    CREATE TABLE IF NOT EXISTS likes (
-      id INT AUTO_INCREMENT PRIMARY KEY
-    );
-  `);
-
-  // COMMENTS
-  await connection.execute(`
-    CREATE TABLE IF NOT EXISTS comments (
-      id INT AUTO_INCREMENT PRIMARY KEY
-    );
-  `);
-
-  // FOLLOWERS
-  await connection.execute(`
-    CREATE TABLE IF NOT EXISTS followers (
-      id INT AUTO_INCREMENT PRIMARY KEY
-    );
-  `);
-
-  // EARNINGS
-  await connection.execute(`
-    CREATE TABLE IF NOT EXISTS earnings (
-      id INT AUTO_INCREMENT PRIMARY KEY
-    );
-  `);
-
-  // WITHDRAWALS
-  await connection.execute(`
-    CREATE TABLE IF NOT EXISTS withdrawals (
-      id INT AUTO_INCREMENT PRIMARY KEY
-    );
-  `);
-
-  // OTPS (complète)
   await connection.execute(`
     CREATE TABLE IF NOT EXISTS otps (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -92,7 +42,7 @@ async function initDatabase() {
 
   await connection.end();
   _initialized = true;
-  console.log("[Database] all tables ready");
+  console.log("[Database] OTP table ready");
 }
 
 export async function getDb() {
@@ -104,7 +54,7 @@ export async function getDb() {
 }
 
 /* =====================
-   USERS
+USERS
 ===================== */
 
 export async function upsertUser(user: Partial<InsertUser>) {
@@ -132,7 +82,7 @@ export async function getUserByPhone(phone: string) {
 }
 
 /* =====================
-   VIDEOS
+VIDEOS
 ===================== */
 
 export async function getVideoById(videoId: number) {
@@ -153,33 +103,6 @@ export async function getUserVideos(userId: number) {
   return db.select().from(videos).where(eq(videos.userId, userId));
 }
 
-/* =====================
-   OTP
-===================== */
-
-function mysqlDate(date: Date) {
-  return date.toISOString().slice(0, 19).replace("T", " ");
-}
-
-export async function createOTP(
-  phone: string,
-  code: string,
-  expiresInMinutes = 10
-) {
-  const db = await getDb();
-  if (!db) return;
-
-  const expiresAt = new Date(Date.now() + expiresInMinutes * 60000);
-
-  await db.insert(otps).values({
-    phone,
-    code,
-    attempts: 0,
-    expiresAt: mysqlDate(expiresAt) as any,
-  });
-
-  console.log(`[OTP] ${phone} → ${code}`);
-}
 /* =====================
 LIKES & COMMENTS
 ===================== */
@@ -203,6 +126,71 @@ export async function getVideoComments(videoId: number) {
 }
 
 /* =====================
+OTP
+===================== */
+
+function mysqlDate(date: Date) {
+  return date.toISOString().slice(0, 19).replace("T", " ");
+}
+
+export async function createOTP(
+  phone: string,
+  code: string,
+  expiresInMinutes = 10
+) {
+  const db = await getDb();
+  if (!db) return;
+
+  const expiresAt = new Date(Date.now() + expiresInMinutes * 60000);
+
+  await db.insert(otps).values({
+    phone,
+    code,
+    attempts: 0,
+    expiresAt: mysqlDate(expiresAt) as any,
+  });
+
+  console.log(`[OTP] ${phone} -> ${code}`);
+}
+
+export async function getValidOTP(phone: string): Promise<InsertOTP | undefined> {
+  const db = await getDb();
+  if (!db) return;
+
+  const now = mysqlDate(new Date());
+
+  return (
+    await db
+      .select()
+      .from(otps)
+      .where(and(eq(otps.phone, phone), gt(otps.expiresAt, now as any)))
+      .limit(1)
+  )[0];
+}
+
+export async function deleteOTP(otpId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(otps).where(eq(otps.id, otpId));
+}
+
+export async function incrementOTPAttempts(otpId: number) {
+  const db = await getDb();
+  if (!db) return;
+
+  const otp = (
+    await db.select().from(otps).where(eq(otps.id, otpId)).limit(1)
+  )[0];
+
+  if (!otp) return;
+
+  await db
+    .update(otps)
+    .set({ attempts: otp.attempts + 1 })
+    .where(eq(otps.id, otpId));
+}
+
+/* =====================
 FOLLOWERS
 ===================== */
 
@@ -220,6 +208,22 @@ export async function getFollowingCount(userId: number) {
   return (
     await db.select().from(followers).where(eq(followers.followerId, userId))
   ).length;
+}
+
+/* =====================
+EARNINGS & WITHDRAWALS
+===================== */
+
+export async function getUserEarnings(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(earnings).where(eq(earnings.userId, userId));
+}
+
+export async function getUserWithdrawals(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(withdrawals).where(eq(withdrawals.userId, userId));
 }
 
 export async function isFollowing(
@@ -241,20 +245,4 @@ export async function isFollowing(
     .limit(1);
 
   return result.length > 0;
-}
-
-/* =====================
-EARNINGS & WITHDRAWALS
-===================== */
-
-export async function getUserEarnings(userId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(earnings).where(eq(earnings.userId, userId));
-}
-
-export async function getUserWithdrawals(userId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(withdrawals).where(eq(withdrawals.userId, userId));
-                                 }
+    }
