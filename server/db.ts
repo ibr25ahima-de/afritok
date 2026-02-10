@@ -180,3 +180,81 @@ export async function createOTP(
 
   console.log(`[OTP] ${phone} → ${code}`);
 }
+/* =====================
+LIKES & COMMENTS
+===================== */
+
+export async function getUserLike(userId: number, videoId: number) {
+  const db = await getDb();
+  if (!db) return;
+  return (
+    await db
+      .select()
+      .from(likes)
+      .where(and(eq(likes.userId, userId), eq(likes.videoId, videoId)))
+      .limit(1)
+  )[0];
+}
+
+export async function getVideoComments(videoId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(comments).where(eq(comments.videoId, videoId));
+}
+
+/* =====================
+FOLLOWERS
+===================== */
+
+export async function getFollowerCount(userId: number) {
+  const db = await getDb();
+  if (!db) return 0;
+  return (
+    await db.select().from(followers).where(eq(followers.followingId, userId))
+  ).length;
+}
+
+export async function getFollowingCount(userId: number) {
+  const db = await getDb();
+  if (!db) return 0;
+  return (
+    await db.select().from(followers).where(eq(followers.followerId, userId))
+  ).length;
+}
+
+export async function isFollowing(
+  followerId: number,
+  followingId: number
+): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+
+  const result = await db
+    .select()
+    .from(followers)
+    .where(
+      and(
+        eq(followers.followerId, followerId),
+        eq(followers.followingId, followingId)
+      )
+    )
+    .limit(1);
+
+  return result.length > 0;
+}
+
+/* =====================
+EARNINGS & WITHDRAWALS
+===================== */
+
+export async function getUserEarnings(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(earnings).where(eq(earnings.userId, userId));
+}
+
+export async function getUserWithdrawals(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(withdrawals).where(eq(withdrawals.userId, userId));
+                                 }
