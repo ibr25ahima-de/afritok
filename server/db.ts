@@ -246,3 +246,4 @@ export async function isFollowing(
 
   return result.length > 0;
     }
+export const db = await getDb();
