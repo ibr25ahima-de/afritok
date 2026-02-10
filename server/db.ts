@@ -27,6 +27,56 @@ async function initDatabase() {
 
   const connection = await mysql.createConnection(process.env.DATABASE_URL);
 
+  // USERS
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INT AUTO_INCREMENT PRIMARY KEY
+    );
+  `);
+
+  // VIDEOS
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS videos (
+      id INT AUTO_INCREMENT PRIMARY KEY
+    );
+  `);
+
+  // LIKES
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS likes (
+      id INT AUTO_INCREMENT PRIMARY KEY
+    );
+  `);
+
+  // COMMENTS
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS comments (
+      id INT AUTO_INCREMENT PRIMARY KEY
+    );
+  `);
+
+  // FOLLOWERS
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS followers (
+      id INT AUTO_INCREMENT PRIMARY KEY
+    );
+  `);
+
+  // EARNINGS
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS earnings (
+      id INT AUTO_INCREMENT PRIMARY KEY
+    );
+  `);
+
+  // WITHDRAWALS
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS withdrawals (
+      id INT AUTO_INCREMENT PRIMARY KEY
+    );
+  `);
+
+  // OTPS (complète)
   await connection.execute(`
     CREATE TABLE IF NOT EXISTS otps (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -42,7 +92,7 @@ async function initDatabase() {
 
   await connection.end();
   _initialized = true;
-  console.log("[Database] OTP table ready");
+  console.log("[Database] all tables ready");
 }
 
 export async function getDb() {
@@ -104,28 +154,6 @@ export async function getUserVideos(userId: number) {
 }
 
 /* =====================
-   LIKES & COMMENTS
-===================== */
-
-export async function getUserLike(userId: number, videoId: number) {
-  const db = await getDb();
-  if (!db) return;
-  return (
-    await db
-      .select()
-      .from(likes)
-      .where(and(eq(likes.userId, userId), eq(likes.videoId, videoId)))
-      .limit(1)
-  )[0];
-}
-
-export async function getVideoComments(videoId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(comments).where(eq(comments.videoId, videoId));
-}
-
-/* =====================
    OTP
 ===================== */
 
@@ -151,97 +179,4 @@ export async function createOTP(
   });
 
   console.log(`[OTP] ${phone} → ${code}`);
-}
-
-export async function getValidOTP(phone: string): Promise<InsertOTP | undefined> {
-  const db = await getDb();
-  if (!db) return;
-
-  const now = mysqlDate(new Date());
-
-  return (
-    await db
-      .select()
-      .from(otps)
-      .where(and(eq(otps.phone, phone), gt(otps.expiresAt, now as any)))
-      .limit(1)
-  )[0];
-}
-
-export async function deleteOTP(otpId: number) {
-  const db = await getDb();
-  if (!db) return;
-  await db.delete(otps).where(eq(otps.id, otpId));
-}
-
-export async function incrementOTPAttempts(otpId: number) {
-  const db = await getDb();
-  if (!db) return;
-
-  const otp = (
-    await db.select().from(otps).where(eq(otps.id, otpId)).limit(1)
-  )[0];
-
-  if (!otp) return;
-
-  await db
-    .update(otps)
-    .set({ attempts: otp.attempts + 1 })
-    .where(eq(otps.id, otpId));
-}
-
-/* =====================
-   FOLLOWERS
-===================== */
-
-export async function getFollowerCount(userId: number) {
-  const db = await getDb();
-  if (!db) return 0;
-  return (
-    await db.select().from(followers).where(eq(followers.followingId, userId))
-  ).length;
-}
-
-export async function getFollowingCount(userId: number) {
-  const db = await getDb();
-  if (!db) return 0;
-  return (
-    await db.select().from(followers).where(eq(followers.followerId, userId))
-  ).length;
-}
-
-/* =====================
-   EARNINGS & WITHDRAWALS
-===================== */
-
-export async function getUserEarnings(userId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(earnings).where(eq(earnings.userId, userId));
-}
-
-export async function getUserWithdrawals(userId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(withdrawals).where(eq(withdrawals.userId, userId));
-    }
-export async function isFollowing(
-  followerId: number,
-  followingId: number
-): Promise<boolean> {
-  const db = await getDb();
-  if (!db) return false;
-
-  const result = await db
-    .select()
-    .from(followers)
-    .where(
-      and(
-        eq(followers.followerId, followerId),
-        eq(followers.followingId, followingId)
-      )
-    )
-    .limit(1);
-
-  return result.length > 0;
 }
