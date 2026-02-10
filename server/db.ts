@@ -1,6 +1,6 @@
 import { eq, and, gt } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
-import mysql from "mysql2/promise";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
 
 import {
   users,
@@ -15,70 +15,48 @@ import {
   InsertOTP,
 } from "../drizzle/schema";
 
-let _db: ReturnType<typeof drizzle> | null = null;
-let _initialized = false;
-
 /* =====================
-INIT DATABASE
+DATABASE CONNECTION
 ===================== */
 
-async function initDatabase() {
-  if (_initialized || !process.env.DATABASE_URL) return;
-
-  const connection = await mysql.createConnection(process.env.DATABASE_URL);
-
-  await connection.execute(`
-    CREATE TABLE IF NOT EXISTS otps (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      phone VARCHAR(20) NOT NULL,
-      code VARCHAR(6) NOT NULL,
-      attempts INT NOT NULL DEFAULT 0,
-      expiresAt DATETIME NOT NULL,
-      createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      INDEX idx_phone (phone),
-      INDEX idx_expires (expiresAt)
-    );
-  `);
-
-  await connection.end();
-  _initialized = true;
-  console.log("[Database] OTP table ready");
+if (!process.env.DATABASE_URL) {
+  throw new Error("DATABASE_URL is not defined");
 }
 
-export async function getDb() {
-  if (!_db && process.env.DATABASE_URL) {
-    await initDatabase();
-    _db = drizzle(process.env.DATABASE_URL);
-  }
-  return _db;
-}
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+});
+
+export const db = drizzle(pool);
 
 /* =====================
 USERS
 ===================== */
 
 export async function upsertUser(user: Partial<InsertUser>) {
-  const db = await getDb();
-  if (!db) return;
+  const values: Partial<InsertUser> = {
+    ...user,
+    lastSignedIn: user.lastSignedIn ?? new Date(),
+  };
 
-  const values: Partial<InsertUser> = { ...user };
-  if (!values.lastSignedIn) values.lastSignedIn = new Date();
-
-  await db.insert(users).values(values as InsertUser).onDuplicateKeyUpdate({
-    set: values,
-  });
+  await db
+    .insert(users)
+    .values(values as InsertUser)
+    .onConflictDoUpdate({
+      target: users.id,
+      set: values,
+    });
 }
 
 export async function getUserById(userId: number) {
-  const db = await getDb();
-  if (!db) return;
   return (await db.select().from(users).where(eq(users.id, userId)).limit(1))[0];
 }
 
 export async function getUserByPhone(phone: string) {
-  const db = await getDb();
-  if (!db) return;
-  return (await db.select().from(users).where(eq(users.phone, phone)).limit(1))[0];
+  return (
+    await db.select().from(users).where(eq(users.phone, phone)).limit(1)
+  )[0];
 }
 
 /* =====================
@@ -86,20 +64,16 @@ VIDEOS
 ===================== */
 
 export async function getVideoById(videoId: number) {
-  const db = await getDb();
-  if (!db) return;
-  return (await db.select().from(videos).where(eq(videos.id, videoId)).limit(1))[0];
+  return (
+    await db.select().from(videos).where(eq(videos.id, videoId)).limit(1)
+  )[0];
 }
 
 export async function getFeedVideos(limit = 20, offset = 0) {
-  const db = await getDb();
-  if (!db) return [];
   return db.select().from(videos).limit(limit).offset(offset);
 }
 
 export async function getUserVideos(userId: number) {
-  const db = await getDb();
-  if (!db) return [];
   return db.select().from(videos).where(eq(videos.userId, userId));
 }
 
@@ -108,8 +82,6 @@ LIKES & COMMENTS
 ===================== */
 
 export async function getUserLike(userId: number, videoId: number) {
-  const db = await getDb();
-  if (!db) return;
   return (
     await db
       .select()
@@ -120,8 +92,6 @@ export async function getUserLike(userId: number, videoId: number) {
 }
 
 export async function getVideoComments(videoId: number) {
-  const db = await getDb();
-  if (!db) return [];
   return db.select().from(comments).where(eq(comments.videoId, videoId));
 }
 
@@ -129,55 +99,38 @@ export async function getVideoComments(videoId: number) {
 OTP
 ===================== */
 
-function mysqlDate(date: Date) {
-  return date.toISOString().slice(0, 19).replace("T", " ");
-}
-
 export async function createOTP(
   phone: string,
   code: string,
   expiresInMinutes = 10
 ) {
-  const db = await getDb();
-  if (!db) return;
-
   const expiresAt = new Date(Date.now() + expiresInMinutes * 60000);
 
   await db.insert(otps).values({
     phone,
     code,
     attempts: 0,
-    expiresAt: mysqlDate(expiresAt) as any,
+    expiresAt,
   });
 
   console.log(`[OTP] ${phone} -> ${code}`);
 }
 
 export async function getValidOTP(phone: string): Promise<InsertOTP | undefined> {
-  const db = await getDb();
-  if (!db) return;
-
-  const now = mysqlDate(new Date());
-
   return (
     await db
       .select()
       .from(otps)
-      .where(and(eq(otps.phone, phone), gt(otps.expiresAt, now as any)))
+      .where(and(eq(otps.phone, phone), gt(otps.expiresAt, new Date())))
       .limit(1)
   )[0];
 }
 
 export async function deleteOTP(otpId: number) {
-  const db = await getDb();
-  if (!db) return;
   await db.delete(otps).where(eq(otps.id, otpId));
 }
 
 export async function incrementOTPAttempts(otpId: number) {
-  const db = await getDb();
-  if (!db) return;
-
   const otp = (
     await db.select().from(otps).where(eq(otps.id, otpId)).limit(1)
   )[0];
@@ -195,18 +148,20 @@ FOLLOWERS
 ===================== */
 
 export async function getFollowerCount(userId: number) {
-  const db = await getDb();
-  if (!db) return 0;
   return (
-    await db.select().from(followers).where(eq(followers.followingId, userId))
+    await db
+      .select()
+      .from(followers)
+      .where(eq(followers.followingId, userId))
   ).length;
 }
 
 export async function getFollowingCount(userId: number) {
-  const db = await getDb();
-  if (!db) return 0;
   return (
-    await db.select().from(followers).where(eq(followers.followerId, userId))
+    await db
+      .select()
+      .from(followers)
+      .where(eq(followers.followerId, userId))
   ).length;
 }
 
@@ -215,14 +170,10 @@ EARNINGS & WITHDRAWALS
 ===================== */
 
 export async function getUserEarnings(userId: number) {
-  const db = await getDb();
-  if (!db) return [];
   return db.select().from(earnings).where(eq(earnings.userId, userId));
 }
 
 export async function getUserWithdrawals(userId: number) {
-  const db = await getDb();
-  if (!db) return [];
   return db.select().from(withdrawals).where(eq(withdrawals.userId, userId));
 }
 
@@ -230,9 +181,6 @@ export async function isFollowing(
   followerId: number,
   followingId: number
 ): Promise<boolean> {
-  const db = await getDb();
-  if (!db) return false;
-
   const result = await db
     .select()
     .from(followers)
@@ -245,5 +193,4 @@ export async function isFollowing(
     .limit(1);
 
   return result.length > 0;
-    }
-export const db = await getDb();
+                                                 }
