@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { protectedProcedure } from "../trpc";
+import { protectedProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { db } from "@/db";
 import { videos } from "@/db/schema";
