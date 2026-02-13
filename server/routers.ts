@@ -1,18 +1,19 @@
 import { z } from "zod";
+import { router } from "./_core/trpc";
 import { protectedProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { db } from "@/db";
 import { videos } from "@/db/schema";
 import { uploadVideoToStorage } from "@/lib/storage";
 
-export const videoRouter = {
+export const videoRouter = router({
   upload: protectedProcedure
     .input(
       z.object({
         title: z.string(),
         description: z.string().optional(),
-        videoFile: z.any(), // ✅ FIX NODE COMPATIBILITY
-        thumbnailFile: z.any().optional(), // ✅ FIX NODE COMPATIBILITY
+        videoFile: z.any(),
+        thumbnailFile: z.any().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -41,4 +42,10 @@ export const videoRouter = {
         });
       }
     }),
-};
+});
+
+export const appRouter = router({
+  video: videoRouter,
+});
+
+export type AppRouter = typeof appRouter;
