@@ -1,7 +1,6 @@
 import { useState, useRef } from "react";
 import AudioSelector from "@/components/AudioSelector";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 import { ArrowLeft, Upload, X, AlertCircle, CheckCircle } from "lucide-react";
@@ -22,20 +21,12 @@ export default function UploadVideo() {
   const [showAudioSelector, setShowAudioSelector] = useState(false);
   const [selectedAudio, setSelectedAudio] = useState<{ url: string; name: string } | null>(null);
 
-  // ✅ CORRECTION: Use trpc.video.upload (not videoUpload.upload)
-  const uploadMutation = trpc.video.upload.useMutation();
-
-  const handleAudioSelect = (audioUrl: string, audioName: string) => {
-    setSelectedAudio({ url: audioUrl, name: audioName });
-    setShowAudioSelector(false);
-  };
-
   if (!isAuthenticated) {
     navigate("/");
     return null;
   }
 
-  const handleFileSelect = async (file: File) => {
+  const handleFileSelect = (file: File) => {
     if (!file.type.startsWith("video/")) {
       setError("Veuillez sélectionner un fichier vidéo valide");
       return;
@@ -48,9 +39,7 @@ export default function UploadVideo() {
 
     setSelectedFile(file);
     setError("");
-
-    const objectUrl = URL.createObjectURL(file);
-    setPreview(objectUrl);
+    setPreview(URL.createObjectURL(file));
   };
 
   const handleUpload = async () => {
@@ -60,14 +49,23 @@ export default function UploadVideo() {
     }
 
     setUploadProgress(10);
+    setError("");
 
     try {
-      await uploadMutation.mutateAsync({
-        title: title.trim(),
-        description: description.trim(),
-        // ✅ CORRECTION: Send file parameter (not videoFile)
-        file: selectedFile,
+      const formData = new FormData();
+      formData.append("title", title.trim());
+      formData.append("description", description.trim());
+      formData.append("file", selectedFile);
+
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
       });
+
+      if (!response.ok) {
+        throw new Error("Upload failed");
+      }
 
       setUploadProgress(100);
       setSuccess(true);
@@ -81,7 +79,7 @@ export default function UploadVideo() {
         navigate(`/profile/${user?.id}`);
       }, 2000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erreur lors de l'upload");
+      setError("Échec du chargement de la vidéo");
       setUploadProgress(0);
     }
   };
@@ -89,18 +87,17 @@ export default function UploadVideo() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       <header className="border-b border-purple-800/30 bg-slate-900/50 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate("/feed")}
-              className="text-purple-400 hover:text-purple-300"
-            >
-              <ArrowLeft className="w-6 h-6" />
-            </button>
-            <div className="flex items-center gap-2">
-              {APP_LOGO && <img src={APP_LOGO} alt={APP_TITLE} className="h-8 w-8" />}
-              <span className="text-xl font-bold text-white">{APP_TITLE}</span>
-            </div>
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center gap-4">
+          <button
+            onClick={() => navigate("/feed")}
+            className="text-purple-400 hover:text-purple-300"
+          >
+            <ArrowLeft className="w-6 h-6" />
+          </button>
+
+          <div className="flex items-center gap-2">
+            {APP_LOGO && <img src={APP_LOGO} alt={APP_TITLE} className="h-8 w-8" />}
+            <span className="text-xl font-bold text-white">{APP_TITLE}</span>
           </div>
         </div>
       </header>
@@ -171,7 +168,6 @@ export default function UploadVideo() {
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  maxLength={200}
                   className="w-full bg-slate-800 border border-purple-800/50 rounded-lg px-4 py-2 text-white"
                 />
               </div>
@@ -183,7 +179,6 @@ export default function UploadVideo() {
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  maxLength={1000}
                   rows={4}
                   className="w-full bg-slate-800 border border-purple-800/50 rounded-lg px-4 py-2 text-white"
                 />
@@ -207,12 +202,10 @@ export default function UploadVideo() {
 
               <Button
                 onClick={handleUpload}
-                disabled={!selectedFile || !title.trim() || uploadMutation.isPending}
+                disabled={!selectedFile || !title.trim()}
                 className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white py-3"
               >
-                {uploadMutation.isPending
-                  ? "Upload en cours..."
-                  : "Télécharger la vidéo"}
+                Télécharger la vidéo
               </Button>
             </div>
           </div>
@@ -221,10 +214,13 @@ export default function UploadVideo() {
 
       {showAudioSelector && (
         <AudioSelector
-          onSelectAudio={handleAudioSelect}
+          onSelectAudio={(url, name) => {
+            setSelectedAudio({ url, name });
+            setShowAudioSelector(false);
+          }}
           onClose={() => setShowAudioSelector(false)}
         />
       )}
     </div>
   );
-}
+        }
