@@ -200,8 +200,9 @@ upload: protectedProcedure
     z.object({  
       title: z.string(),  
       description: z.string().optional(),  
-      file: z.instanceof(File), // ✅ FIXED: Changed from videoFile to file
-      thumbnailFile: z.instanceof(File).optional(),  
+      file: z.any(),
+thumbnailFile: z.any().optional(),
+       
     })  
   )  
   .mutation(async ({ ctx, input }) => {  
