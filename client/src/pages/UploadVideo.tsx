@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import AudioSelector from "@/components/AudioSelector";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { trpc } from "@/_core/trpc";
+import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 import { ArrowLeft, Upload, X, AlertCircle, CheckCircle } from "lucide-react";
