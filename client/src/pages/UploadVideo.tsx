@@ -73,11 +73,13 @@ export default function UploadVideo() {
         navigate(`/profile/${user?.id}`);
       }, 2000);
 
-    } catch (err) {
-      console.error(err);
-      setError("Échec du chargement de la vidéo");
-      setUploadProgress(0);
+    } catch (err: any) {
+  console.error("UPLOAD ERROR:", err);
+  setError(err?.message || "Échec du chargement de la vidéo");
+  setUploadProgress(0);
     }
+      
+  
   };
 
   return (
