@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import AudioSelector from "@/components/AudioSelector";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { trpc } from "@/_core/trpc";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 import { ArrowLeft, Upload, X, AlertCircle, CheckCircle } from "lucide-react";
@@ -10,6 +11,8 @@ export default function UploadVideo() {
   const { user, isAuthenticated } = useAuth();
   const [, navigate] = useLocation();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const uploadMutation = trpc.video.upload.useMutation();
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -52,20 +55,11 @@ export default function UploadVideo() {
     setError("");
 
     try {
-      const formData = new FormData();
-      formData.append("title", title.trim());
-      formData.append("description", description.trim());
-      formData.append("file", selectedFile);
-
-      const response = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-        credentials: "include",
+      await uploadMutation.mutateAsync({
+        title: title.trim(),
+        description: description.trim(),
+        file: selectedFile,
       });
-
-      if (!response.ok) {
-        throw new Error("Upload failed");
-      }
 
       setUploadProgress(100);
       setSuccess(true);
@@ -78,7 +72,9 @@ export default function UploadVideo() {
         setUploadProgress(0);
         navigate(`/profile/${user?.id}`);
       }, 2000);
+
     } catch (err) {
+      console.error(err);
       setError("Échec du chargement de la vidéo");
       setUploadProgress(0);
     }
@@ -202,10 +198,10 @@ export default function UploadVideo() {
 
               <Button
                 onClick={handleUpload}
-                disabled={!selectedFile || !title.trim()}
+                disabled={!selectedFile || !title.trim() || uploadMutation.isLoading}
                 className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white py-3"
               >
-                Télécharger la vidéo
+                {uploadMutation.isLoading ? "Chargement..." : "Télécharger la vidéo"}
               </Button>
             </div>
           </div>
@@ -223,4 +219,4 @@ export default function UploadVideo() {
       )}
     </div>
   );
-        }
+    }
