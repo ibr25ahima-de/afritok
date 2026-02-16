@@ -25,17 +25,18 @@ export interface VideoMetadata {
 /**
  * Validation vidéo
  */
-export function validateVideoFile(
-  file: File
+  export function validateVideoFile(
+  file: any
 ): { valid: boolean; error?: string } {
-  if (!file.type.startsWith("video/")) {
+
+  if (!file) {
     return {
       valid: false,
-      error: "Le fichier sélectionné n'est pas une vidéo valide.",
+      error: "Aucun fichier reçu.",
     };
   }
 
-  if (file.size > VIDEO_CONFIG.MAX_FILE_SIZE) {
+  if (file.size && file.size > VIDEO_CONFIG.MAX_FILE_SIZE) {
     return {
       valid: false,
       error: "Fichier trop volumineux. Taille maximale: 100 MB",
@@ -43,8 +44,7 @@ export function validateVideoFile(
   }
 
   return { valid: true };
-}
-
+  }
 /**
  * Génère une miniature placeholder
  */
