@@ -27,6 +27,24 @@ export interface VideoMetadata {
  * Valide un fichier vidéo avant upload
  */
 export function validateVideoFile(file: File): { valid: boolean; error?: string } {
+  // Vérifier que c'est une vidéo
+  if (!file.type.startsWith("video/")) {
+    return {
+      valid: false,
+      error: "Le fichier sélectionné n'est pas une vidéo valide.",
+    };
+  }
+
+  // Vérifier la taille
+  if (file.size > VIDEO_CONFIG.MAX_FILE_SIZE) {
+    return {
+      valid: false,
+      error: "Fichier trop volumineux. Taille maximale: 100 MB",
+    };
+  }
+
+  return { valid: true };
+}
   // Vérifier le type MIME
   if (!VIDEO_CONFIG.ALLOWED_FORMATS.includes(file.type)) {
     return {
