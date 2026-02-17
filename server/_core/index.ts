@@ -1,7 +1,6 @@
 import "dotenv/config";
 import express, { Request, Response } from "express";
 import { createServer } from "http";
-import net from "net";
 import multer from "multer";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
@@ -10,25 +9,6 @@ import { serveStatic, setupVite } from "./vite";
 import { handleStripeWebhook, testStripeWebhook } from "../webhook-endpoint";
 import { runMigrations } from "./migrate";
 import { uploadVideoToSupabase } from "../supabase-storage";
-
-function isPortAvailable(port: number): Promise<boolean> {
-  return new Promise(resolve => {
-    const server = net.createServer();
-    server.listen(port, () => {
-      server.close(() => resolve(true));
-    });
-    server.on("error", () => resolve(false));
-  });
-}
-
-async function findAvailablePort(startPort: number = 3000): Promise<number> {
-  for (let port = startPort; port < startPort + 20; port++) {
-    if (await isPortAvailable(port)) {
-      return port;
-    }
-  }
-  throw new Error(`No available port found starting from ${startPort}`);
-}
 
 // Configure multer for file uploads (in memory)
 const upload = multer({ 
@@ -56,12 +36,10 @@ async function startServer() {
   // ============================================
   app.post('/api/upload-video', upload.single('file'), async (req: Request, res: Response) => {
     try {
-      // Check if file is present
       if (!req.file) {
         return res.status(400).json({ error: "No file provided" });
       }
 
-      // Get userId from body
       const userId = req.body.userId;
       if (!userId) {
         return res.status(401).json({ error: "Unauthorized" });
@@ -69,25 +47,22 @@ async function startServer() {
 
       const file = req.file;
 
-      // Validate file type
       if (!file.mimetype.startsWith("video/")) {
         return res.status(400).json({ error: "File must be a video" });
       }
 
-      // Validate file size (100MB max)
       if (file.size > 100 * 1024 * 1024) {
         return res.status(400).json({ error: "File too large (max 100MB)" });
       }
 
-      // Upload to Supabase Storage
       const videoUrl = await uploadVideoToSupabase(
         file.buffer,
         file.originalname || "video.mp4",
         parseInt(userId)
       );
 
-      // Return the URL
       return res.json({ videoUrl });
+
     } catch (error) {
       console.error("[Upload] Error:", error);
       return res.status(500).json({ error: "Upload failed" });
@@ -109,15 +84,11 @@ async function startServer() {
     serveStatic(app);
   }
 
-  const preferredPort = parseInt(process.env.PORT || "3000");
-  const port = await findAvailablePort(preferredPort);
-
-  if (port !== preferredPort) {
-    console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
-  }
+  // ✅ IMPORTANT : Render port configuration (FIXED)
+  const port = parseInt(process.env.PORT || "3000");
 
   server.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}/`);
+    console.log(`Server running on port ${port}`);
   });
 }
 
