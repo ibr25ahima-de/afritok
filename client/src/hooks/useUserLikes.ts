@@ -2,16 +2,14 @@ import { useEffect, useState, useCallback } from "react";
 import { trpc } from "@/lib/trpc";
 
 interface Video {
-  id: string;
+  id: number;
 }
 
-export function useUserLikes(
-  videos: Video[],
-  isAuthenticated: boolean
-) {
-  const [likedVideos, setLikedVideos] = useState<Set<string>>(new Set());
+export function useUserLikes(videos: Video[], isAuthenticated: boolean) {
+  const [likedVideos, setLikedVideos] = useState<Set<number>>(new Set());
 
-  const videoIds = videos.map((v) => v.id);
+  // ✅ Always safe array
+  const videoIds = Array.isArray(videos) ? videos.map((v) => v.id) : [];
 
   const userLikesQuery = trpc.like.userLikes.useQuery(
     { videoIds },
@@ -21,11 +19,19 @@ export function useUserLikes(
   );
 
   useEffect(() => {
-    if (!userLikesQuery.data) return;
-    setLikedVideos(new Set(userLikesQuery.data));
+    const incoming = userLikesQuery.data;
+
+    // ✅ HARD CRASH SHIELD
+    const safeArray = Array.isArray(incoming)
+      ? incoming
+      : Array.isArray((incoming as any)?.likes)
+      ? (incoming as any).likes
+      : [];
+
+    setLikedVideos(new Set(safeArray));
   }, [userLikesQuery.data]);
 
-  const toggleLike = useCallback((videoId: string) => {
+  const toggleLike = useCallback((videoId: number) => {
     setLikedVideos((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(videoId)) newSet.delete(videoId);
@@ -38,6 +44,6 @@ export function useUserLikes(
     likedVideos,
     toggleLike,
     isLoading: userLikesQuery.isLoading,
-    isLiked: (videoId: string) => likedVideos.has(videoId),
+    isLiked: (videoId: number) => likedVideos.has(videoId),
   };
 }
