@@ -1,5 +1,7 @@
-import UploadVideo from "./UploadVideo";
-
 export default function Upload() {
-  return <UploadVideo />;
+  return (
+    <div className="h-screen bg-black text-white flex items-center justify-center">
+      Upload page
+    </div>
+  );
 }
