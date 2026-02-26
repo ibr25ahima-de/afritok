@@ -1,110 +1,73 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { ChevronLeft, Image } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { Loader2 } from "lucide-react";
 
-export default function Publish() {
+export default function Publish({ file }: { file: File }) {
   const [, navigate] = useLocation();
+  const { user } = useAuth();
 
-  const [description, setDescription] = useState("");
-  const [allowComments, setAllowComments] = useState(true);
-  const [allowDuet, setAllowDuet] = useState(true);
-  const [allowStitch, setAllowStitch] = useState(true);
+  const [caption, setCaption] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handlePublish = () => {
-    // Pour l'instant simulation
-    // Upload réel Supabase viendra après
-    navigate("/feed");
+  const handlePublish = async () => {
+    if (!file || !user) return;
+
+    setLoading(true);
+
+    try {
+      /** ================= UPLOAD STORAGE ================= */
+      const fileName = `${user.id}-${Date.now()}.mp4`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("videos")
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      /** ================= GET PUBLIC URL ================= */
+      const { data } = supabase.storage.from("videos").getPublicUrl(fileName);
+
+      const videoUrl = data.publicUrl;
+
+      /** ================= INSERT DB ================= */
+      const { error: insertError } = await supabase.from("videos").insert({
+        userId: user.id,
+        videoUrl,
+        description: caption,
+      });
+
+      if (insertError) throw insertError;
+
+      /** ================= DONE ================= */
+      navigate("/feed");
+    } catch (err) {
+      console.error(err);
+      alert("Upload failed");
+    }
+
+    setLoading(false);
   };
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col">
-      {/* HEADER */}
-      <header className="flex items-center justify-between p-4 border-b border-gray-800">
-        <button onClick={() => navigate("/upload")}>
-          <ChevronLeft />
-        </button>
-        <h1 className="font-semibold text-lg">Publier</h1>
-        <div className="w-6" />
-      </header>
+    <div className="h-screen bg-black text-white flex flex-col p-4">
+      <h1 className="text-xl font-bold mb-4">Publier vidéo</h1>
 
-      {/* CONTENT */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-6">
-        {/* Preview cover */}
-        <div className="flex items-center gap-4">
-          <div className="w-20 h-28 bg-gray-800 rounded-lg flex items-center justify-center">
-            <Image />
-          </div>
+      <textarea
+        placeholder="Description..."
+        value={caption}
+        onChange={(e) => setCaption(e.target.value)}
+        className="bg-gray-900 p-3 rounded mb-4"
+      />
 
-          <textarea
-            placeholder="Décris ta vidéo..."
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="flex-1 bg-transparent outline-none resize-none text-white placeholder-gray-400"
-            rows={4}
-          />
-        </div>
-
-        {/* Options TikTok */}
-        <div className="space-y-4">
-          <Toggle
-            label="Autoriser commentaires"
-            value={allowComments}
-            onChange={setAllowComments}
-          />
-
-          <Toggle
-            label="Autoriser Duo"
-            value={allowDuet}
-            onChange={setAllowDuet}
-          />
-
-          <Toggle
-            label="Autoriser Stitch"
-            value={allowStitch}
-            onChange={setAllowStitch}
-          />
-        </div>
-      </div>
-
-      {/* PUBLISH BUTTON */}
-      <div className="p-4 border-t border-gray-800">
-        <Button
-          onClick={handlePublish}
-          className="w-full bg-red-600 hover:bg-red-700"
-        >
-          Publier
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-/** Small toggle component */
-function Toggle({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <div className="flex justify-between items-center">
-      <span>{label}</span>
       <button
-        onClick={() => onChange(!value)}
-        className={`w-12 h-6 rounded-full transition ${
-          value ? "bg-red-600" : "bg-gray-700"
-        }`}
+        onClick={handlePublish}
+        disabled={loading}
+        className="bg-red-600 py-3 rounded font-semibold flex items-center justify-center"
       >
-        <div
-          className={`w-5 h-5 bg-white rounded-full transition ${
-            value ? "translate-x-6" : "translate-x-1"
-          }`}
-        />
+        {loading ? <Loader2 className="animate-spin" /> : "Publier"}
       </button>
     </div>
   );
-}
+      }
