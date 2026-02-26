@@ -62,12 +62,14 @@ export default function Publish({ file }: { file: File }) {
       />
 
       <button
-        onClick={handlePublish}
-        disabled={loading}
-        className="bg-red-600 py-3 rounded font-semibold flex items-center justify-center"
-      >
-        {loading ? <Loader2 className="animate-spin" /> : "Publier"}
-      </button>
+  onClick={() => {
+    console.log("PUBLISH CLICK");
+    handlePublish();
+  }}
+  className="w-full bg-red-600 py-3 rounded-lg font-semibold"
+>
+  Publier
+</button>
     </div>
   );
       }
