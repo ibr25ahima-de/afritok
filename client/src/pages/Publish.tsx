@@ -1,23 +1,45 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 
-export default function Publish({ file }: { file: File }) {
+export default function Publish() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
 
   const [caption, setCaption] = useState("");
   const [loading, setLoading] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
+  /** ================= GET FILE FROM UPLOAD ================= */
+  useEffect(() => {
+    const data = localStorage.getItem("afritok-upload");
+
+    if (!data) return;
+
+    setVideoUrl(data);
+
+    fetch(data)
+      .then((res) => res.blob())
+      .then((blob) => {
+        const f = new File([blob], "video.mp4", { type: blob.type });
+        setFile(f);
+      });
+  }, []);
+
+  /** ================= PUBLISH ================= */
   const handlePublish = async () => {
-    if (!file || !user) return;
+    if (!file || !user) {
+      alert("Vidéo manquante");
+      return;
+    }
 
     setLoading(true);
 
     try {
-      /** ================= UPLOAD STORAGE ================= */
+      /** Upload storage */
       const fileName = `${user.id}-${Date.now()}.mp4`;
 
       const { error: uploadError } = await supabase.storage
@@ -26,25 +48,27 @@ export default function Publish({ file }: { file: File }) {
 
       if (uploadError) throw uploadError;
 
-      /** ================= GET PUBLIC URL ================= */
+      /** Public URL */
       const { data } = supabase.storage.from("videos").getPublicUrl(fileName);
+      const publicUrl = data.publicUrl;
 
-      const videoUrl = data.publicUrl;
-
-      /** ================= INSERT DB ================= */
+      /** Insert DB */
       const { error: insertError } = await supabase.from("videos").insert({
         userId: user.id,
-        videoUrl,
+        videoUrl: publicUrl,
         description: caption,
       });
 
       if (insertError) throw insertError;
 
-      /** ================= DONE ================= */
+      /** Cleanup */
+      localStorage.removeItem("afritok-upload");
+
+      /** Done */
       navigate("/feed");
     } catch (err) {
       console.error(err);
-      alert("Upload failed");
+      alert("Erreur upload");
     }
 
     setLoading(false);
@@ -54,6 +78,17 @@ export default function Publish({ file }: { file: File }) {
     <div className="h-screen bg-black text-white flex flex-col p-4">
       <h1 className="text-xl font-bold mb-4">Publier vidéo</h1>
 
+      {/* preview */}
+      {videoUrl && (
+        <video
+          src={videoUrl}
+          className="w-full h-60 object-cover rounded-lg mb-4"
+          autoPlay
+          loop
+          muted
+        />
+      )}
+
       <textarea
         placeholder="Description..."
         value={caption}
@@ -62,14 +97,12 @@ export default function Publish({ file }: { file: File }) {
       />
 
       <button
-  onClick={() => {
-    console.log("PUBLISH CLICK");
-    handlePublish();
-  }}
-  className="w-full bg-red-600 py-3 rounded-lg font-semibold"
->
-  Publier
-</button>
+        onClick={handlePublish}
+        disabled={loading}
+        className="w-full bg-red-600 py-3 rounded-lg font-semibold flex justify-center"
+      >
+        {loading ? <Loader2 className="animate-spin" /> : "Publier"}
+      </button>
     </div>
   );
-      }
+  }
