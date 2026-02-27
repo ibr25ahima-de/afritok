@@ -39,12 +39,18 @@ export default function Upload() {
       videoRef.current.currentTime = 0;
     }
   }, []);
+const handleNext = useCallback(() => {
+  if (!selectedFile) return;
 
-  const handleNext = useCallback(() => {
-    // Ici, on simulerait l'envoi de la vidéo ou la navigation vers l'étape suivante
-    // Pour l'instant, on retourne simplement au feed comme demandé pour l'UX TikTok
+  const reader = new FileReader();
+
+  reader.onload = () => {
+    localStorage.setItem("afritok_upload_video", reader.result as string);
     navigate("/publish");
-  }, [navigate]);
+  };
+
+  reader.readAsDataURL(selectedFile);
+}, [navigate, selectedFile]);
 
   return (
     <div className="h-screen w-screen bg-black text-white flex flex-col overflow-hidden">
