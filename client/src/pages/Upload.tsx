@@ -42,16 +42,11 @@ export default function Upload() {
 const handleNext = useCallback(() => {
   if (!selectedFile) return;
 
-  const reader = new FileReader();
+  // on garde le fichier en mémoire globale temporaire
+  (window as any).afritokFile = selectedFile;
 
-  reader.onload = () => {
-    localStorage.setItem("afritok_upload_video", reader.result as string);
-    navigate("/publish");
-  };
-
-  reader.readAsDataURL(selectedFile);
+  navigate("/publish");
 }, [navigate, selectedFile]);
-
   return (
     <div className="h-screen w-screen bg-black text-white flex flex-col overflow-hidden">
       {/* Header */}
