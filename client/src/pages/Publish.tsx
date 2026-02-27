@@ -4,26 +4,34 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 
-const file = (window as any).afritokFile;
-
 export default function Publish() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
 
   const [caption, setCaption] = useState("");
   const [loading, setLoading] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
-  /** ================= GET FILE FROM UPLOAD ================= */
+  /** GET FILE FROM UPLOAD */
   useEffect(() => {
-    const data = localStorage.getItem("afritok-upload");
+    const data = sessionStorage.getItem("afritok_video_data");
+    const name = sessionStorage.getItem("afritok_video_name");
+    const type = sessionStorage.getItem("afritok_video_type");
 
-    if (!data) return;
+    if (!data || !name || !type) return;
 
     setVideoUrl(data);
+
+    fetch(data)
+      .then((res) => res.blob())
+      .then((blob) => {
+        const f = new File([blob], name, { type });
+        setFile(f);
+      });
   }, []);
 
-  /** ================= PUBLISH ================= */
+  /** PUBLISH */
   const handlePublish = async () => {
     if (!file || !user) {
       alert("Vidéo manquante");
@@ -33,7 +41,6 @@ export default function Publish() {
     setLoading(true);
 
     try {
-      /** Upload storage */
       const fileName = `${user.id}-${Date.now()}.mp4`;
 
       const { error: uploadError } = await supabase.storage
@@ -42,11 +49,9 @@ export default function Publish() {
 
       if (uploadError) throw uploadError;
 
-      /** Public URL */
       const { data } = supabase.storage.from("videos").getPublicUrl(fileName);
       const publicUrl = data.publicUrl;
 
-      /** Insert DB */
       const { error: insertError } = await supabase.from("videos").insert({
         userId: user.id,
         videoUrl: publicUrl,
@@ -55,10 +60,8 @@ export default function Publish() {
 
       if (insertError) throw insertError;
 
-      /** Cleanup */
-      localStorage.removeItem("afritok-upload");
+      sessionStorage.clear();
 
-      /** Done */
       navigate("/feed");
     } catch (err) {
       console.error(err);
@@ -72,7 +75,6 @@ export default function Publish() {
     <div className="h-screen bg-black text-white flex flex-col p-4">
       <h1 className="text-xl font-bold mb-4">Publier vidéo</h1>
 
-      {/* preview */}
       {videoUrl && (
         <video
           src={videoUrl}
@@ -99,4 +101,4 @@ export default function Publish() {
       </button>
     </div>
   );
-}
+        }
