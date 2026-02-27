@@ -38,14 +38,20 @@ export default function Upload() {
       videoRef.current.pause();
       videoRef.current.currentTime = 0;
     }
-  }, []);
-const handleNext = useCallback(() => {
+  }, []);   
+  const handleNext = useCallback(() => {
   if (!selectedFile) return;
 
-  // on garde le fichier en mémoire globale temporaire
-  (window as any).afritokFile = selectedFile;
+  sessionStorage.setItem("afritok_video_name", selectedFile.name);
+  sessionStorage.setItem("afritok_video_type", selectedFile.type);
 
-  navigate("/publish");
+  const reader = new FileReader();
+  reader.onload = () => {
+    sessionStorage.setItem("afritok_video_data", reader.result as string);
+    navigate("/publish");
+  };
+
+  reader.readAsDataURL(selectedFile);
 }, [navigate, selectedFile]);
   return (
     <div className="h-screen w-screen bg-black text-white flex flex-col overflow-hidden">
