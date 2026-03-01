@@ -1,9 +1,9 @@
-import { useState } from "react";
+UploadContextContextt { useState } from "react";
 import { useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Loader2 } from "lucide-react";
-import { useUpload } from "@/context/UploadContext";
+import { useUpload } from "@/contexts/UploadContext";
 
 export default function Publish() {
   const [, navigate] = useLocation();
