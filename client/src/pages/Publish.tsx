@@ -34,10 +34,12 @@ export default function Publish() {
       const { data } = supabase.storage.from("videos").getPublicUrl(fileName);
       const publicUrl = data.publicUrl;
 
+      // 🔥 CORRECTION : remplacement total du bloc insert
       const { error: insertError } = await supabase.from("videos").insert({
-        userId: user.id,
-        videoUrl: publicUrl,
+        user_id: user.id,
+        video_url: publicUrl,
         description: caption,
+        title: caption,
       });
 
       if (insertError) throw insertError;
