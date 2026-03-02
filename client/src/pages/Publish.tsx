@@ -16,7 +16,7 @@ export default function Publish() {
   /** PUBLISH */
   const handlePublish = async () => {
     if (!file || !user) {
-      alert("Vidéo manquante");
+      alert("Vidéo manquante ou utilisateur non connecté");
       return;
     }
 
@@ -25,16 +25,32 @@ export default function Publish() {
     try {
       const fileName = `${user.id}-${Date.now()}.mp4`;
 
+      console.log("✅ Début upload Storage :", fileName);
+
+      // 🔹 Upload dans le bucket Storage
       const { error: uploadError } = await supabase.storage
         .from("videos")
         .upload(fileName, file);
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error("❌ Erreur upload Storage :", uploadError);
+        throw uploadError;
+      }
 
+      console.log("✅ Upload Storage réussi");
+
+      // 🔹 Récupérer URL publique
       const { data } = supabase.storage.from("videos").getPublicUrl(fileName);
-      const publicUrl = data.publicUrl;
+      const publicUrl = data?.publicUrl;
 
-      // 🔥 CORRECTION : remplacement total du bloc insert
+      if (!publicUrl) {
+        console.error("❌ Public URL introuvable pour le fichier :", fileName);
+        throw new Error("Impossible de récupérer l'URL publique");
+      }
+
+      console.log("✅ URL publique :", publicUrl);
+
+      // 🔹 Insert dans la table videos
       const { error: insertError } = await supabase.from("videos").insert({
         user_id: user.id,
         video_url: publicUrl,
@@ -42,14 +58,17 @@ export default function Publish() {
         title: caption,
       });
 
-      if (insertError) throw insertError;
+      if (insertError) {
+        console.error("❌ Erreur insertion table videos :", insertError);
+        throw insertError;
+      }
 
-      // sessionStorage.clear(); // Optionnel si plus utilisé
+      console.log("✅ Insertion table videos réussie");
 
       navigate("/feed");
-    } catch (err) {
-      console.error(err);
-      alert("Erreur upload");
+    } catch (err: any) {
+      console.error("💥 Erreur upload complète :", err);
+      alert("Erreur upload : " + (err.message ?? JSON.stringify(err)));
     }
 
     setLoading(false);
@@ -85,4 +104,4 @@ export default function Publish() {
       </button>
     </div>
   );
-}
+        }
