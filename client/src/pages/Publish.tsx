@@ -49,7 +49,10 @@ export default function Publish() {
       }
 
       console.log("✅ URL publique :", publicUrl);
+console.log("USER ID FRONT:", user?.id);
 
+const { data: sessionData } = await supabase.auth.getSession();
+console.log("SESSION SUPABASE:", sessionData);
       // 🔹 Insert dans la table videos
       const { error: insertError } = await supabase.from("videos").insert({
         user_id: user.id,
