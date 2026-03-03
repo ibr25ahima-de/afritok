@@ -15,6 +15,9 @@ export default function Publish() {
 
   /** PUBLISH */
   const handlePublish = async () => {
+console.log("USER FROM useAuth:", user);
+const { data: sessionData } = await supabase.auth.getSession();
+console.log("SESSION FROM SUPABASE:", sessionData);
     if (!file || !user) {
       alert("Vidéo manquante ou utilisateur non connecté");
       return;
