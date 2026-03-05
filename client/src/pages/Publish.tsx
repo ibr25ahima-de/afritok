@@ -13,13 +13,19 @@ export default function Publish() {
   const [caption, setCaption] = useState("");
   const [loading, setLoading] = useState(false);
 
-  /** PUBLISH */
   const handlePublish = async () => {
-console.log("USER FROM useAuth:", user);
-const { data: sessionData } = await supabase.auth.getSession();
-console.log("SESSION FROM SUPABASE:", sessionData);
-    if (!file || !user) {
-      alert("Vidéo manquante ou utilisateur non connecté");
+    console.log("🚀 CLICK PUBLISH");
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    console.log("SESSION:", sessionData);
+
+    if (!file) {
+      alert("Pas de fichier sélectionné");
+      return;
+    }
+
+    if (!user) {
+      alert("Utilisateur non connecté");
       return;
     }
 
@@ -28,53 +34,30 @@ console.log("SESSION FROM SUPABASE:", sessionData);
     try {
       const fileName = `${user.id}-${Date.now()}.mp4`;
 
-      console.log("✅ Début upload Storage :", fileName);
+      console.log("📤 Upload vers storage...");
 
-      // 🔹 Upload dans le bucket Storage
       const { error: uploadError } = await supabase.storage
         .from("videos")
         .upload(fileName, file);
 
       if (uploadError) {
-        console.error("❌ Erreur upload Storage :", uploadError);
-        throw uploadError;
+        console.error("❌ STORAGE ERROR:", uploadError);
+        alert("STORAGE ERROR: " + JSON.stringify(uploadError, null, 2));
+        setLoading(false);
+        return;
       }
 
-      console.log("✅ Upload Storage réussi");
+      console.log("✅ STORAGE SUCCESS");
+      alert("Upload storage réussi ✅");
 
-      // 🔹 Récupérer URL publique
-      const { data } = supabase.storage.from("videos").getPublicUrl(fileName);
-      const publicUrl = data?.publicUrl;
-
-      if (!publicUrl) {
-        console.error("❌ Public URL introuvable pour le fichier :", fileName);
-        throw new Error("Impossible de récupérer l'URL publique");
-      }
-
-      console.log("✅ URL publique :", publicUrl);
-console.log("USER ID FRONT:", user?.id);
-
-const { data: sessionData } = await supabase.auth.getSession();
-console.log("SESSION SUPABASE:", sessionData);
-      // 🔹 Insert dans la table videos
-      const { error: insertError } = await supabase.from("videos").insert({
-        user_id: user.id,
-        video_url: publicUrl,
-        description: caption,
-        title: caption,
-      });
-
-      if (insertError) {
-        console.error("❌ Erreur insertion table videos :", insertError);
-        throw insertError;
-      }
-
-      console.log("✅ Insertion table videos réussie");
+      // Pour l’instant on ne fait PAS l’insert en base
+      // On teste uniquement le storage
 
       navigate("/feed");
+
     } catch (err: any) {
-      console.error("💥 Erreur upload complète :", err);
-      alert("Erreur upload : " + (err.message ?? JSON.stringify(err)));
+      console.error("💥 FULL ERROR:", err);
+      alert("FULL ERROR: " + JSON.stringify(err, null, 2));
     }
 
     setLoading(false);
@@ -110,4 +93,4 @@ console.log("SESSION SUPABASE:", sessionData);
       </button>
     </div>
   );
-        }
+}
