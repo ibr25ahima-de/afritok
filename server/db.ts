@@ -109,7 +109,12 @@ export async function getVideoById(videoId: number) {
 }
 
 export async function getFeedVideos(limit = 20, offset = 0) {
-  return db.select().from(videos).limit(limit).offset(offset);
+  return db
+    .select()
+    .from(videos)
+    .orderBy(videos.createdAt)
+    .limit(limit)
+    .offset(offset);
 }
 
 export async function getUserVideos(userId: number) {
