@@ -115,7 +115,7 @@ export async function getFeedVideos(limit = 20, offset = 0) {
     .limit(limit)
     .offset(offset);
 }  
-exportt xport async function getUserVideos(userId: number) {
+export async function getUserVideos(userId: number) {
   return db.select().from(videos).where(eq(videos.userId, userId));
 }
 
