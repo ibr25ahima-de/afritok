@@ -189,7 +189,7 @@ export const appRouter = router({
         offset: z.number().default(0),
         tab: z.enum(["forYou", "following"]).default("forYou")
       }))
-      .query(({ input }) => getFeedVideos(input.limit, input.offset, input.tab)),
+      .query(({ input }) => getFeedVideos(input.limit, input.offset)),
 
     getById: publicProcedure
       .input(z.object({ id: z.number() }))
