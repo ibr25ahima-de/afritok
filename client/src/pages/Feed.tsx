@@ -37,6 +37,7 @@ export default function Feed() {
   const [touchStart, setTouchStart] = useState(0);
   const [heartVideoId, setHeartVideoId] = useState<number | null>(null);
   const [tab, setTab] = useState<"forYou" | "following">("forYou");
+const [muted, setMuted] = useState(true);
   const [likedVideos, setLikedVideos] = useState<Set<number>>(new Set());
   const [favoritedVideos, setFavoritedVideos] = useState<Set<number>>(new Set());
   const [videoCounters, setVideoCounters] = useState<Record<number, { likes: number; comments: number; shares: number; favorites: number }>>({});
@@ -258,18 +259,23 @@ export default function Feed() {
         ) : (
           videos.map((video, i) => (
             <div key={video.id} className="h-screen" style={{ scrollSnapAlign: "start" }}>
-              <div className="relative w-full h-full max-w-md mx-auto">
+              <div className="relative w-full h-full">
                 <video
-                  ref={(el) => (videoRefs.current[video.id] = el)}
-                  data-video-id={video.id}
-                  src={video.videoUrl}
-                  className="w-full h-full object-cover"
-                  loop
-                  autoPlay={i === currentVideoIndex}
-                  onClick={() => handleDoubleTap(video)}
-                  muted
-                />
-
+  ref={(el) => (videoRefs.current[video.id] = el)}
+  data-video-id={video.id}
+  src={video.videoUrl}
+  className="w-full h-full object-cover"
+  loop
+  autoPlay={i === currentVideoIndex}
+  onClick={() => handleDoubleTap(video)}
+  muted={muted}
+/>
+ <button
+  onClick={() => setMuted(!muted)}
+  className="absolute top-20 right-4 bg-black/60 p-2 rounded-full"
+>
+  {muted ? "🔇" : "🔊"}
+</button>               
                 {heartVideoId === video.id && (
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <Heart className="text-white animate-ping" size={120} fill="white" />
