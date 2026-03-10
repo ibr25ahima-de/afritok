@@ -31,7 +31,33 @@ const pool = new Pool({
 });
 
 export const db = drizzle(pool);
+async function runMigrations() {
+  console.log("[Migrations] Creating database tables...");
 
+  await db.execute(`
+  ALTER TABLE videos ADD COLUMN IF NOT EXISTS views INTEGER DEFAULT 0;
+  `);
+
+  await db.execute(`
+  ALTER TABLE videos ADD COLUMN IF NOT EXISTS likes INTEGER DEFAULT 0;
+  `);
+
+  await db.execute(`
+  ALTER TABLE videos ADD COLUMN IF NOT EXISTS comments INTEGER DEFAULT 0;
+  `);
+
+  await db.execute(`
+  ALTER TABLE videos ADD COLUMN IF NOT EXISTS shares INTEGER DEFAULT 0;
+  `);
+
+  await db.execute(`
+  ALTER TABLE videos ADD COLUMN IF NOT EXISTS favorites INTEGER DEFAULT 0;
+  `);
+
+  console.log("✅ Database tables created successfully");
+}
+
+runMigrations();
 /* =====================
 USERS
 ===================== */
