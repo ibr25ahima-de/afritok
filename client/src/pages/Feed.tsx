@@ -189,8 +189,29 @@ const [muted, setMuted] = useState(true);
   };
 
   /** ================= DOUBLE TAP ================= */
-  const handleDoubleTap = (video: Video) => {
-    const now = Date.now();
+  const handleVideoTap = (video: Video) => {
+  const now = Date.now();
+
+  // double tap = like
+  if (now - lastTapRef.current < 300) {
+    handleLike(video);
+    setHeartVideoId(video.id);
+    setTimeout(() => setHeartVideoId(null), 900);
+  } else {
+    // single tap = pause / play
+    const el = videoRefs.current[video.id];
+    if (!el) return;
+
+    if (el.paused) {
+      el.play();
+    } else {
+      el.pause();
+    }
+  }
+
+  lastTapRef.current = now;
+};
+  const now = Date.now();
     if (now - lastTapRef.current < 300) {
       handleLike(video);
       setHeartVideoId(video.id);
@@ -267,7 +288,7 @@ const [muted, setMuted] = useState(true);
   className="w-full h-full object-cover"
   loop
   autoPlay={i === currentVideoIndex}
-  onClick={() => handleDoubleTap(video)}
+  onClick={() => handleVideoTap(video)}
   muted={muted}
 />
  <button
