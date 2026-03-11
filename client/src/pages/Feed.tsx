@@ -211,15 +211,6 @@ const [muted, setMuted] = useState(true);
 
   lastTapRef.current = now;
 };
-  const now = Date.now();
-    if (now - lastTapRef.current < 300) {
-      handleLike(video);
-      setHeartVideoId(video.id);
-      setTimeout(() => setHeartVideoId(null), 900);
-    }
-    lastTapRef.current = now;
-  };
-
   /** ================= SWIPE ================= */
   const handleSwipe = useCallback(
     (start: number, end: number) => {
