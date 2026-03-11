@@ -13,24 +13,29 @@ export default function CommentsModal({ videoId, isOpen, onClose }: CommentsModa
   const [newComment, setNewComment] = useState("");
   const commentsQuery = trpc.comment.list.useQuery({ videoId });
   const createCommentMutation = trpc.comment.create.useMutation();
+const handleSubmitComment = async () => {
+  if (!newComment.trim()) return;
 
-  const handleSubmitComment = async () => {
-    if (!newComment.trim()) return;
-
+  try {
     await createCommentMutation.mutateAsync({
       videoId,
       text: newComment,
     });
 
     setNewComment("");
-    commentsQuery.refetch();
-  };
 
-  if (!isOpen) return null;
+    // recharge les commentaires
+    await commentsQuery.refetch();
+
+  } catch (error) {
+    console.error("Comment error", error);
+  }
+};
+   en if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black/80 z-50 flex items-end">
-      <div className="bg-slate-900 w-full max-w-md h-[80vh] flex flex-col rounded-t-lg border-t border-purple-800/50">
+      <div className="bg-slate-900 w-full h-[85vh] flex flex-col rounded-t-lg">
         {/* Header */}
         <div className="border-b border-purple-800/30 p-4 flex items-center justify-between">
           <h2 className="text-white font-semibold">Comments</h2>
