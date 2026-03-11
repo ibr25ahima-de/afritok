@@ -31,8 +31,8 @@ const handleSubmitComment = async () => {
     console.error("Comment error", error);
   }
 };
-   en if (!isOpen) return null;
-
+   
+if (!isOpen) return null;
   return (
     <div className="fixed inset-0 bg-black/80 z-50 flex items-end">
       <div className="bg-slate-900 w-full h-[85vh] flex flex-col rounded-t-lg">
