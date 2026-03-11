@@ -11,7 +11,13 @@ interface CommentsModalProps {
 
 export default function CommentsModal({ videoId, isOpen, onClose }: CommentsModalProps) {
   const [newComment, setNewComment] = useState("");
-  const commentsQuery = trpc.comment.list.useQuery({ videoId });
+  const commentsQuery = trpc.comment.list.useQuery(
+  { videoId },
+  {
+    refetchOnWindowFocus: false,
+    refetchOnMount: true,
+  }
+);
   const createCommentMutation = trpc.comment.create.useMutation();
 const handleSubmitComment = async () => {
   if (!newComment.trim()) return;
@@ -26,7 +32,7 @@ const handleSubmitComment = async () => {
 
     // recharge les commentaires
     await commentsQuery.refetch();
-
+commentsQuery.invalidate();
   } catch (error) {
     console.error("Comment error", error);
   }
