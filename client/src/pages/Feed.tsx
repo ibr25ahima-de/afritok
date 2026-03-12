@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+const{ useEffect, useState, useRef, useCallback } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,7 @@ export default function Feed() {
   const [touchStart, setTouchStart] = useState(0);
   const [heartVideoId, setHeartVideoId] = useState<number | null>(null);
   const [tab, setTab] = useState<"forYou" | "following">("forYou");
+const [muted, setMuted] = useState(true);
   const [likedVideos, setLikedVideos] = useState<Set<number>>(new Set());
   const [favoritedVideos, setFavoritedVideos] = useState<Set<number>>(new Set());
   const [videoCounters, setVideoCounters] = useState<Record<number, { likes: number; comments: number; shares: number; favorites: number }>>({});
