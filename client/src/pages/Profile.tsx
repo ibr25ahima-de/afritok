@@ -93,7 +93,7 @@ export default function Profile() {
   const followerCount = followerCountQuery.data;
 
   // Calculate total likes from all videos
-  const totalLikes = videos.reduce((sum, video) => sum + (video.likes || 0), 0);
+  const totalLikes = (videos || []).reduce((sum, video) => sum + (video.likes || 0), 0);
 
   // Filter videos based on active tab
   const filteredVideos = videos;
