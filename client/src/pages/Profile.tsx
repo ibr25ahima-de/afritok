@@ -337,12 +337,12 @@ export default function Profile() {
           <button onClick={() => setShowFollowing(true)} className="flex items-center gap-1 hover:text-red-500 transition">
             <span className="font-bold">{profile?.followingCount || 0}</span>
             <span className="text-gray-400 text-sm">abonnements</span>
-          </button>
-          <button onClick={() => setShowFollowers(true)} className="flex items-center gap-1 hover:text-red-500 transition">
-            <span className="font-bold">{followerCount || 0}</span>
-            <span className="text-gray-400 text-sm">abonnés</span>
-          </button>
-          <button onClick={() => setShowLikes(true)} className="flex items-center gap-1 hover:text-red-500 transition">
+          </span>
+           <button onClick={() => setShowFollowers(true)} className="flex items-center gap-1 hover:text-red-500 transition">
+  <span className="font-bold">{followerCount?.followers || 0}</span>
+  <span className="text-gray-400 text-sm">abonnés</span>
+</button>  
+          buttonn onClick={() => setShowLikes(true)} className="flex items-center gap-1 hover:text-red-500 transition">
             <span className="font-bold">{totalLikes}</span>
             <span className="text-gray-400 text-sm">j'aime</span>
           </button>
