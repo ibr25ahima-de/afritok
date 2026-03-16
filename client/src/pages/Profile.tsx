@@ -94,7 +94,7 @@ export default function Profile() {
 
   const profile = userQuery.data;
   const videos = (videosQuery.data || []) as Video[];
-  const followerCount = followerCountQuery.data;
+  const followerCount = followerCountQuery.data || { followers: 0 };
 
   // Calculate total likes from all videos
   const totalLikes = Array.isArray(videos) ? videos.reduce((sum, video) => sum + (video.likes || 0), 0) : 0;
