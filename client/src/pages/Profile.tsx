@@ -4,10 +4,6 @@ import { trpc } from "@/lib/trpc";
 import { useLocation, useRoute } from "wouter";
 import { ArrowLeft, Play, Heart, MessageCircle, Share2, MapPin, Edit3, UserPlus, UserCheck, MoreVertical, Flame, Lock, Share, Flag, Eye } from "lucide-react";
 import { useState, useRef } from "react";
-import AfritokStudio from "./AfritokStudio";
-import Balance from "./Balance";
-import QRCode from "./QRCode";
-import Settings from "./Settings";
 import { Button } from "@/components/ui/button";
 
 interface Earning {
