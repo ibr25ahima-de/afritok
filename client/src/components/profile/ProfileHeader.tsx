@@ -1,4 +1,4 @@
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
 import { ArrowLeft, Edit3, UserPlus, UserCheck, MoreVertical, Flame, Lock, Flag, MapPin } from "lucide-react";
 import { useState } from "react";
 
@@ -19,7 +19,7 @@ export default function ProfileHeader({
   onMenuToggle,
   onFollowToggle,
 }: ProfileHeaderProps) {
-  const navigate = useNavigate();
+  const [, navigate] = useLocation();
 
   return (
     <>
