@@ -96,8 +96,7 @@ export default function Profile() {
   const totalLikes = Array.isArray(videos) ? videos.reduce((sum, video) => sum + (video.likes || 0), 0) : 0;
 
   // Filter videos based on active tab
-  const filteredVideos = videos;
-
+  const filteredVideos = Array.isArray(videos) ? videos : [];
   // Calculate earnings by source (simplified)
   const earningsBySource: Record<string, { total: number; count: number }> = {};
   const earningsData = Array.isArray(earningsQuery.data) ? earningsQuery.data : [];
@@ -112,9 +111,10 @@ export default function Profile() {
   });
 
   // Calculate total earnings (simplified)
-  const totalEarnings = (earningsBySource && typeof earningsBySource === 'object' && Object.keys(earningsBySource).length > 0) 
-    ? Object.values(earningsBySource).reduce((sum, item: any) => sum + (item?.total || 0), 0)
-    : 0;
+  const totalEarnings = Object.values(earningsBySource || {}).reduce(
+  (sum: number, item: any) => sum + (item?.total || 0),
+  0
+);
 
   // Revenue sources configuration
   const revenueSources = [
