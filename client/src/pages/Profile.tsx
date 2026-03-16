@@ -1,7 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { MonetizationProgressBar } from "@/components/MonetizationProgressBar";
 import { trpc } from "@/lib/trpc";
-import { useLocation, useRoute, useNavigate } from "wouter";
+import { useLocation, useRoute } from "wouter";
 import { ArrowLeft, Play, Heart, MessageCircle, Share2, MapPin, Edit3, UserPlus, UserCheck, MoreVertical, Flame, Lock, Share, Flag, Eye } from "lucide-react";
 import { useState, useRef } from "react";
 import AfritokStudio from "./AfritokStudio";
