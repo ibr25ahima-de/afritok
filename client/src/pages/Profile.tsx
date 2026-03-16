@@ -37,7 +37,7 @@ interface Video {
 
 export default function Profile() {
   const { user: currentUser } = useAuth();
-  const navigate = useNavigate();
+  const [, navigate] = useLocation();
   const [match, params] = useRoute("/profile/:userId");
   const userId = params?.userId ? parseInt(params.userId) : currentUser?.id;
   const isOwnProfile = currentUser?.id === userId;
