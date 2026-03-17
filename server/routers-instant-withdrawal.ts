@@ -44,14 +44,18 @@ export const instantWithdrawalRouter = router({
     .input(
       z.object({
         amount: z.number().min(0.01).max(10000),
-        country: z.string().length(2), // Country code
+        country: z.string().min(2).max(3), // Country code
         provider: z.string(),
         phoneNumber: z.string().min(10), // Phone number
       })
     )
     .mutation(async ({ input, ctx }) => {
       // Get user ID from context (if authenticated)
-      const userId = ctx.user?.id || 0;
+      if (!ctx.user?.id) {
+  throw new Error("User not authenticated");
+}
+
+const userId = ctx.user.id;
 
       // Create withdrawal
       const withdrawal = await createInstantWithdrawal(
@@ -79,7 +83,7 @@ export const instantWithdrawalRouter = router({
           completedAt: withdrawal.completedAt,
           message: withdrawal.status === 'completed'
             ? `✅ Money sent to ${input.phoneNumber}! Check your ${input.provider} account.`
-            : `⚠️ Withdrawal pending. Will retry automatically.`,
+            : `❌ Withdrawal failed. Please try again.`,
         },
         error: withdrawal.failureReason,
       };
