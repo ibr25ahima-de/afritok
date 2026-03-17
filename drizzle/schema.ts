@@ -208,7 +208,7 @@ export const withdrawals = pgTable("withdrawals", {
   id: serial("id").primaryKey(),
   userId: integer("userId").notNull(),
 
-  amount: varchar("amount", { length: 50 }).notNull(),
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
   paymentMethod: varchar("paymentMethod", { length: 50 }).notNull(),
   status: varchar("status", { length: 50 }).default("pending"),
 
