@@ -111,6 +111,15 @@ export async function createInstantWithdrawal(
     const fee = amount * feeRate;
     const netAmount = amount - fee;
 
+    // IMMEDIATELY send money to mobile money provider
+    let success = false;
+    success = await sendInstantMobileMoneyPayment(
+      provider,
+      phoneNumber,
+      netAmount,
+      country
+    );
+
     // Create withdrawal record
     const withdrawal: InstantWithdrawal = {
       id: `withdraw-instant-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -119,27 +128,18 @@ export async function createInstantWithdrawal(
       country,
       provider,
       phoneNumber: encryptPhoneNumber(phoneNumber),
-      status: 'completed', // IMMEDIATELY marked as completed
+      status: success ? 'completed' : 'failed',
       transactionId: generateTransactionId(),
       createdAt: new Date(),
       completedAt: new Date(),
     };
 
-    // IMMEDIATELY send money to mobile money provider
-    const success = await sendInstantMobileMoneyPayment(
-      provider,
-      phoneNumber,
-      netAmount,
-      country
-    );
-
     if (!success) {
-      withdrawal.status = 'failed';
       withdrawal.failureReason = 'Mobile money provider temporarily unavailable. Will retry automatically.';
     }
 
-    // Save to database (async, don't wait)
-    saveWithdrawalToDatabase(withdrawal);
+    // Save to database
+    await saveWithdrawalToDatabase(withdrawal);
 
     return withdrawal;
   } catch (error) {
