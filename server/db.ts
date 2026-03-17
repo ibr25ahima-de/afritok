@@ -500,3 +500,53 @@ export async function getEarningsBySource(userId: number) {
 
   return grouped;
 }
+export async function createWithdrawalRequest(
+  userId: number,
+  amount: number,
+  paymentMethod: string
+) {
+  try {
+    // 1. Get user
+    const user = await getUserById(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const currentBalance = parseFloat(user.totalEarnings?.toString() || "0");
+
+    // 2. Check balance
+    if (amount > currentBalance) {
+      throw new Error("Insufficient balance");
+    }
+
+    // 3. Deduct earnings
+    const newEarnings = (currentBalance - amount).toFixed(2);
+
+    await db
+      .update(users)
+      .set({ totalEarnings: newEarnings })
+      .where(eq(users.id, userId));
+
+    // 4. Add to withdrawals total
+    const currentWithdrawals = parseFloat(user.totalWithdrawals?.toString() || "0");
+    const newWithdrawals = (currentWithdrawals + amount).toFixed(2);
+
+    await db
+      .update(users)
+      .set({ totalWithdrawals: newWithdrawals })
+      .where(eq(users.id, userId));
+
+    // 5. Save withdrawal
+    await db.insert(withdrawals).values({
+      userId,
+      amount: amount.toString(),
+      paymentMethod,
+      status: "pending",
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error("[Withdrawal] Error:", error);
+    throw error;
+  }
+      }
