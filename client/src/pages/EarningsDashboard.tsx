@@ -1,3 +1,4 @@
+import Withdraw from "../components/Withdraw";
 /**
  * Earnings Dashboard
  * Shows user's earnings, activities, and withdrawal options
@@ -324,9 +325,7 @@ export default function EarningsDashboard() {
                     You can withdraw <span className="font-bold text-green-100">${stats.currentBalance.toFixed(2)}</span>
                   </p>
                 </div>
-                <Button className="w-full bg-green-600 hover:bg-green-700 text-white">
-                  Withdraw Now
-                </Button>
+                <Withdraw />
               </CardContent>
             </Card>
           </TabsContent>
