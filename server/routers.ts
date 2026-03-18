@@ -48,7 +48,7 @@ export const appRouter = router({
   system: systemRouter,
   live: liveRouter,
   liveChat: liveChatRouter,
-
+instantWithdrawal: instantWithdrawalRouter,
   // ============================================
   // AUTHENTICATION ROUTES
   // ============================================
