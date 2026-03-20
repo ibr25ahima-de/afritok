@@ -7,6 +7,7 @@ import { sdk } from "./_core/sdk";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import {
+  import { monetizationRouter } from "./routers-monetization";
   getUserVideos,
   getVideoById,
   getFeedVideos,
