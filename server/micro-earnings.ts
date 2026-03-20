@@ -1,3 +1,4 @@
+import { earnings } from './schema';
 /**
  * Micro-Earnings System for Afritok (FIXED VERSION)
  */
