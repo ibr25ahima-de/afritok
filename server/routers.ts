@@ -38,7 +38,7 @@ import {
   reports,
 } from "../drizzle/schema";
 
-import { eq, and, like } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 
 // ============================================
 // MAIN ROUTER
