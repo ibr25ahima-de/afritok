@@ -411,8 +411,11 @@ export async function shareVideo(userId: number, videoId: number, platform: stri
 VIEWS - INTERACTIONS
 ===================== */
 
-export async function incrementVideoViews(videoId: number) {
-  const video = await getVideoById(videoId);
+if async function incrementVideoViews(videoId: number) {
+ await db
+  .update(videos)
+  .set({ views: sql`${videos.views} + 1` })
+  .where(eq(videos.id, videoId)); 
   if (video) {
     await db
       .update(videos)
@@ -528,7 +531,7 @@ export async function createWithdrawalRecord(
     const currentBalance = parseFloat(user.totalEarnings?.toString() || "0");
 
     // 2. Check balance
-    if (amount > currentBalance) {
+    if (Number(amount) > Number(currentBalance))
       throw new Error("Insufficient balance");
     }
 
