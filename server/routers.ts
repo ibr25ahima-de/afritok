@@ -146,7 +146,7 @@ export const appRouter = router({
           .set({ views: (video.views || 0) + 1 })
           .where(eq(videos.id, input.videoId));
 
-        await createEarning(video.userId, 0.001, "views", input.videoId);
+        await createEarning(video.userId, 0.02, "watch", input.videoId);
 
         return { success: true };
       }),
