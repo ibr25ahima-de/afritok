@@ -71,8 +71,7 @@ export async function upsertUser(user: Partial<InsertUser>) {
       avatarUrl: user.avatarUrl ?? null,
       country: user.country ?? null,
       currency: user.currency ?? null,
-      totalEarnings: user.totalEarnings ?? 0,
-      totalWithdrawals: user.totalWithdrawals ?? 0,
+      
       lastSignedIn: user.lastSignedIn ?? new Date(),
     })
     .onConflictDoUpdate({
@@ -88,6 +87,8 @@ export async function upsertUser(user: Partial<InsertUser>) {
         currency: user.currency ?? undefined,
         totalEarnings: user.totalEarnings ?? undefined,
         totalWithdrawals: user.totalWithdrawals ?? undefined,
+       totalEarnings: user.totalEarnings?.toString() ?? "0",
+totalWithdrawals: user.totalWithdrawals?.toString() ?? "0",
         lastSignedIn: user.lastSignedIn ?? new Date(),
         updatedAt: new Date(),
       },
@@ -168,10 +169,12 @@ export async function createOTP(
   console.log(`[OTP] ${phone} -> ${code}`);
 }
 
+import { OTP } from "../drizzle/schema";
+
 export async function getValidOTP(
   phone: string,
   code?: string
-): Promise<InsertOTP | undefined> {
+): Promise<OTP | undefined> {
   const conditions = [
     eq(otps.phone, phone),
     gt(otps.expiresAt, new Date()),
@@ -269,7 +272,7 @@ export async function likeVideo(userId: number, videoId: number) {
   if (existingLike) return;
 
   // Add like
-  await db.insert(likes).values({ userId, videoId });
+  await db.insert(likes).values({ userId, videoId });m
 
   // Increment video likes counter
   const video = await getVideoById(videoId);
