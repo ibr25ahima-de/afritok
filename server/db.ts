@@ -281,18 +281,34 @@ export async function createEarning(
       return { success: false, reason: "daily_limit" };
     }
 
-    // 🚨 1. Limite par action (anti spam)
-    const recent = await db
-      .select()
-      .from(earnings)
-      .where(eq(earnings.userId, userId))
-      .orderBy(desc(earnings.createdAt))
-      .limit(20);
+    // 🚫 Anti-spam basé sur le temps
+const delay =
+  MONETIZATION.antiSpam[
+    source as keyof typeof MONETIZATION.antiSpam
+  ];
 
-    // Limite simple : max 20 actions récentes
-    if (recent.length >= 20) {
-      return { success: false, reason: "too_many_actions" };
+if (delay) {
+  const last = await db
+    .select()
+    .from(earnings)
+    .where(
+      and(
+        eq(earnings.userId, userId),
+        eq(earnings.source, source)
+      )
+    )
+    .orderBy(desc(earnings.createdAt))
+    .limit(1);
+
+  if (last[0]) {
+    const lastTime = new Date(last[0].createdAt).getTime();
+    const now = Date.now();
+
+    if (now - lastTime < delay) {
+      return { success: false, reason: "too_fast" };
     }
+  }
+}
 
     // 🚨 2. Anti duplicate (même action même vidéo)
     const existing = await db
