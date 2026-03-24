@@ -1,0 +1,46 @@
+/**
+ * MONETIZATION CONFIG (SOURCE UNIQUE)
+ * 👉 Backend + Frontend doivent utiliser ça
+ */
+
+export const MONETIZATION = {
+  // 💰 Gains par action
+  rewards: {
+    like: 0.01,
+    comment: 0.02,
+    share: 0.05,
+    view: 0.001,
+  },
+
+  // 🔒 Limites journalières
+  dailyLimits: {
+    like: 20,
+    comment: 10,
+    share: 10,
+    view: 50,
+  },
+
+  // 👤 Conditions créateur
+  creator: {
+    minVideos: 1, // doit avoir au moins 1 vidéo
+  },
+
+  // 💸 Retrait
+  withdrawal: {
+    minAmount: 1, // 1$
+    delay: "24h",
+  },
+
+  // 🌍 Méthodes
+  methods: ["MTN", "ORANGE", "WAVE"],
+
+  // 📢 Règles affichées
+  rules: [
+    "Tu gagnes de l’argent en regardant et interagissant avec les vidéos.",
+    "Les gains sont limités par jour pour éviter les abus.",
+    "Les créateurs doivent publier au moins 1 vidéo.",
+    "Paiement minimum : 1$",
+    "Paiement sous 24h",
+    "Un seul compte par utilisateur.",
+  ],
+};
