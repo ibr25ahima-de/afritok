@@ -60,9 +60,10 @@ export const instantWithdrawalRouter = router({
         `${input.method} - ${input.phone}`
       );
 
-      return {
-        success: true,
-        message: "Demande envoyée. Paiement en cours...",
-      };
+    return {
+  success: true,
+  message:
+    "✅ Demande envoyée.\n💰 Paiement sous 24h.\n📱 Assure-toi que ton numéro est correct.",
+};
     }),
 });
