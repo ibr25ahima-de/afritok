@@ -278,7 +278,8 @@ export async function createEarning(
       );
 
     if (todayEarnings.length >= ((limits as Record<string, number>)[source] || 20)) {
-      return { success: false, reason: "daily_limit" };
+  // 🔒 Shadow limit → on ne paie plus mais on ne bloque pas
+  return { success: false, shadow: true };
     }
 
     // 🚫 Anti-spam basé sur le temps
