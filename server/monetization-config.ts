@@ -44,3 +44,10 @@ export const MONETIZATION = {
     "Un seul compte par utilisateur.",
   ],
 };
+antiSpam: {
+  like: 2000,
+  comment: 5000,
+  share: 10000,
+  favorite: 3000,
+  view: 1000,
+},
