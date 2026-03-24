@@ -10,6 +10,7 @@ export const MONETIZATION = {
     comment: 0.02,
     share: 0.05,
     view: 0.001,
+    favorite: 0.01,
   },
 
   // 🔒 Limites journalières
@@ -18,20 +19,32 @@ export const MONETIZATION = {
     comment: 10,
     share: 10,
     view: 50,
+    favorite: 20,
+  },
+
+  // 🚫 Anti-spam (en millisecondes)
+  antiSpam: {
+    like: 2000,
+    comment: 5000,
+    share: 10000,
+    favorite: 3000,
+    view: 1000,
   },
 
   // 👤 Conditions créateur
   creator: {
-    minVideos: 1, // doit avoir au moins 1 vidéo
+    minVideos: 1,
+    minFollowers: 5000,
+    minViews30Days: 500,
   },
 
   // 💸 Retrait
   withdrawal: {
-    minAmount: 1, // 1$
+    minAmount: 1,
     delay: "24h",
   },
 
-  // 🌍 Méthodes
+  // 🌍 Méthodes de paiement
   methods: ["MTN", "ORANGE", "WAVE"],
 
   // 📢 Règles affichées
@@ -44,10 +57,3 @@ export const MONETIZATION = {
     "Un seul compte par utilisateur.",
   ],
 };
-antiSpam: {
-  like: 2000,
-  comment: 5000,
-  share: 10000,
-  favorite: 3000,
-  view: 1000,
-},
