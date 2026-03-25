@@ -168,32 +168,58 @@ const [muted, setMuted] = useState(true);
   /** ================= LIKE ================= */
   const handleLike = async (video: Video) => {
     const wasLiked = likedVideos.has(video.id);
-    const newLikedVideos = new Set(likedVideos);
+  const handleLike = async (video: Video) => {
+  const wasLiked = likedVideos.has(video.id);
+  const newLikedVideos = new Set(likedVideos);
 
-    if (wasLiked) {
-      newLikedVideos.delete(video.id);
-    } else {
-      newLikedVideos.add(video.id);
+  if (wasLiked) {
+    newLikedVideos.delete(video.id);
+  } else {
+    newLikedVideos.add(video.id);
+  }
+
+  setLikedVideos(newLikedVideos);
+
+  setVideoCounters((prev) => ({
+    ...prev,
+    [video.id]: {
+      ...prev[video.id],
+      likes: (prev[video.id]?.likes || 0) + (wasLiked ? -1 : 1),
+    },
+  }));
+
+  try {
+    const res = await likeToggleMutation.mutateAsync({
+      videoId: video.id,
+    });
+
+    // 💰 MONETIZATION FEEDBACK
+    if (res?.earning?.success) {
+      alert("💰 + gain reçu !");
     }
 
-    setLikedVideos(newLikedVideos);
-    setVideoCounters((prev) => ({
-      ...prev,
-      [video.id]: {
-        ...prev[video.id],
-        likes: (prev[video.id]?.likes || 0) + (wasLiked ? -1 : 1),
-      },
-    }));
-
-    try {
-      await likeToggleMutation.mutateAsync({ videoId: video.id });
-    } catch {
-      // Revert on error
-      setLikedVideos(likedVideos);
+    if (res?.earning?.shadow) {
+      alert("⚠️ Limite atteinte aujourd’hui");
     }
-  };
 
-  /** ================= FAVORITE ================= */
+    if (res?.earning?.reason === "too_fast") {
+      alert("🚫 Tu vas trop vite");
+    }
+
+    if (res?.earning?.reason === "duplicate") {
+      alert("⚠️ Action déjà comptée");
+    }
+
+    if (res?.earning?.reason === "creator_not_eligible") {
+      alert("⚠️ Conditions créateur non remplies");
+    }
+
+  } catch {
+    // rollback UI
+    setLikedVideos(likedVideos);
+  }
+};
+    /** ================= FAVORITE ================= */
   const handleFavorite = async (video: Video) => {
     const wasFavorited = favoritedVideos.has(video.id);
     const newFavoritedVideos = new Set(favoritedVideos);
