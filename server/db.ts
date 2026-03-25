@@ -340,13 +340,35 @@ if (delay) {
       }
     }
 
-    // 🚨 4. Condition créateur (évite fake comptes)
-    if (isCreator) {
-      const vids = await getUserVideos(userId);
-      if (vids.length < 1) {
-        return { success: false, reason: "not_eligible" };
-      }
-    }
+    // 🚨 4. Vérifier éligibilité créateur réelle
+if (isCreator) {
+  const followers = await getFollowerCount(userId);
+
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const viewsResult = await db
+    .select({
+      total: sql<number>`SUM(${videos.views})`,
+    })
+    .from(videos)
+    .where(
+      and(
+        eq(videos.userId, userId),
+        gt(videos.createdAt, thirtyDaysAgo)
+      )
+    );
+
+  const views30Days = Number(viewsResult[0]?.total || 0);
+
+  const eligible =
+    followers >= MONETIZATION.creator.minFollowers &&
+    views30Days >= MONETIZATION.creator.minViews30Days;
+
+  if (!eligible) {
+    return { success: false, reason: "creator_not_eligible" };
+  }
+}
 
     // 💰 5. Split argent
     const reward = MONETIZATION.rewards[source as keyof typeof MONETIZATION.rewards] || amount;
