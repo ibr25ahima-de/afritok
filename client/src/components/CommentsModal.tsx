@@ -23,6 +23,40 @@ const handleSubmitComment = async () => {
   if (!newComment.trim()) return;
 
   try {
+    const res = await createCommentMutation.mutateAsync({
+      videoId,
+      text: newComment,
+    });
+
+    setNewComment("");
+
+    // refresh commentaires
+    await commentsQuery.refetch();
+
+    // 💰 MONETIZATION FEEDBACK
+    if (res?.earning?.success) {
+      alert("💰 + gain commentaire !");
+    }
+
+    if (res?.earning?.shadow) {
+      alert("⚠️ Limite atteinte aujourd’hui");
+    }
+
+    if (res?.earning?.reason === "too_fast") {
+      alert("🚫 Tu spam trop");
+    }
+
+    if (res?.earning?.reason === "duplicate") {
+      alert("⚠️ Commentaire déjà compté");
+    }
+
+  } catch (error) {
+    console.error("Comment error", error);
+  }
+};
+  if (!newComment.trim()) return;
+
+  try {
     await createCommentMutation.mutateAsync({
       videoId,
       text: newComment,
