@@ -11,71 +11,59 @@ interface CommentsModalProps {
 
 export default function CommentsModal({ videoId, isOpen, onClose }: CommentsModalProps) {
   const [newComment, setNewComment] = useState("");
+
   const commentsQuery = trpc.comment.list.useQuery(
-  { videoId },
-  {
-    refetchOnWindowFocus: false,
-    refetchOnMount: true,
-  }
-);
+    { videoId },
+    {
+      refetchOnWindowFocus: false,
+      refetchOnMount: true,
+    }
+  );
+
   const createCommentMutation = trpc.comment.create.useMutation();
-const handleSubmitComment = async () => {
-  if (!newComment.trim()) return;
 
-  try {
-    const res = await createCommentMutation.mutateAsync({
-      videoId,
-      text: newComment,
-    });
+  const handleSubmitComment = async () => {
+    if (!newComment.trim()) return;
 
-    setNewComment("");
+    try {
+      const res = await createCommentMutation.mutateAsync({
+        videoId,
+        text: newComment,
+      });
 
-    // refresh commentaires
-    await commentsQuery.refetch();
+      setNewComment("");
 
-    // 💰 MONETIZATION FEEDBACK
-    if (res?.earning?.success) {
-      alert("💰 + gain commentaire !");
+      // refresh commentaires
+      await commentsQuery.refetch();
+
+      // 💰 MONETIZATION FEEDBACK
+      if (res?.earning?.success) {
+        alert("💰 + gain commentaire !");
+      }
+
+      if (res?.earning?.shadow) {
+        alert("⚠️ Limite atteinte aujourd’hui");
+      }
+
+      if (res?.earning?.reason === "too_fast") {
+        alert("🚫 Tu spam trop");
+      }
+
+      if (res?.earning?.reason === "duplicate") {
+        alert("⚠️ Commentaire déjà compté");
+      }
+
+    } catch (error) {
+      console.error("Comment error", error);
     }
+  };
 
-    if (res?.earning?.shadow) {
-      alert("⚠️ Limite atteinte aujourd’hui");
-    }
+  if (!isOpen) return null;
 
-    if (res?.earning?.reason === "too_fast") {
-      alert("🚫 Tu spam trop");
-    }
-
-    if (res?.earning?.reason === "duplicate") {
-      alert("⚠️ Commentaire déjà compté");
-    }
-
-  } catch (error) {
-    console.error("Comment error", error);
-  }
-};
-  if (!newComment.trim()) return;
-
-  try {
-    await createCommentMutation.mutateAsync({
-      videoId,
-      text: newComment,
-    });
-
-    setNewComment("");
-
-    // recharge les commentaires
-    await commentsQuery.refetch();
-commentsQuery.invalidate();
-  } catch (error) {
-    console.error("Comment error", error);
-  }
-};
-   
-if (!isOpen) return null;
   return (
     <div className="fixed inset-0 bg-black/80 z-50 flex items-end">
       <div className="bg-slate-900 w-full h-[85vh] flex flex-col rounded-t-lg">
+        
         {/* Header */}
         <div className="border-b border-purple-800/30 p-4 flex items-center justify-between">
           <h2 className="text-white font-semibold">Comments</h2>
@@ -96,8 +84,12 @@ if (!isOpen) return null;
                   <User className="w-4 h-4 text-white" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-white font-semibold text-sm">Creator #{comment.userId}</p>
-                  <p className="text-purple-300 text-sm mt-1">{comment.text}</p>
+                  <p className="text-white font-semibold text-sm">
+                    Creator #{comment.userId}
+                  </p>
+                  <p className="text-purple-300 text-sm mt-1">
+                    {comment.text}
+                  </p>
                   <p className="text-gray-500 text-xs mt-1">
                     {new Date(comment.createdAt).toLocaleDateString()}
                   </p>
@@ -105,7 +97,9 @@ if (!isOpen) return null;
               </div>
             ))
           ) : (
-            <p className="text-purple-300 text-center py-8">No comments yet</p>
+            <p className="text-purple-300 text-center py-8">
+              No comments yet
+            </p>
           )}
         </div>
 
@@ -116,13 +110,14 @@ if (!isOpen) return null;
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
             placeholder="Add a comment..."
-            onKeyPress={(e) => {
+            onKeyDown={(e) => {
               if (e.key === "Enter") {
                 handleSubmitComment();
               }
             }}
             className="flex-1 bg-slate-800 border border-purple-800/50 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-purple-600 text-sm"
           />
+
           <Button
             onClick={handleSubmitComment}
             disabled={!newComment.trim() || createCommentMutation.isPending}
@@ -131,6 +126,7 @@ if (!isOpen) return null;
             <Send className="w-4 h-4" />
           </Button>
         </div>
+
       </div>
     </div>
   );
