@@ -40,7 +40,7 @@ interface Video {
 
 export default function Feed() {
   const { isAuthenticated, user } = useAuth();
-  const navigate = useNavigate();
+  const [, navigate] = useLocation();
 
   const [videos, setVideos] = useState<Video[]>([]);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
