@@ -2,6 +2,9 @@ import "dotenv/config";
 import express, { Request, Response } from "express";
 import { createServer } from "http";
 import multer from "multer";
+import cors from "cors";
+import session from "express-session";
+import cookieParser from "cookie-parser";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
@@ -10,20 +13,40 @@ import { handleStripeWebhook, testStripeWebhook } from "../webhook-endpoint";
 import { runMigrations } from "./migrate";
 import { uploadVideoToSupabase } from "../supabase-storage";
 
-// Configure multer for file uploads (in memory)
+// multer config
 const upload = multer({ 
   storage: multer.memoryStorage(),
-  limits: { fileSize: 100 * 1024 * 1024 } // 100MB max
+  limits: { fileSize: 100 * 1024 * 1024 }
 });
 
 async function startServer() {
-  // Run migrations BEFORE anything else
   await runMigrations();
 
   const app = express();
   const server = createServer(app);
 
-  // Stripe webhooks (raw body)
+  // ✅ CORS (CRITIQUE)
+  app.use(cors({
+    origin: true,
+    credentials: true,
+  }));
+
+  // ✅ COOKIE PARSER
+  app.use(cookieParser());
+
+  // ✅ SESSION (CRITIQUE POUR LOGIN)
+  app.use(session({
+    secret: process.env.SESSION_SECRET || "afritok-secret",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: true,       // Render = HTTPS
+      sameSite: "none",   // 🔥 OBLIGATOIRE SINON COOKIE BLOQUÉ
+      httpOnly: true,
+    },
+  }));
+
+  // Stripe webhooks
   app.post('/api/webhooks/stripe', express.raw({type: 'application/json'}), handleStripeWebhook);
   app.post('/api/webhooks/stripe/test', express.json(), testStripeWebhook);
 
@@ -31,9 +54,7 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-  // ============================================
-  // VIDEO UPLOAD ENDPOINT (Supabase)
-  // ============================================
+  // upload vidéo
   app.post('/api/upload-video', upload.single('file'), async (req: Request, res: Response) => {
     try {
       if (!req.file) {
@@ -52,7 +73,7 @@ async function startServer() {
       }
 
       if (file.size > 100 * 1024 * 1024) {
-        return res.status(400).json({ error: "File too large (max 100MB)" });
+        return res.status(400).json({ error: "File too large" });
       }
 
       const videoUrl = await uploadVideoToSupabase(
@@ -69,7 +90,7 @@ async function startServer() {
     }
   });
 
-  // tRPC endpoint
+  // tRPC
   app.use(
     "/api/trpc",
     createExpressMiddleware({
@@ -84,7 +105,6 @@ async function startServer() {
     serveStatic(app);
   }
 
-  // ✅ IMPORTANT : Render port configuration (FIXED)
   const port = parseInt(process.env.PORT || "3000");
 
   server.listen(port, () => {
