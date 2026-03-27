@@ -1,7 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
-import { useLocation } from "wouter";
 import {
   Heart,
   MessageCircle,
@@ -40,7 +39,9 @@ interface Video {
 
 export default function Feed() {
   const { isAuthenticated, user } = useAuth();
-  const navigate = useNavigate();
+  const goTo = (path: string) => {
+    window.location.assign(path);
+  };
 
   const [videos, setVideos] = useState<Video[]>([]);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
@@ -91,7 +92,7 @@ export default function Feed() {
   /** ================= LIKE ================= */
   const handleLike = async (video: Video) => {
     if (!isAuthenticated) {
-      navigate("/");
+      goTo("/");
       return;
     }
 
@@ -134,7 +135,7 @@ export default function Feed() {
   /** ================= FAVORITE ================= */
   const handleFavorite = async (video: Video) => {
     if (!isAuthenticated) {
-      navigate("/");
+      goTo("/");
       return;
     }
 
@@ -341,7 +342,7 @@ export default function Feed() {
 
                 {/* PROFILE */}
                 <button
-                  onClick={() => navigate(`/profile/${video.userId}`)}
+                  onClick={() => goTo(`/profile/${video.userId}`)}
                   className="flex flex-col items-center gap-1 hover:scale-110 transition mt-2"
                 >
                   <div className="p-3 bg-black/50 hover:bg-black/70 rounded-full transition">

@@ -54,23 +54,6 @@ const handleSubmitComment = async () => {
     console.error("Comment error", error);
   }
 };
-  if (!newComment.trim()) return;
-
-  try {
-    await createCommentMutation.mutateAsync({
-      videoId,
-      text: newComment,
-    });
-
-    setNewComment("");
-
-    // recharge les commentaires
-    await commentsQuery.refetch();
-commentsQuery.invalidate();
-  } catch (error) {
-    console.error("Comment error", error);
-  }
-};
    
 if (!isOpen) return null;
   return (

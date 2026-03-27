@@ -14,20 +14,28 @@ export default function Monetization() {
   const [withdrawalAmount, setWithdrawalAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("mtn_money");
 
-  const statsQuery = trpc.monetization.stats.useQuery();
-  const earningsQuery = trpc.monetization.earnings.useQuery();
-  const withdrawalsQuery = trpc.monetization.withdrawals.useQuery();
-  const requestWithdrawalMutation = trpc.monetization.requestWithdrawal.useMutation();
+  const statsQuery = trpc.monetization.dashboard.useQuery();
+  const earningsQuery = trpc.monetization.myEarnings.useQuery();
+  const withdrawalsQuery = trpc.earnings.getMyWithdrawals.useQuery();
+  const requestWithdrawalMutation = trpc.monetization.withdraw.useMutation();
 
   const handleRequestWithdrawal = async () => {
     if (!withdrawalAmount) return;
+    const amountInUsd = Math.round(Number(withdrawalAmount) / USD_TO_CFA);
+    if (!amountInUsd || amountInUsd <= 0) return;
+
     await requestWithdrawalMutation.mutateAsync({
-      amount: withdrawalAmount,
+      amount: amountInUsd,
       paymentMethod,
     });
     setWithdrawalAmount("");
+    statsQuery.refetch();
     withdrawalsQuery.refetch();
   };
+
+  const totalEarnings = Number(statsQuery.data?.balance || 0);
+  const totalWithdrawals = Number(statsQuery.data?.totalWithdrawals || 0);
+  const availableBalance = Math.max(totalEarnings - totalWithdrawals, 0);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
@@ -59,7 +67,7 @@ export default function Monetization() {
               <TrendingUp className="w-5 h-5 text-green-400" />
             </div>
             <p className="text-3xl font-bold text-white">
-              {(statsQuery.data?.totalEarnings || 0) * USD_TO_CFA} CFA
+              {totalEarnings * USD_TO_CFA} CFA
             </p>
           </div>
 
@@ -69,7 +77,7 @@ export default function Monetization() {
               <Send className="w-5 h-5 text-blue-400" />
             </div>
             <p className="text-3xl font-bold text-white">
-              {(statsQuery.data?.totalWithdrawals || 0) * USD_TO_CFA} CFA
+              {totalWithdrawals * USD_TO_CFA} CFA
             </p>
           </div>
 
@@ -79,11 +87,7 @@ export default function Monetization() {
               <Wallet className="w-5 h-5 text-yellow-400" />
             </div>
             <p className="text-3xl font-bold text-white">
-              {(
-                (parseFloat(statsQuery.data?.totalEarnings?.toString() || "0") -
-                 parseFloat(statsQuery.data?.totalWithdrawals?.toString() || "0")) * USD_TO_CFA
-              ).toFixed(0)}{" "}
-              CFA
+              {(availableBalance * USD_TO_CFA).toFixed(0)} CFA
             </p>
           </div>
         </div>

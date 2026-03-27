@@ -8,6 +8,7 @@ import { TRPCError } from "@trpc/server";
 
 import { instantWithdrawalRouter } from "./routers-instant-withdrawal";
 import { monetizationRouter } from "./routers-monetization";
+import { paystackRouter } from "./routers-paystack";
 import { liveRouter } from "./routers-live";
 import { liveChatRouter } from "./routers-live-chat";
 import { likeRouter, commentRouter, favoriteRouter, shareRouter } from "./routers-interaction";
@@ -51,6 +52,7 @@ export const appRouter = router({
   liveChat: liveChatRouter,
   instantWithdrawal: instantWithdrawalRouter,
   monetization: monetizationRouter,
+  paystack: paystackRouter,
 
   // ============================================
   // AUTH

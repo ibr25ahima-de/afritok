@@ -439,17 +439,28 @@ export async function createWithdrawalRecord(
   amount: number,
   paymentMethod: string
 ) {
+  if (amount <= 0) throw new Error("Amount must be positive");
+
   const user = await getUserById(userId);
   if (!user) throw new Error("User not found");
 
   const balance = parseFloat(user.totalEarnings?.toString() || "0");
+  const totalWithdrawals = parseFloat(user.totalWithdrawals?.toString() || "0");
+  const availableBalance = balance - totalWithdrawals;
 
-  if (amount > balance) throw new Error("Insufficient balance");
+  if (amount > availableBalance) throw new Error("Insufficient balance");
 
   await db.insert(withdrawals).values({
     userId,
-    amount: amount.toFixed(2),
+    amount: Math.round(amount),
     paymentMethod,
-    status: "completed",
+    status: "pending",
   });
+
+  const nextWithdrawals = Math.round(totalWithdrawals + amount);
+
+  await db
+    .update(users)
+    .set({ totalWithdrawals: nextWithdrawals })
+    .where(eq(users.id, userId));
 }
