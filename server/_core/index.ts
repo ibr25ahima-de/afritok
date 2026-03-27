@@ -23,6 +23,7 @@ async function startServer() {
   await runMigrations();
 
   const app = express();
+ app.set("trust proxy", 1);
   const server = createServer(app);
 
   // ✅ CORS (CRITIQUE)
