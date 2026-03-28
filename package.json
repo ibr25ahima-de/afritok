@@ -53,6 +53,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "cookie": "^1.0.2",
+    "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.2",
@@ -60,13 +61,12 @@
     "embla-carousel-react": "^8.6.0",
     "express": "^4.21.2",
     "express-session": "^1.17.3",
-   "cookie-parser": "^1.4.6",
     "express-rate-limit": "^8.2.1",
     "framer-motion": "^12.23.22",
     "helmet": "^8.1.0",
     "input-otp": "^1.4.2",
     "jose": "6.1.0",
-    "jsonwebtoken": "^9.0.0"
+    "jsonwebtoken": "^9.0.0",
     "lucide-react": "^0.453.0",
     "multer": "^1.4.5-lts.1",
     "nanoid": "^5.1.5",
@@ -119,11 +119,5 @@
     "vite": "^7.1.7",
     "vite-plugin-manus-runtime": "^0.0.52",
     "vitest": "^2.1.4"
-  },
-  "packageManager": "pnpm@10.4.1+sha512.c753b6c3ad7afa13af388fa6d808035a008e30ea9993f58c6663e2bc5ff21679aa834db094987129aa4d488b86df57f7b634981b2f827cdcacc698cc0cfb88af",
-  "pnpm": {
-    "overrides": {
-      "tailwindcss>nanoid": "3.3.7"
-    }
   }
 }
