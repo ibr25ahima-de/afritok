@@ -14,18 +14,24 @@ export async function createContext(
   let user: User | null = null;
 
   try {
-    const token = opts.req.cookies?.app_session_id;
+    const cookieHeader = opts.req.headers.cookie;
 
-    if (token) {
-      const decoded: any = jwt.verify(
-        token,
-        process.env.JWT_SECRET || "secret"
-      );
+    if (cookieHeader) {
+      const match = cookieHeader.match(/app_session_id=([^;]+)/);
 
-      user = {
-        id: decoded.userId,
-        name: decoded.phone,
-      } as User;
+      if (match) {
+        const token = match[1];
+
+        const decoded: any = jwt.verify(
+          token,
+          process.env.JWT_SECRET || "secret"
+        );
+
+        user = {
+          id: decoded.userId,
+          name: decoded.phone,
+        } as User;
+      }
     }
   } catch (error) {
     user = null;
