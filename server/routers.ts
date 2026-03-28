@@ -135,7 +135,32 @@ export const appRouter = router({
 
         return { success: true };
       }),
+    uploadFile: protectedProcedure
+      .input(z.object({
+        title: z.string().optional(),
+        description: z.string().optional(),
+        file: z.instanceof(File),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
 
+        const buffer = await input.file.arrayBuffer();
+        const videoUrl = await uploadVideoToSupabase(
+          Buffer.from(buffer),
+          input.file.name,
+          ctx.user.id
+        );
+
+        await db.insert(videos).values({
+          userId: ctx.user.id,
+          title: input.title || input.file.name,
+          description: input.description || null,
+          videoUrl: videoUrl,
+        });
+
+        return { success: true, videoUrl };
+      }),
+          
     incrementViews: publicProcedure
       .input(z.object({ videoId: z.number() }))
       .mutation(async ({ input }) => {
