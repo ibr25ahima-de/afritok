@@ -277,15 +277,16 @@ export default function Feed() {
             >
               {/* VIDEO */}
               {video.videoUrl ? (
-                <video
-                  ref={(el) => (videoRefs.current[video.id] = el)}
-                  data-video-id={video.id}
-                  src={video.videoUrl}
-                  className="w-full h-full object-cover bg-black"
-                  loop
-                  muted={muted}
-                  autoPlay={i === currentVideoIndex}
-                  onClick={() => setCurrentVideoIndex(i)}
+              <video
+  ref={(el) => (videoRefs.current[video.id] = el)}
+  data-video-id={video.id}
+  src={video.videoUrl}
+  className="w-full h-full object-cover bg-black"
+  style={{ pointerEvents: "none" }}
+  loop
+  muted={muted}
+  autoPlay={i === currentVideoIndex}
+/>
                   onError={(e) => {
                     console.error("Video load error:", e);
                   }}
@@ -308,7 +309,7 @@ export default function Feed() {
               </button>
 
               {/* RIGHT SIDEBAR - ACTIONS (MOVED UP) */}
-              <div className="absolute right-3 top-32 flex flex-col gap-4 z-20">
+              <div className="absolute right-3 top-32 flex flex-col gap-4 z-50">
                 {/* USER AVATAR */}
                 <button
                   onClick={() => navigate(`/profile/${video.userId}`)}
