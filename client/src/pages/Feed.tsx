@@ -290,7 +290,6 @@ export default function Feed() {
     console.error("Video load error:", e);
   }}
 />
-              />
               ) : (
                 <div className="w-full h-full bg-gradient-to-br from-gray-900 to-black flex items-center justify-center">
                   <p className="text-gray-400">Vidéo indisponible</p>
