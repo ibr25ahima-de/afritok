@@ -282,14 +282,14 @@ export default function Feed() {
   data-video-id={video.id}
   src={video.videoUrl}
   className="w-full h-full object-cover bg-black"
-  style={{ pointerEvents: "none" }}
   loop
   muted={muted}
   autoPlay={i === currentVideoIndex}
+  onClick={() => setCurrentVideoIndex(i)}
+  onError={(e) => {
+    console.error("Video load error:", e);
+  }}
 />
-                  onError={(e) => {
-                    console.error("Video load error:", e);
-                  }}
                 />
               ) : (
                 <div className="w-full h-full bg-gradient-to-br from-gray-900 to-black flex items-center justify-center">
