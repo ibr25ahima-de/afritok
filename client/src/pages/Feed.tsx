@@ -488,12 +488,15 @@ export default function Feed() {
         />
       )}
 
-      {showShare && selectedVideoId && (
-        <ShareModal
-          videoId={selectedVideoId}
-          onClose={() => setShowShare(false)}
-        />
-      )}
+      {showShare && current && (
+  <ShareModal
+    videoId={current.id}
+    videoUrl={current.videoUrl}
+    videoTitle={current.title}
+    isOpen={showShare}
+    onClose={() => setShowShare(false)}
+  />
+)}
     </div>
   );
 }
