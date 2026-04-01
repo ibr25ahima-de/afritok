@@ -482,11 +482,20 @@ export default function Feed() {
 
       {/* MODALS */}
       {showComments && selectedVideoId && (
-        <CommentsModal
-          videoId={selectedVideoId}
-          onClose={() => setShowComments(false)}
-        />
-      )}
+  <CommentsModal
+    videoId={selectedVideoId}
+    onClose={() => setShowComments(false)}
+    onCommentAdded={() => {
+      setVideoCounters((prev) => ({
+        ...prev,
+        [selectedVideoId]: {
+          ...prev[selectedVideoId],
+          comments: (prev[selectedVideoId]?.comments || 0) + 1,
+        },
+      }));
+    }}
+  />
+)}
 
       {showShare && current && (
   <ShareModal
