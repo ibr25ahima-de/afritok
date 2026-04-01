@@ -13,7 +13,7 @@ export default function ShareModal({ videoId, videoTitle, videoUrl, onClose }: S
 const createShareMutation = trpc.share.create.useMutation();
 
 const shareUrl = videoUrl || window.location.href;
-const shareText = "Check out this amazing video on Afritok: ${videoTitle || "Video"}";
+const shareText = `Check out this amazing video on Afritok: ${videoTitle || "Video"}`;
 
 const handleShare = async (platform: string) => {
 let url = "";
