@@ -135,45 +135,51 @@ export default function Feed() {
   };
 
   /** ================= FAVORITE ================= */
-  const handleFavorite = async (video: Video) => {
-    if (!isAuthenticated) {
-      navigate("/");
-      return;
-    }
+const handleFavorite = async (video: Video) => {
+  if (!isAuthenticated) {
+    navigate("/");
+    return;
+  }
 
-    const was = favoritedVideos.has(video.id);
-    const next = new Set(favoritedVideos);
+  const wasFavorited = favoritedVideos.has(video.id);
 
-    if (was) next.delete(video.id);
+  // ✅ update propre (évite bug React async)
+  setFavoritedVideos((prev) => {
+    const next = new Set(prev);
+    if (wasFavorited) next.delete(video.id);
     else next.add(video.id);
+    return next;
+  });
 
-    setFavoritedVideos(next);
+  // ✅ update compteur
+  setVideoCounters((prev) => ({
+    ...prev,
+    [video.id]: {
+      ...prev[video.id],
+      favorites: (prev[video.id]?.favorites || 0) + (wasFavorited ? -1 : 1),
+    },
+  }));
+
+  try {
+    await favoriteToggleMutation.mutateAsync({ videoId: video.id });
+  } catch {
+    // ❌ rollback propre
+    setFavoritedVideos((prev) => {
+      const next = new Set(prev);
+      if (wasFavorited) next.add(video.id);
+      else next.delete(video.id);
+      return next;
+    });
 
     setVideoCounters((prev) => ({
       ...prev,
       [video.id]: {
         ...prev[video.id],
-        favorites: (prev[video.id]?.favorites || 0) + (was ? -1 : 1),
+        favorites: (prev[video.id]?.favorites || 0) + (wasFavorited ? 1 : -1),
       },
     }));
-
-    try {
-      await favoriteToggleMutation.mutateAsync({ videoId: video.id });
-    } catch {
-      const prev = new Set(favoritedVideos);
-      if (was) prev.add(video.id);
-      else prev.delete(video.id);
-      setFavoritedVideos(prev);
-      setVideoCounters((prevCounters) => ({
-        ...prevCounters,
-        [video.id]: {
-          ...prevCounters[video.id],
-          favorites: (prevCounters[video.id]?.favorites || 0) + (was ? 1 : -1),
-        },
-      }));
-    }
-  };
-
+  }
+};
   /** ================= AUTOPLAY ================= */
   useEffect(() => {
     const current = videos[currentVideoIndex];
