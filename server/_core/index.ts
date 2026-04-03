@@ -85,12 +85,18 @@ async function startServer() {
     })
   );
 
-  if (process.env.NODE_ENV === "development") {
-    await setupVite(app, server);
-  } else {
-    serveStatic(app);
-  }
 
+if (process.env.NODE_ENV === "development") {
+  await setupVite(app, server);
+} else {
+  serveStatic(app);
+
+  // ✅ FIX ROUTING FRONTEND (Render / SPA)
+  app.get("*", (req: Request, res: Response) => {
+    const path = require("path");
+    res.sendFile(path.join(__dirname, "../dist/index.html"));
+  });
+}
   const port = parseInt(process.env.PORT || "3000");
 
   server.listen(port, () => {
