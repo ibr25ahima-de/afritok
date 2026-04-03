@@ -78,17 +78,22 @@ export default function Feed() {
       return [...prev, ...newVideos];
     });
 
-    feedQuery.data.forEach((v: Video) => {
-      setVideoCounters((prev) => ({
-        ...prev,
-        [v.id]: {
-          likes: v.likes || 0,
-          comments: v.comments || 0,
-          shares: v.shares || 0,
-          favorites: v.favorites || 0,
-        },
-      }));
-    });
+  feedQuery.data.forEach((v: Video) => {
+  setVideoCounters((prev) => {
+    // ✅ ne pas écraser si déjà modifié côté client
+    if (prev[v.id]) return prev;
+
+    return {
+      ...prev,
+      [v.id]: {
+        likes: v.likes || 0,
+        comments: v.comments || 0,
+        shares: v.shares || 0,
+        favorites: v.favorites || 0,
+      },
+    };
+  });
+});
   }, [feedQuery.data]);
 
   /** ================= LIKE ================= */
