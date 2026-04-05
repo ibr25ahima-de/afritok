@@ -1,7 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // ✅ FIX
+
+// ✅ fallback intelligent
+const supabaseKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
   throw new Error("Missing Supabase credentials");
@@ -32,10 +36,10 @@ export async function storagePut(
       throw error;
     }
 
-    // ✅ marche même si bucket privé
+    // ✅ URL publique (ou signée si privé)
     const { data } = await supabase.storage
       .from("videos")
-      .createSignedUrl(fileKey, 60 * 60 * 24 * 365); // 1 an
+      .createSignedUrl(fileKey, 60 * 60 * 24 * 365);
 
     return {
       key: fileKey,
@@ -45,4 +49,4 @@ export async function storagePut(
     console.error("[Storage] Upload failed:", error);
     throw error;
   }
-      }
+        }
