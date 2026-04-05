@@ -1,12 +1,11 @@
 import { useRef, useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { trpc } from "@/lib/trpc";
 import { Loader2 } from "lucide-react";
 
 export default function Upload() {
   const [, navigate] = useLocation();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
   
   const [file, setFile] = useState<File | null>(null);
@@ -14,8 +13,6 @@ export default function Upload() {
   const [description, setDescription] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
-  const uploadMutation = trpc.video.uploadFile.useMutation();
 
   useEffect(() => {
     if (file) {
@@ -40,21 +37,47 @@ export default function Upload() {
   };
 
   const handleSubmit = async () => {
-    if (!file) return;
+    if (!file || !user) return;
 
     setIsLoading(true);
+
     try {
-      await uploadMutation.mutateAsync({
-        title: title || file.name,
-        description: description || null,
-        file: file,
+      // ✅ 1. Upload vers backend (multer + supabase)
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("userId", String(user.id));
+
+      const res = await fetch("/api/upload-video", {
+        method: "POST",
+        body: formData,
       });
 
-      // Reset et redirection
+      if (!res.ok) {
+        throw new Error("Upload échoué");
+      }
+
+      const data = await res.json();
+      const videoUrl = data.videoUrl;
+
+      // ✅ 2. Créer la vidéo via API (SANS fichier)
+      await fetch("/api/trpc/video.create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: title || file.name,
+          description: description || null,
+          videoUrl: videoUrl,
+        }),
+      });
+
+      // Reset + redirect
       setFile(null);
       setTitle("");
       setDescription("");
       navigate("/feed");
+
     } catch (error) {
       console.error("Upload failed:", error);
       alert("Erreur lors de l'upload");
@@ -94,7 +117,7 @@ export default function Upload() {
             </div>
           )}
           
-          <div className="max-w-md mx-auto">
+          <div className="max-w-md mx-auto space-y-4">
             <div>
               <label className="block text-sm font-semibold mb-2">Titre</label>
               <input
@@ -130,6 +153,7 @@ export default function Upload() {
               >
                 Annuler
               </button>
+
               <button
                 onClick={handleSubmit}
                 disabled={isLoading}
