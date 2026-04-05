@@ -24,6 +24,8 @@ export async function storagePut(
   contentType: string
 ): Promise<{ key: string; url: string }> {
   try {
+    console.log("📤 Uploading:", fileKey);
+
     const { error } = await supabase.storage
       .from("videos")
       .upload(fileKey, fileBuffer, {
@@ -32,21 +34,21 @@ export async function storagePut(
       });
 
     if (error) {
-      console.error("❌ Supabase error:", error);
+      console.error("❌ Supabase upload error:", error);
       throw error;
     }
 
-    // ✅ URL publique (ou signée si privé)
-    const { data } = await supabase.storage
+    // ✅ URL publique (simple et rapide)
+    const { data } = supabase.storage
       .from("videos")
-      .createSignedUrl(fileKey, 60 * 60 * 24 * 365);
+      .getPublicUrl(fileKey);
 
     return {
       key: fileKey,
-      url: data?.signedUrl || "",
+      url: data.publicUrl,
     };
   } catch (error) {
     console.error("[Storage] Upload failed:", error);
     throw error;
   }
-        }
+}
