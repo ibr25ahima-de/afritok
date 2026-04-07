@@ -79,7 +79,25 @@ export async function getVideoById(videoId: number) {
   return (await db.select().from(videos).where(eq(videos.id, videoId)).limit(1))[0];
 }
 
-export async function getFeedVideos(limit = 20, offset = 0) {
+export async function import { desc } from "drizzle-orm";
+
+export async function getFeedVideos(limit: number, offset: number) {
+  try {
+    const data = await db
+      .select()
+      .from(videos)
+      .orderBy(desc(videos.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    console.log("[FEED VIDEOS]:", data);
+
+    return data;
+  } catch (error) {
+    console.error("[FEED ERROR]:", error);
+    return [];
+  }
+}(limit = 20, offset = 0) {
   return db
     .select({
       id: videos.id,
