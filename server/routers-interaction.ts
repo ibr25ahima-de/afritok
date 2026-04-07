@@ -113,7 +113,7 @@ export const commentRouter = router({
       const user = ctx.user;
       if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
 
-      await deleteComment(input.commentId);
+      await (input.commentId);
       return { success: true };
     }),
 });
