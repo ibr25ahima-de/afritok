@@ -118,10 +118,8 @@ export const appRouter = router({
 
   video: router({
     feed: publicProcedure
-      .input(z.object({ limit: z.number().default(20), offset: z.number().default(0) }))
-      .query(async ({ input }) => await getFeedVideos(input.limit, input.offset, "forYou")),
-
-    upload: protectedProcedure
+  .query(async () => await getFeedVideos(10, 0, "forYou")),
+        upload: protectedProcedure
       .input(z.object({
         title: z.string(),
         videoUrl: z.string(),
