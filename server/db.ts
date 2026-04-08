@@ -82,24 +82,23 @@ export async function getVideoById(videoId: number) {
 export async function getFeedVideos(limit = 20, offset = 0) {
   return db
     .select({
-      id: videos.id,
-      userId: videos.userId,
-      title: videos.title,
-      description: videos.description,
-      videoUrl: videos.videoUrl,
-      thumbnailUrl: videos.thumbnailUrl,
-      views: videos.views,
-      likes: videos.likes,
-      comments: videos.comments,
-      shares: videos.shares,
-      favorites:
-      createdAt: videos.createdAt,
-      user: {
-        id: users.id,
-        name: users.name,
-        avatarUrl: users.avatarUrl,
-      },
-    })
+  id: videos.id,
+  userId: videos.userId,
+  title: videos.title,
+  description: videos.description,
+  videoUrl: videos.videoUrl,
+  thumbnailUrl: videos.thumbnailUrl,
+  views: videos.views,
+  likes: videos.likes,
+  comments: videos.comments,
+  shares: videos.shares,
+  createdAt: videos.createdAt,
+  user: {
+    id: users.id,
+    name: users.name,
+    avatarUrl: users.avatarUrl,
+  },
+})
     .from(videos)
     .leftJoin(users, eq(videos.userId, users.id))
     .orderBy(desc(videos.createdAt))
@@ -125,7 +124,7 @@ export async function createOTP(phone: string, code: string) {
 }
 
 export async function getValidOTP(phone: string, code: string): Promise<OTP | undefined> {
-  return (
+  rreturn(
     await db
       .select()
       .from(otps)
