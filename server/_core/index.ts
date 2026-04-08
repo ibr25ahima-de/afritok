@@ -78,12 +78,12 @@ async function startServer() {
   });
 
   app.use(
-    "/api/trpc",
-    createExpressMiddleware({
-      router: appRouter,
-      createContext,
-    })
-  );
+  "/trpc",
+  createExpressMiddleware({
+    router: appRouter,
+    createContext,
+  })
+);
 
 
 if (process.env.NODE_ENV === "development") {
