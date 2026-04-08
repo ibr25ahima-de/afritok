@@ -92,7 +92,7 @@ export async function getFeedVideos(limit = 20, offset = 0) {
       likes: videos.likes,
       comments: videos.comments,
       shares: videos.shares,
-      favorites: videos.favorites,
+      favorites:
       createdAt: videos.createdAt,
       user: {
         id: users.id,
