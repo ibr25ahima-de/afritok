@@ -18,7 +18,9 @@ const upload = multer({
 });
 
 async function startServer() {
-  await runMigrations();
+  runMigrations().catch((err) => {
+  console.error("Migration failed:", err);
+});
 
   const app = express();
   
