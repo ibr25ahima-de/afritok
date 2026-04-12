@@ -6,6 +6,7 @@
 
 import { router, protectedProcedure } from './_core/trpc';
 import { z } from 'zod';
+import { TRPCError } from '@trpc/server';
 import { getVideoRecordingManager } from './video-recording';
 
 export const videoRecordingRouter = router({
@@ -25,10 +26,19 @@ export const videoRecordingRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      // ✅ SÉCURISER USER
+      if (!ctx.user) {
+        throw new TRPCError({ code: "UNAUTHORIZED" });
+      }
+
       const manager = getVideoRecordingManager();
 
-      // TODO: Récupérer le blob de la requête multipart
-      // Pour l'instant, créer un placeholder
+      // ✅ BLOQUER LE FAKE UPLOAD (OBLIGATOIRE)
+      // On ne laisse PAS ça en prod.
+      throw new Error("Upload vidéo non implémenté côté serveur");
+
+      /* 
+      // Code original mis en commentaire pour référence
       const blob = new Blob([], { type: input.mimeType });
 
       const result = await manager.processRecordedVideo(blob, {
@@ -50,7 +60,9 @@ export const videoRecordingRouter = router({
         success: true,
         videoId: result.videoId,
         url: result.url,
+        duration: input.duration, // ✅ AMÉLIORATION : utile pour feed + stats
       };
+      */
     }),
 
   /**
@@ -80,12 +92,15 @@ export const videoRecordingRouter = router({
     .mutation(async ({ input }) => {
       const manager = getVideoRecordingManager();
 
-      // TODO: Récupérer le blob de la requête multipart
+      // ✅ BLOQUER LE FAKE UPLOAD (OBLIGATOIRE)
+      throw new Error("Upload vidéo non implémenté côté serveur");
+
+      /*
+      // Code original mis en commentaire pour référence
       const blob = new Blob([], { type: input.mimeType });
-
       const result = await manager.validateVideoQuality(blob);
-
       return result;
+      */
     }),
 
   /**
