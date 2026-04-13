@@ -11,6 +11,7 @@
 
 import { getDb } from './db';
 import { getLogger } from './logging';
+import { sql } from 'drizzle-orm';
 
 const logger = getLogger();
 
@@ -99,15 +100,21 @@ export class RecommendationEngine {
   }
 
   /**
-   * Obtenir le feed par défaut (tendances)
+   * 🔧 1. FIX getDefaultFeed (ULTRA IMPORTANT)
+   * Obtenir le feed par défaut (récent)
    */
   async getDefaultFeed(limit: number = 20, offset: number = 0): Promise<number[]> {
     try {
-      logger.info('Getting default feed', { limit, offset });
+      const db = await getDb();
+      if (!db) return [];
 
-      // TODO: Implémenter la requête pour obtenir les vidéos tendances
-      // Pour l'instant, retourner un tableau vide
-      return [];
+      const videos = await db.query.videos.findMany({
+        orderBy: (v, { desc }) => [desc(v.createdAt)],
+        limit,
+        offset,
+      });
+
+      return videos.map(v => v.id);
     } catch (error) {
       logger.error('Failed to get default feed', { error });
       return [];
@@ -192,7 +199,7 @@ export class RecommendationEngine {
       const filteredScores = Array.from(scores.values()).filter(
         (rec) =>
           !viewHistory.some((vh) => vh.videoId === rec.videoId) &&
-          !userProfile.blockedIds.includes(rec.videoId) &&
+          true && // 🟡 AMÉLIORATION RAPIDE : blockedIds = users, pas vidéos
           !userProfile.likedVideoIds.includes(rec.videoId) // Optionnel : éviter les vidéos aimées
       );
 
@@ -204,13 +211,18 @@ export class RecommendationEngine {
   }
 
   /**
+   * 🔧 2. FIX getTrendingVideosPrivate
    * Obtenir les vidéos trending (privé)
    */
   private async getTrendingVideosPrivate(limit: number): Promise<any[]> {
     try {
-      // TODO: Implémenter la requête pour obtenir les vidéos tendances
-      // Basé sur les vues, likes, commentaires, partages des dernières 24-48h
-      return [];
+      const db = await getDb();
+      if (!db) return [];
+
+      return await db.query.videos.findMany({
+        orderBy: (v, { desc }) => [desc(v.views)],
+        limit,
+      });
     } catch (error) {
       logger.error('Failed to get trending videos', { error });
       return [];
@@ -218,13 +230,20 @@ export class RecommendationEngine {
   }
 
   /**
+   * 🔧 3. FIX getHighEngagementVideos
    * Obtenir les vidéos avec engagement élevé
    */
   private async getHighEngagementVideos(limit: number): Promise<any[]> {
     try {
-      // TODO: Implémenter la requête pour obtenir les vidéos avec engagement élevé
-      // Basé sur le taux d'engagement (likes + commentaires + partages) / vues
-      return [];
+      const db = await getDb();
+      if (!db) return [];
+
+      return await db.query.videos.findMany({
+        orderBy: (v, { desc }) => [
+          desc(sql`(${v.likes} + ${v.comments} + ${v.shares})`)
+        ],
+        limit,
+      });
     } catch (error) {
       logger.error('Failed to get high engagement videos', { error });
       return [];
@@ -246,15 +265,19 @@ export class RecommendationEngine {
   }
 
   /**
+   * 🔧 4. FIX getFollowingVideos
    * Obtenir les vidéos des utilisateurs suivis
    */
   private async getFollowingVideos(followingIds: number[], limit: number): Promise<any[]> {
     try {
-      // TODO: Implémenter la requête pour obtenir les vidéos des utilisateurs suivis
-      if (followingIds.length === 0) {
-        return [];
-      }
-      return [];
+      const db = await getDb();
+      if (!db || followingIds.length === 0) return [];
+
+      return await db.query.videos.findMany({
+        where: (v, { inArray }) => inArray(v.userId, followingIds),
+        orderBy: (v, { desc }) => [desc(v.createdAt)],
+        limit,
+      });
     } catch (error) {
       logger.error('Failed to get following videos', { error });
       return [];
@@ -262,13 +285,18 @@ export class RecommendationEngine {
   }
 
   /**
+   * ⚠️ PETIT BUG À CORRIGER
    * Calculer le score de tendance
    */
   private calculateTrendingScore(video: any): number {
     // Score basé sur les vues, likes, commentaires, partages
     const viewsScore = Math.min(video.views / 10000, 100); // Normaliser à 100
+    
+    // Correction crash si views = 0
+    const safeViews = video.views || 1;
+
     const engagementScore = Math.min(
-      ((video.likes + video.comments + video.shares) / video.views) * 100,
+      ((video.likes + video.comments + video.shares) / safeViews) * 100,
       100
     );
     return (viewsScore * 0.6 + engagementScore * 0.4) / 100;
@@ -279,7 +307,8 @@ export class RecommendationEngine {
    */
   private calculateEngagementScore(video: any): number {
     // Score basé sur le taux d'engagement
-    const engagementRate = (video.likes + video.comments + video.shares) / video.views;
+    const safeViews = video.views || 1;
+    const engagementRate = (video.likes + video.comments + video.shares) / safeViews;
     return Math.min(engagementRate * 100, 100) / 100;
   }
 
@@ -340,6 +369,7 @@ export class RecommendationEngine {
   }
 
   /**
+   * 🔧 5. FIX recordViewHistory (IMPORTANT POUR FUTUR IA)
    * Enregistrer l'historique de visionnage
    */
   async recordViewHistory(
@@ -349,7 +379,17 @@ export class RecommendationEngine {
     completionRate: number
   ): Promise<void> {
     try {
-      // TODO: Enregistrer dans la base de données
+      const db = await getDb();
+      if (!db) return;
+
+      await db.insert('view_history').values({
+        userId,
+        videoId,
+        watchDuration,
+        completionRate,
+        watchedAt: new Date(),
+      });
+      
       logger.info('View history recorded', { userId, videoId, watchDuration, completionRate });
     } catch (error) {
       logger.error('Failed to record view history', { error, userId, videoId });
@@ -366,9 +406,16 @@ export class RecommendationEngine {
   ): Promise<number[]> {
     try {
       logger.info('Getting trending videos', { category, limit, offset });
+      const db = await getDb();
+      if (!db) return [];
 
-      // TODO: Implémenter la requête pour obtenir les vidéos trending
-      return [];
+      const videos = await db.query.videos.findMany({
+        orderBy: (v, { desc }) => [desc(v.views)],
+        limit,
+        offset,
+      });
+
+      return videos.map(v => v.id);
     } catch (error) {
       logger.error('Failed to get trending videos', { error });
       return [];
@@ -381,10 +428,7 @@ export class RecommendationEngine {
   async getDiscoveryVideos(limit: number = 20, offset: number = 0): Promise<number[]> {
     try {
       logger.info('Getting discovery videos', { limit, offset });
-
-      // TODO: Implémenter la requête pour obtenir les vidéos découverte
-      // Mélange de vidéos nouvelles, tendances et aléatoires
-      return [];
+      return await this.getDefaultFeed(limit, offset);
     } catch (error) {
       logger.error('Failed to get discovery videos', { error });
       return [];
@@ -397,9 +441,14 @@ export class RecommendationEngine {
   async getFollowingFeed(userId: number, limit: number = 20, offset: number = 0): Promise<number[]> {
     try {
       logger.info('Getting following feed', { userId, limit, offset });
+      
+      const userProfile = await this.getUserProfile(userId);
+      if (!userProfile || userProfile.followingIds.length === 0) {
+        return [];
+      }
 
-      // TODO: Implémenter la requête pour obtenir les vidéos des utilisateurs suivis
-      return [];
+      const videos = await this.getFollowingVideos(userProfile.followingIds, limit);
+      return videos.map(v => v.id);
     } catch (error) {
       logger.error('Failed to get following feed', { error });
       return [];
