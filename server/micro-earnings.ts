@@ -138,7 +138,7 @@ export async function recordWatchEarning(
   videoId: number,
   duration: number
 ) {
-  if (duration < 30) return null;
+  if (duration < 5) return null;
 
   // ❗ anti-duplication
   if (await alreadyEarned(userId, "watch", videoId)) return null;
