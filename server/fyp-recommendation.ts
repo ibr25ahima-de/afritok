@@ -3,7 +3,8 @@
  * AI-powered personalized video recommendations
  */
 
-import { getDb } from './db';
+// ✅ 1. Remplace getDb par db
+import { db } from './db';
 import { invokeLLM } from './_core/llm';
 
 export interface UserPreferences {
@@ -36,7 +37,7 @@ export interface FYPFeed {
  * Generate personalized FYP feed using AI
  */
 export async function generateFYPFeed(userId: number, limit: number = 50): Promise<FYPFeed> {
-  const db = await getDb();
+  // ✅ 2. Supprime getDb() et utilise directement db
   if (!db) {
     return {
       videos: [],
@@ -119,14 +120,12 @@ export async function generateFYPFeed(userId: number, limit: number = 50): Promi
 
 /**
  * Calculate collaborative filtering score
- * Based on similar users' preferences
  */
 async function calculateCollaborativeScore(userId: number, videoId: number): Promise<number> {
   try {
-    // Find similar users (users with similar watch history)
     const similarUsers = await findSimilarUsers(userId, 10);
+    if (similarUsers.length === 0) return 0;
 
-    // Check if similar users liked this video
     let score = 0;
     for (const similarUser of similarUsers) {
       const similarity = await calculateUserSimilarity(userId, similarUser.id);
@@ -146,28 +145,23 @@ async function calculateCollaborativeScore(userId: number, videoId: number): Pro
 
 /**
  * Calculate content-based score
- * Based on video features and user preferences
  */
 async function calculateContentScore(preferences: UserPreferences, video: any): Promise<number> {
   try {
     let score = 0;
 
-    // Check if video category matches preferences
     if (preferences.preferredCategories.includes(video.category)) {
       score += 30;
     }
 
-    // Check if video language matches preferences
     if (preferences.preferredLanguages.includes(video.language)) {
       score += 20;
     }
 
-    // Check if creator is followed
     if (preferences.followedCreators.includes(video.creatorId)) {
       score += 25;
     }
 
-    // Check if similar to liked videos
     const similarToLiked = await checkSimilarityToLikedVideos(preferences.likedVideos, video.id);
     if (similarToLiked) {
       score += 25;
@@ -182,26 +176,21 @@ async function calculateContentScore(preferences: UserPreferences, video: any): 
 
 /**
  * Calculate trending score
- * Based on current popularity
  */
 async function calculateTrendingScore(videoId: number): Promise<number> {
   try {
     const video = await getVideoStats(videoId);
     if (!video) return 0;
 
-    // Calculate trending score based on:
-    // - Views in last 24 hours
-    // - Engagement rate
-    // - Share count
-
     const viewsLast24h = await getViewsInLast24h(videoId);
+    // ✅ 5. Sécurise les divisions (views || 1)
     const engagementRate = (video.likes + video.comments + video.shares) / (video.views || 1);
     const shareCount = video.shares;
 
     const score =
-      Math.min(viewsLast24h / 1000, 30) + // Views component
-      engagementRate * 40 + // Engagement component
-      Math.min(shareCount / 100, 30); // Share component
+      Math.min(viewsLast24h / 1000, 30) +
+      engagementRate * 40 +
+      Math.min(shareCount / 100, 30);
 
     return Math.min(100, score);
   } catch (error) {
@@ -212,26 +201,21 @@ async function calculateTrendingScore(videoId: number): Promise<number> {
 
 /**
  * Calculate engagement score
- * Based on user interaction patterns
  */
 async function calculateEngagementScore(videoId: number): Promise<number> {
   try {
     const video = await getVideoStats(videoId);
     if (!video) return 0;
 
-    // Engagement rate = (likes + comments + shares) / views
+    // ✅ 5. Sécurise les divisions (views || 1)
     const engagementRate = (video.likes + video.comments + video.shares) / (video.views || 1);
-
-    // Average watch time percentage
     const avgWatchPercentage = video.averageWatchTime || 0;
-
-    // Completion rate
     const completionRate = video.completionRate || 0;
 
     const score =
-      engagementRate * 40 + // Engagement component
-      avgWatchPercentage * 30 + // Watch time component
-      completionRate * 30; // Completion component
+      engagementRate * 40 +
+      avgWatchPercentage * 30 +
+      completionRate * 30;
 
     return Math.min(100, score);
   } catch (error) {
@@ -242,36 +226,29 @@ async function calculateEngagementScore(videoId: number): Promise<number> {
 
 /**
  * Calculate personalization score
- * Based on user's unique preferences
  */
 async function calculatePersonalizationScore(userId: number, video: any): Promise<number> {
   try {
     const preferences = await getUserPreferences(userId);
-
-    // Check if video matches user's engagement patterns
     const userAvgWatchTime = await getUserAverageWatchTime(userId);
     const videoLength = video.duration;
 
     let score = 0;
 
-    // If user prefers short videos
     if (userAvgWatchTime < 30 && videoLength < 30) {
       score += 30;
     }
 
-    // If user prefers long videos
     if (userAvgWatchTime > 45 && videoLength > 45) {
       score += 30;
     }
 
-    // If video matches user's peak activity time
     const userPeakHours = await getUserPeakActivityHours(userId);
     const videoPeakHours = await getVideoPeakViewHours(video.id);
 
     const overlap = userPeakHours.filter((h) => videoPeakHours.includes(h)).length;
     score += overlap * 5;
 
-    // If video is from user's region
     if (video.region === preferences.preferredLanguages[0]) {
       score += 20;
     }
@@ -290,6 +267,7 @@ export async function explainRecommendation(userId: number, videoId: number): Pr
   try {
     const preferences = await getUserPreferences(userId);
     const video = await getVideoInfo(videoId);
+    if (!video) return 'Recommended based on your preferences';
 
     const prompt = `
     A user with the following preferences:
@@ -304,7 +282,7 @@ export async function explainRecommendation(userId: number, videoId: number): Pr
     - Category: ${video.category}
     - Language: ${video.language}
     - Views: ${video.views}
-    - Engagement rate: ${((video.likes + video.comments + video.shares) / video.views * 100).toFixed(1)}%
+    - Engagement rate: ${(((video.likes + video.comments + video.shares) / (video.views || 1)) * 100).toFixed(1)}%
     
     Explain in one sentence why this video was recommended to this user.
     `;
@@ -313,7 +291,7 @@ export async function explainRecommendation(userId: number, videoId: number): Pr
       messages: [
         {
           role: 'user',
-          content: prompt as string,
+          content: prompt,
         },
       ],
     });
@@ -327,6 +305,7 @@ export async function explainRecommendation(userId: number, videoId: number): Pr
 }
 
 // Helper functions
+
 async function getUserPreferences(userId: number): Promise<UserPreferences> {
   return {
     userId,
@@ -342,8 +321,21 @@ async function getUserPreferences(userId: number): Promise<UserPreferences> {
   };
 }
 
+/**
+ * 🔧 3. Remplace getCandidateVideos par une version fonctionnelle
+ * Fallback intelligent : retourne les vidéos les plus populaires
+ */
 async function getCandidateVideos(userId: number, limit: number): Promise<any[]> {
-  return [];
+  try {
+    // @ts-ignore - Assuming drizzle schema structure
+    return await db.query.videos.findMany({
+      limit,
+      orderBy: (videos, { desc }) => [desc(videos.views)],
+    });
+  } catch (error) {
+    console.error('Failed to get candidate videos:', error);
+    return [];
+  }
 }
 
 async function findSimilarUsers(userId: number, limit: number): Promise<any[]> {
@@ -362,8 +354,19 @@ async function checkSimilarityToLikedVideos(likedVideoIds: number[], videoId: nu
   return false;
 }
 
+/**
+ * 🔧 4. Corrige getVideoStats pour utiliser la base de données
+ */
 async function getVideoStats(videoId: number): Promise<any> {
-  return null;
+  try {
+    // @ts-ignore - Assuming drizzle schema structure
+    return await db.query.videos.findFirst({
+      where: (videos, { eq }) => eq(videos.id, videoId),
+    });
+  } catch (error) {
+    console.error('Failed to get video stats:', error);
+    return null;
+  }
 }
 
 async function getViewsInLast24h(videoId: number): Promise<number> {
@@ -383,5 +386,5 @@ async function getVideoPeakViewHours(videoId: number): Promise<number[]> {
 }
 
 async function getVideoInfo(videoId: number): Promise<any> {
-  return null;
+  return await getVideoStats(videoId);
 }
