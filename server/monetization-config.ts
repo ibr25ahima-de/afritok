@@ -7,17 +7,17 @@
 export const MONETIZATION = {
   // 💰 Gains par action (Séparés par rôle)
   rewards: {
-    user: {
-      like: 0.01,
-      comment: 0.02,
-      share: 0.05,
-      view: 0.001,
-      favorite: 0.01,
-    },
-    creator: {
-      view: 0.002, // créateur gagne + que viewer
-    },
-  },
+  like: 0.01,
+  comment: 0.02,
+  share: 0.05,
+  favorite: 0.01,
+
+  // 👤 viewer
+  view: 0.001,
+
+  // 🎬 creator
+  creator_view: 0.002,
+}, // créateur gagne + que viewer
 
   // 🔒 Limites journalières
   dailyLimits: {
