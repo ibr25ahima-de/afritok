@@ -421,12 +421,35 @@ export async function createEarning(
       const views30Days = Number(viewsResult[0]?.total || 0);
 
       const eligible =
-        followersCount >= MONETIZATION.creator.minFollowers &&
-        views30Days >= MONETIZATION.creator.minViews30Days;
+  followersCount >= MONETIZATION.creator.minFollowers &&
+  views30Days >= MONETIZATION.creator.minViews30Days;
 
-      if (!eligible) {
-        return { success: false, reason: "creator_not_eligible" };
-      }
+if (!eligible) {
+  return { success: false, reason: "creator_not_eligible" };
+}
+
+// 🚨 NOUVEAU : plafond journalier créateur
+const today = new Date();
+today.setHours(0, 0, 0, 0);
+
+const todayCreatorEarnings = await db
+  .select({
+    total: sql<number>`SUM(${earnings.amount})`,
+  })
+  .from(earnings)
+  .where(
+    and(
+      eq(earnings.userId, userId),
+      eq(earnings.source, "creator_view"),
+      gt(earnings.createdAt, today)
+    )
+  );
+
+const totalToday = Number(todayCreatorEarnings[0]?.total || 0);
+
+if (totalToday >= MONETIZATION.dailyLimits.creator.maxDailyEarnings) {
+  return { success: false, reason: "creator_daily_limit" };
+}
     }
 
     // 💰 5. Split argent
