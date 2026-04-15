@@ -454,7 +454,15 @@ if (totalToday >= MONETIZATION.dailyLimits.creator.maxDailyEarnings) {
 
     // 💰 5. Split argent
     // ✅ FIX PROPRE (Utilisation de cleanSource pour la récompense)
-    const reward = (MONETIZATION.rewards.user as any)[cleanSource] || amount;
+    let reward = amount;
+
+// 🎬 créateur
+if (source === "creator_view") {
+  reward = MONETIZATION.rewards.creator_view;
+} else {
+  // 👤 utilisateur normal
+  reward = (MONETIZATION.rewards as any)[cleanSource] || amount;
+}
     const userAmount = (reward * 0.7).toFixed(4);
     const appAmount = (reward * 0.3).toFixed(4);
 
