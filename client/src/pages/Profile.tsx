@@ -99,19 +99,9 @@ export default function Profile() {
   const filteredVideos = videos;
 
   // Calculate earnings by source (simplified)
-  const earningsBySource: Record<string, { total: number; count: number }> = {};
-  if (earningsQuery.data && Array.isArray(earningsQuery.data)) {
-    (earningsQuery.data as Earning[]).forEach((earning) => {
-      if (!earningsBySource[earning.source]) {
-        earningsBySource[earning.source] = { total: 0, count: 0 };
-      }
-      earningsBySource[earning.source].total += parseFloat(earning.amount);
-      earningsBySource[earning.source].count += 1;
-    });
-  }
-
-  // Calculate total earnings (simplified)
-  const totalEarnings = Object.values(earningsBySource).reduce((sum, item) => sum + item.total, 0);
+  const totalEarnings = earningsQuery.data?.total || 0;
+const availableEarnings = earningsQuery.data?.available || 0;
+const pendingEarnings = earningsQuery.data?.pending || 0;
 
   // Revenue sources configuration
   const revenueSources = [
