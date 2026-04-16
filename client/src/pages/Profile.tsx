@@ -5,16 +5,6 @@ import { useLocation, useRoute } from "wouter";
 import { ArrowLeft, Play, Heart, MessageCircle, Share2, MapPin, Edit3, UserPlus, UserCheck, MoreVertical, Flame, Lock, Share, Flag, Eye } from "lucide-react";
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
-
-interface Earning {
-  id: number;
-  userId: number;
-  amount: string;
-  source: string;
-  videoId: number | null;
-  createdAt: string;
-}
-
 interface Video {
   id: number;
   userId: number;
