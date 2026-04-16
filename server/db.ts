@@ -511,3 +511,29 @@ export async function createWithdrawal(userId: number, amount: number, method: s
 export async function getUserWithdrawals(userId: number) {
   return db.select().from(withdrawals).where(eq(withdrawals.userId, userId)).orderBy(desc(withdrawals.createdAt));
 }
+// ✅ COMPATIBILITÉ ROUTERS
+
+export async function getUserEarnings(userId: number) {
+  try {
+    const result = await db
+      .select({
+        total: sql<number>`SUM(${earnings.amount})`,
+      })
+      .from(earnings)
+      .where(eq(earnings.userId, userId));
+
+    const total = Number(result[0]?.total || 0);
+
+    return {
+      total,
+      available: total,
+      pending: 0,
+    };
+  } catch (error) {
+    console.error("getUserEarnings error:", error);
+    return { total: 0, available: 0, pending: 0 };
+  }
+}
+
+// 🔁 Alias pour ancien nom utilisé dans les routers
+export const createWithdrawalRecord = createWithdrawal;
