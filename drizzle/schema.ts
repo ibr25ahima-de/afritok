@@ -237,12 +237,14 @@ export const withdrawals = pgTable("withdrawals", {
 
   amount: integer("amount").notNull(),
   paymentMethod: varchar("paymentMethod", { length: 50 }).notNull(),
+
+  phone: varchar("phone", { length: 20 }).notNull(), // ✅ AJOUT IMPORTANT
+
   status: varchar("status", { length: 50 }).default("pending"),
 
   createdAt: timestamp("createdAt", { mode: "string" }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { mode: "string" }).defaultNow().notNull(),
 });
-
 export type Withdrawal = typeof withdrawals.$inferSelect;
 export type InsertWithdrawal = typeof withdrawals.$inferInsert;
 
