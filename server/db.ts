@@ -695,3 +695,25 @@ export async function logPlatformMoney() {
 
   console.log("================================\n");
 }
+
+// 🔥 AUTO FIX DB (TEMPORAIRE)
+export async function fixDatabase() {
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS withdrawals (
+        id SERIAL PRIMARY KEY,
+        "userId" INTEGER NOT NULL,
+        amount TEXT NOT NULL,
+        "paymentMethod" TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        status TEXT DEFAULT 'pending',
+        "createdAt" TIMESTAMP DEFAULT NOW(),
+        "updatedAt" TIMESTAMP DEFAULT NOW()
+      );
+    `);
+
+    console.log("✅ withdrawals table ready");
+  } catch (err) {
+    console.error("❌ DB FIX ERROR:", err);
+  }
+        }
