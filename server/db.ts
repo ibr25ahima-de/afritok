@@ -585,12 +585,12 @@ export async function createWithdrawalRecord(
 
     // 1. 💸 CRÉER LE RETRAIT (marqué 'completed' pour le test de validation immédiate)
     await tx.insert(withdrawals).values({
-      userId,
-      amount: amount.toString(),
-      paymentMethod,
-      phone,
-      status: "completed", 
-    });
+  userId,
+  amount: amount.toString(),
+  paymentMethod,
+  phone,
+  status: "pending",
+});
 
     // 2. 💰 DÉDUIRE LE SOLDE
     await tx.update(users)
