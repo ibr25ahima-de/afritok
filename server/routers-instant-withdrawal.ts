@@ -103,14 +103,6 @@ export const instantWithdrawalRouter = router({
       }
 
       // 🧮 Mettre à jour totalWithdrawals
-      await db
-        .update(users)
-        .set({
-          totalWithdrawals: Number(user.totalWithdrawals || 0) + input.amount,
-        })
-        .where(eq(users.id, ctx.user.id));
-
-      console.log("💰 Solde mis à jour !");
 
       // 4. Retour succès
       return {
