@@ -53,7 +53,11 @@ function Router() {
 
       {/* TikTok main */}
       <Route path="/feed" component={Feed} />
-      <Route path="/discover" component={Discover} />
+      <Route path="/discover">
+  <div style={{ color: "white", padding: 20 }}>
+    DISCOVER TEST OK
+  </div>
+</Route>
       <Route path="/upload" component={Upload} />
       <Route path="/publish" component={Publish} />
       <Route path="/inbox" component={Inbox} />
