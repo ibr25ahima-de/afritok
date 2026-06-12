@@ -58,7 +58,7 @@ function Router() {
       <Route path="/publish" component={Publish} />
       <Route path="/inbox" component={Inbox} />
       <Route path="/profile/:userId" component={Profile} />
-
+      <Route path="/profile" component={Profile} />
       {/* Existing features */}
       <Route path="/monetization" component={Monetization} />
       <Route path="/search" component={Search} />
