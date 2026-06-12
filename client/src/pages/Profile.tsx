@@ -26,7 +26,10 @@ export default function Profile() {
   const { user: currentUser, token } = useAuth();
   const [, navigate] = useLocation();
   const [match, params] = useRoute("/profile/:userId");
-  const userId = params?.userId ? parseInt(params.userId) : currentUser?.id;
+  const userId =
+  params?.userId
+    ? parseInt(params.userId)
+    : currentUser?.id;
   const isOwnProfile = currentUser?.id === userId;
 
   // ================= STATE =================
@@ -47,8 +50,6 @@ export default function Profile() {
   });
 
   const earnings = earningsQuery.data;
-
-  if (!match) return null;
 
   // ================= API QUERIES =================
   const userQuery = trpc.user.getProfile.useQuery(
