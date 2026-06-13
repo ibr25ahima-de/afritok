@@ -69,8 +69,6 @@ const [isFollowing, setIsFollowing] = useState(false);
     { enabled: !!userId }
   );
 const utils = trpc.useUtils();
-
-const followMutation = trpc.follower.toggle.useMutation({
   onSuccess: () => {
     utils.follower.getCount.invalidate();
   },
@@ -207,10 +205,15 @@ const followMutation = trpc.follower.toggle.useMutation({
                onClick={() => {
   if (!userId) return;
 
-  followMutation.mutate({
-    userId,
-  });
-}} 
+  followMutation.mutate(
+    { userId },
+    {
+      onSuccess: (data) => {
+        setIsFollowing(data.following);
+      },
+    }
+  );
+}}
                 className={`px-4 py-2 rounded-full font-semibold transition flex items-center gap-2 ${
                   isFollowing
                     ? "bg-gray-700 hover:bg-gray-600 text-white"
