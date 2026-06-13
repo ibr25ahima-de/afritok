@@ -24,9 +24,10 @@ export default function Discover() {
 
         {users.map((user) => (
           <div
-            key={user.id}
-            className="flex items-center justify-between bg-gray-900 rounded-lg p-4"
-          >
+  key={user.id}
+  onClick={() => window.location.href = `/profile/${user.id}`}
+  className="flex items-center justify-between bg-gray-900 rounded-lg p-4 cursor-pointer"
+>
             <div>
               <p className="font-semibold">
                 {user.name || `Utilisateur ${user.id}`}
