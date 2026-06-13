@@ -1,4 +1,4 @@
-import { Search, UserPlus } from "lucide-react";
+import { Search, UserPlus, User } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
 export default function Discover() {
@@ -20,25 +20,38 @@ export default function Discover() {
       </div>
 
       <div className="p-4 space-y-4">
-        {isLoading && <p>Chargement...</p>}
+        {isLoading && (
+          <p className="text-center text-gray-400">
+            Chargement...
+          </p>
+        )}
 
         {users.map((user) => (
           <div
-  key={user.id}
-  onClick={() => window.location.href = `/profile/${user.id}`}
-  className="flex items-center justify-between bg-gray-900 rounded-lg p-4 cursor-pointer"
->
-            <div>
-              <p className="font-semibold">
-                {user.name || `Utilisateur ${user.id}`}
-              </p>
+            key={user.id}
+            onClick={() => (window.location.href = `/profile/${user.id}`)}
+            className="flex items-center justify-between bg-gray-900 rounded-xl p-4 cursor-pointer hover:bg-gray-800 transition"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-red-500 flex items-center justify-center">
+                <User size={22} />
+              </div>
 
-              <p className="text-sm text-gray-400">
-                {user.phone}
-              </p>
+              <div>
+                <p className="font-semibold">
+                  {user.name || `Utilisateur ${user.id}`}
+                </p>
+
+                <p className="text-sm text-gray-400">
+                  {user.phone}
+                </p>
+              </div>
             </div>
 
-            <button className="bg-red-500 px-4 py-2 rounded-lg flex items-center gap-2">
+            <button
+              onClick={(e) => e.stopPropagation()}
+              className="bg-red-500 hover:bg-red-600 px-4 py-2 rounded-lg flex items-center gap-2"
+            >
               <UserPlus size={16} />
               Suivre
             </button>
@@ -47,4 +60,4 @@ export default function Discover() {
       </div>
     </div>
   );
-}
+            }
