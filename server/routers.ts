@@ -332,6 +332,10 @@ export const appRouter = router({
         return result[0] || null;
       }),
 
+    getAll: publicProcedure.query(async () => {
+      return await db.select().from(users);
+    }),
+
     getVideos: publicProcedure
       .input(z.object({ userId: z.number() }))
       .query(async ({ input }) => await getUserVideos(input.userId)),
