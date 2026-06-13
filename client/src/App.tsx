@@ -53,11 +53,7 @@ function Router() {
 
       {/* TikTok main */}
       <Route path="/feed" component={Feed} />
-      <Route path="/discover">
-  <div style={{ color: "white", padding: 20 }}>
-    DISCOVER TEST OK
-  </div>
-</Route>
+      <Route path="/discover" component={Discover} />
       <Route path="/upload" component={Upload} />
       <Route path="/publish" component={Publish} />
       <Route path="/inbox" component={Inbox} />
@@ -79,7 +75,7 @@ function Router() {
       <Route path="/qr-code" component={QRCode} />
 
       {/* Admin */}
-      {user?.role === "admin" && <Route path="/admin" component={AdminDashboard} />}
+      {user?.role === "admin" && <Route path="/admin" Route={AdminDashboard} />}
 
       {/* Errors */}
       <Route path="/404" component={NotFound} />
