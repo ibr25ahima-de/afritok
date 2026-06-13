@@ -33,7 +33,51 @@ export default function Profile() {
   const isOwnProfile = currentUser?.id === userId;
 
   // ================= STATE =================
-  const [selectedVideoIndex, setSelectedVideoIndex] = useState<number | null>(null);
+  // ================= STATE =================
+const [selectedVideoIndex, setSelectedVideoIndex] = useState<number | null>(null);
+const [activeTab, setActiveTab] = useState<"videos" | "likes" | "favorites">("videos");
+const [isFollowing, setIsFollowing] = useState(false);
+
+const [showMenu, setShowMenu] = useState(false);
+const [showMonetization, setShowMonetization] = useState(false);
+const [showFollowers, setShowFollowers] = useState(false);
+const [showFollowing, setShowFollowing] = useState(false);
+const [showLikes, setShowLikes] = useState(false);
+
+const videoRefs = useRef<Record<number, HTMLVideoElement | null>>({});
+
+// ✅ Gains
+const earningsQuery = trpc.earnings.getMyEarnings.useQuery(undefined, {
+  enabled: isOwnProfile,
+  refetchInterval: 10000,
+});
+
+const earnings = earningsQuery.data;
+
+// ================= API QUERIES =================
+const userQuery = trpc.user.getProfile.useQuery(
+  { userId: userId || 0 },
+  { enabled: !!userId }
+);
+
+const videosQuery = trpc.video.getByUser.useQuery(
+  { userId: userId || 0 },
+  { enabled: !!userId }
+);
+
+const followerCountQuery = trpc.follower.getCount.useQuery(
+  { userId: userId || 0 },
+  { enabled: !!userId }
+);
+
+// ✅ FOLLOW
+const utils = trpc.useUtils();
+
+const followMutation = trpc.follower.toggle.useMutation({
+  onSuccess: () => {
+    utils.follower.getCount.invalidate();
+  },
+});
   const [activeTab, setActiveTab] = useState<"videos" | "likes" | "favorites">("videos");
   const followMutation = trpc.follower.toggle.useMutation();
 
