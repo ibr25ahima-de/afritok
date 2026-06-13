@@ -263,38 +263,63 @@ export const appRouter = router({
   // ============================================
 
   follower: router({
-    toggle: protectedProcedure
-      .input(z.object({ userId: z.number() }))
-      .mutation(async ({ ctx, input }) => {
-        if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
+  toggle: protectedProcedure
+    .input(z.object({ userId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
 
-        const following = await isFollowing(ctx.user.id, input.userId);
+      const following = await isFollowing(
+        ctx.user.id,
+        input.userId
+      );
 
-        if (following) {
-          await db.delete(followers).where(
-            and(
-              eq(followers.followerId, ctx.user.id),
-              eq(followers.followingId, input.userId)
-            )
-          );
-          return { following: false };
-        }
+      if (following) {
+        await db.delete(followers).where(
+          and(
+            eq(followers.followerId, ctx.user.id),
+            eq(followers.followingId, input.userId)
+          )
+        );
 
-        await db.insert(followers).values({
-          followerId: ctx.user.id,
-          followingId: input.userId,
+        return { following: false };
+      }
+
+      await db.insert(followers).values({
+        followerId: ctx.user.id,
+        followingId: input.userId,
+      });
+
+      return { following: true };
+    }),
+
+  getCount: publicProcedure
+    .input(z.object({ userId: z.number() }))
+    .query(async ({ input }) => ({
+      followers: await getFollowerCount(input.userId),
+      following: await getFollowingCount(input.userId),
+    })),
+
+  isFollowing: protectedProcedure
+    .input(
+      z.object({
+        userId: z.number(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      if (!ctx.user) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
         });
+      }
 
-        return { following: true };
-      }),
-
-    getCount: publicProcedure
-      .input(z.object({ userId: z.number() }))
-      .query(async ({ input }) => ({
-        followers: await getFollowerCount(input.userId),
-        following: await getFollowingCount(input.userId),
-      })),
-  }),
+      return {
+        following: await isFollowing(
+          ctx.user.id,
+          input.userId
+        ),
+      };
+    }),
+}),
 
   // ============================================
   // EARNINGS
