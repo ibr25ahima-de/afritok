@@ -66,7 +66,13 @@ export default function Profile() {
     { userId: userId || 0 },
     { enabled: !!userId }
   );
+const utils = trpc.useUtils();
 
+const followMutation = trpc.follower.toggle.useMutation({
+  onSuccess: () => {
+    utils.follower.getCount.invalidate();
+  },
+});
   if (!userId) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
@@ -196,7 +202,13 @@ export default function Profile() {
               </button>
             ) : (
               <button
-                onClick={() => setIsFollowing(!isFollowing)}
+               onClick={() => {
+  if (!userId) return;
+
+  followMutation.mutate({
+    userId,
+  });
+}} 
                 className={`px-4 py-2 rounded-full font-semibold transition flex items-center gap-2 ${
                   isFollowing
                     ? "bg-gray-700 hover:bg-gray-600 text-white"
