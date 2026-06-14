@@ -34,7 +34,7 @@ export default function Profile() {
   const [activeTab, setActiveTab] = useState<"videos" | "likes" | "favorites">("videos");
   const [isFollowing, setIsFollowing] = useState(false);
   const followMutation = trpc.follower.toggle.useMutation();
-  const [sshowMenu setShowMenu] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const [showMonetization, setShowMonetization] = useState(false);
   const [showFollowers, setShowFollowers] = useState(false);
   const [showFollowing, setShowFollowing] = useState(false);
