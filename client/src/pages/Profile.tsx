@@ -196,7 +196,19 @@ export default function Profile() {
               </button>
             ) : (
               <button
-                onClick={() => setIsFollowing(!isFollowing)}
+  onClick={() => {
+    if (!userId) return;
+
+    followMutation.mutate(
+      { userId },
+      {
+        onSuccess: (data) => {
+          setIsFollowing(data.following);
+          followerCountQuery.refetch();
+        },
+      }
+    );
+  }}
                 className={`px-4 py-2 rounded-full font-semibold transition flex items-center gap-2 ${
                   isFollowing
                     ? "bg-gray-700 hover:bg-gray-600 text-white"
