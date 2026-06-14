@@ -1,4 +1,4 @@
-import { useAuth } from "@/_core/hooks/useAuth";
+const { useAuth } from "@/_core/hooks/useAuth";
 import { MonetizationProgressBar } from "@/components/MonetizationProgressBar";
 import { trpc } from "@/lib/trpc";
 import { useLocation, useRoute } from "wouter";
@@ -33,7 +33,8 @@ export default function Profile() {
   const [selectedVideoIndex, setSelectedVideoIndex] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<"videos" | "likes" | "favorites">("videos");
   const [isFollowing, setIsFollowing] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
+  const followMutation = trpc.follower.toggle.useMutation();
+  const [sshowMenu setShowMenu] = useState(false);
   const [showMonetization, setShowMonetization] = useState(false);
   const [showFollowers, setShowFollowers] = useState(false);
   const [showFollowing, setShowFollowing] = useState(false);
