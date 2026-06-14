@@ -1,4 +1,4 @@
-const { useAuth } from "@/_core/hooks/useAuth";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { MonetizationProgressBar } from "@/components/MonetizationProgressBar";
 import { trpc } from "@/lib/trpc";
 import { useLocation, useRoute } from "wouter";
