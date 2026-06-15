@@ -680,3 +680,23 @@ export async function logPlatformMoney() {
 
   console.log("================================\n");
 }
+export async function updateUserProfile(
+  userId: number,
+  data: {
+    name?: string;
+    bio?: string;
+    country?: string;
+  }
+) {
+  await db
+    .update(users)
+    .set({
+      name: data.name,
+      bio: data.bio,
+      country: data.country,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, userId));
+
+  return await getUserById(userId);
+              }
