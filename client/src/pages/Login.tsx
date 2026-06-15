@@ -53,9 +53,18 @@ export default function Login() {
 
     setLoading(true);
     try {
-      await verifyOtp.mutateAsync({ phone, code: otp });
-      await utils.auth.me.invalidate();
-      navigate("/feed");
+  const result = await verifyOtp.mutateAsync({
+  phone,
+  code: otp,
+});
+
+await utils.auth.me.invalidate();
+
+if (result.isNewUser) {
+  navigate("/edit-profile");
+} else {
+  navigate("/feed");
+  }
     } catch (e: any) {
       toast.error(e?.message || "Code incorrect");
     } finally {
