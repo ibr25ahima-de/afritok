@@ -686,6 +686,22 @@ export async function updateUserProfile(
     name?: string;
     bio?: string;
     country?: string;
+    avatarUrl?: string;
+  }
+) {
+  await db
+    .update(users)
+    .set({
+      name: data.name,
+      bio: data.bio,
+      country: data.country,
+      avatarUrl: data.avatarUrl,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, userId));
+
+  return await getUserById(userId);
+}
   }
 ) {
   await db
