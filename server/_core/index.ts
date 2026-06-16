@@ -1,4 +1,5 @@
-import "dotenv/config";
+import { storagePut } from "../storage";
+importt "dotenv/config";
 import express, { Request, Response } from "express";
 import { createServer } from "http";
 import multer from "multer";
@@ -61,6 +62,45 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
   app.post('/api/upload-video', upload.single('file'), async (req: Request, res: Response) => {
+  app.post(
+  "/api/upload-avatar",
+  upload.single("file"),
+  async (req: Request, res: Response) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({
+          error: "No file provided",
+        });
+      }
+
+      const file = req.file;
+
+      if (!file.mimetype.startsWith("image/")) {
+        return res.status(400).json({
+          error: "File must be an image",
+        });
+      }
+
+      const fileKey = `avatars/${Date.now()}-${file.originalname}`;
+
+      const { url } = await storagePut(
+        fileKey,
+        file.buffer,
+        file.mimetype
+      );
+
+      return res.json({
+        avatarUrl: url,
+      });
+    } catch (error) {
+      console.error("Avatar upload error:", error);
+
+      return res.status(500).json({
+        error: "Upload failed",
+      });
+    }
+  }
+);
     try {
       if (!req.file) {
         return res.status(400).json({ error: "No file provided" });
