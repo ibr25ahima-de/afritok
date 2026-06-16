@@ -700,3 +700,17 @@ export async function updateUserProfile(
 
   return await getUserById(userId);
               }
+export async function updateUserAvatar(
+  userId: number,
+  avatarUrl: string
+) {
+  await db
+    .update(users)
+    .set({
+      avatarUrl,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, userId));
+
+  return await getUserById(userId);
+  }
