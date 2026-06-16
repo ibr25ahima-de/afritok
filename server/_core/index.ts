@@ -1,5 +1,5 @@
 import { storagePut } from "../storage";
-importt "dotenv/config";
+import "dotenv/config";
 import express, { Request, Response } from "express";
 import { createServer } from "http";
 import multer from "multer";
