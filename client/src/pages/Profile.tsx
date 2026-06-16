@@ -189,7 +189,7 @@ export default function Profile() {
           <div className="flex gap-2">
             {isOwnProfile ? (
               <button
-                onClick={() => navigate("/upload")}
+                onClick={() => navigate("/edit-profile")}
                 className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-full font-semibold transition"
               >
                 <Edit3 size={18} />
