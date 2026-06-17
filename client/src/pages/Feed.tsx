@@ -388,44 +388,62 @@ export default function Feed() {
         )}
       </div>
 
-      {/* NAVIGATION BAR (FIXED + z-50) */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-black border-t border-white/10 px-6 py-3 flex items-center justify-between z-50">
-        <button onClick={() => navigate("/feed")} className="flex flex-col items-center gap-1 text-white">
-          <Home size={24} />
-          <span className="text-[10px]">Accueil</span>
-        </button>
-        <button onClick={() => navigate("/discover")} className="flex flex-col items-center gap-1 text-gray-500">
-          <Users size={24} />
-          <span className="text-[10px]">Amis</span>
-        </button>
-        <button onClick={() => navigate("/upload")} className="flex flex-col items-center -mt-8">
-          <div className="bg-gradient-to-r from-blue-500 via-white to-red-500 p-[2px] rounded-lg">
-            <div className="bg-black p-2 rounded-lg">
-              <Plus size={24} className="text-white" />
-            </div>
-          </div>
-        </button>
-        <button onClick={() => navigate("/inbox")} className="flex flex-col items-center gap-1 text-gray-500">
-          <Mail size={24} />
-          <span className="text-[10px]">Messages</span>
-        <button
-  onClick={() => navigate(`/profile/${user?.id}`)}
-  className="flex flex-col items-center gap-1 text-gray-500"
->
-  {user?.avatarUrl ? (
-    <img
-      src={user.avatarUrl}
-      alt="profile"
-      className="w-6 h-6 rounded-full object-cover"
-    />
-  ) : (
-    <User size={24} />
-  )}
+      {/* NAVIGATION BAR */}
+<nav className="fixed bottom-0 left-0 right-0 bg-black border-t border-white/10 px-6 py-3 flex items-center justify-between z-50">
 
-  <span className="text-[10px]">Profil</span>
-</button>
-      </nav>
+  <button
+    onClick={() => navigate("/feed")}
+    className="flex flex-col items-center gap-1 text-white"
+  >
+    <Home size={24} />
+    <span className="text-[10px]">Accueil</span>
+  </button>
 
+  <button
+    onClick={() => navigate("/discover")}
+    className="flex flex-col items-center gap-1 text-gray-500"
+  >
+    <Users size={24} />
+    <span className="text-[10px]">Amis</span>
+  </button>
+
+  <button
+    onClick={() => navigate("/upload")}
+    className="flex flex-col items-center -mt-8"
+  >
+    <div className="bg-gradient-to-r from-blue-500 via-white to-red-500 p-[2px] rounded-lg">
+      <div className="bg-black p-2 rounded-lg">
+        <Plus size={24} className="text-white" />
+      </div>
+    </div>
+  </button>
+
+  <button
+    onClick={() => navigate("/inbox")}
+    className="flex flex-col items-center gap-1 text-gray-500"
+  >
+    <Mail size={24} />
+    <span className="text-[10px]">Messages</span>
+  </button>
+
+  <button
+    onClick={() => navigate(`/profile/${user?.id}`)}
+    className="flex flex-col items-center gap-1 text-gray-500"
+  >
+    {user?.avatarUrl ? (
+      <img
+        src={user.avatarUrl}
+        alt="profile"
+        className="w-6 h-6 rounded-full object-cover"
+      />
+    ) : (
+      <User size={24} />
+    )}
+
+    <span className="text-[10px]">Profil</span>
+  </button>
+
+</nav>
       {/* MODALS */}
       {showComments && selectedVideoId && (
         <CommentsModal
