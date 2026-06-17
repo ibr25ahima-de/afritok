@@ -311,9 +311,19 @@ export default function Feed() {
                   onClick={() => navigate(`/profile/${video.userId}`)}
                   className="flex flex-col items-center gap-1 hover:scale-110 transition"
                 >
-                  <div className="p-2 bg-gradient-to-r from-red-500 to-pink-500 rounded-full border-2 border-white">
-                    <User size={24} />
-                  </div>
+                  <div className="w-12 h-12 rounded-full border-2 border-white overflow-hidden bg-black">
+  {video.user?.avatarUrl ? (
+    <img
+      src={video.user.avatarUrl}
+      alt="avatar"
+      className="w-full h-full object-cover"
+    />
+  ) : (
+    <div className="w-full h-full flex items-center justify-center bg-gradient-to-r from-red-500 to-pink-500">
+      <User size={24} />
+    </div>
+  )}
+</div>
                 </button>
 
                 <button
@@ -398,11 +408,22 @@ export default function Feed() {
         <button onClick={() => navigate("/inbox")} className="flex flex-col items-center gap-1 text-gray-500">
           <Mail size={24} />
           <span className="text-[10px]">Messages</span>
-        </button>
-        <button onClick={() => navigate(`/profile/${user?.id}`)} className="flex flex-col items-center gap-1 text-gray-500">
-          <User size={24} />
-          <span className="text-[10px]">Profil</span>
-        </button>
+        <button
+  onClick={() => navigate(`/profile/${user?.id}`)}
+  className="flex flex-col items-center gap-1 text-gray-500"
+>
+  {user?.avatarUrl ? (
+    <img
+      src={user.avatarUrl}
+      alt="profile"
+      className="w-6 h-6 rounded-full object-cover"
+    />
+  ) : (
+    <User size={24} />
+  )}
+
+  <span className="text-[10px]">Profil</span>
+</button>
       </nav>
 
       {/* MODALS */}
