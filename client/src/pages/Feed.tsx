@@ -408,15 +408,25 @@ export default function Feed() {
   </button>
 
   <button
-    onClick={() => navigate("/upload")}
-    className="flex flex-col items-center -mt-8"
-  >
-    <div className="bg-gradient-to-r from-blue-500 via-white to-red-500 p-[2px] rounded-lg">
-      <div className="bg-black p-2 rounded-lg">
-        <Plus size={24} className="text-white" />
-      </div>
+  onClick={() => navigate("/upload")}
+  className="flex flex-col items-center -mt-10"
+>
+  <div className="relative hover:scale-110 transition-transform duration-200">
+
+    <div className="absolute -left-1 top-0 w-12 h-10 bg-cyan-400 rounded-xl"></div>
+
+    <div className="absolute left-1 top-0 w-12 h-10 bg-pink-500 rounded-xl"></div>
+
+    <div className="relative w-12 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg">
+      <Plus size={28} className="text-black font-bold" />
     </div>
-  </button>
+
+  </div>
+
+  <span className="text-[10px] text-white mt-1">
+    Créer
+  </span>
+</button>
 
   <button
     onClick={() => navigate("/inbox")}
