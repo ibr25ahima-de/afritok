@@ -319,7 +319,6 @@ export default function Upload() {
     className="absolute inset-0 w-full h-full object-cover transition-all"
   />
 )} 
-      />
       {flashEnabled && <div className="absolute inset-0 bg-white/20 pointer-events-none z-0" />}
       <canvas ref={canvasRef} className="hidden" />
       <audio ref={audioRef} className="hidden" />
