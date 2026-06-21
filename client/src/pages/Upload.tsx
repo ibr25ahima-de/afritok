@@ -27,13 +27,14 @@ const FILTERS = [
 ];
 
 const EFFECTS = [
-  { id: "none", name: "Aucun", preview: "/effects/none.jpg" },
-  { id: "beauty", name: "Beauté", preview: "/effects/beauty.jpg" },
-  { id: "portrait", name: "Portrait", preview: "/effects/portrait.jpg" },
-  { id: "greenscreen", name: "Fond Vert", preview: "/effects/green.jpg" },
-  { id: "facezoom", name: "Face Zoom", preview: "/effects/zoom.jpg" },
-  { id: "vhs", name: "VHS", preview: "/effects/vhs.jpg" },
-  { id: "mirror", name: "Miroir", preview: "/effects/mirror.jpg" }
+  { id: "none", name: "Aucun" },
+  { id: "beauty", name: "Beauté Pro" },
+  { id: "bigeyes", name: "Grands Yeux" },
+  { id: "faceslim", name: "Visage Fin" },
+  { id: "lips", name: "Lèvres" },
+  { id: "mirror", name: "Miroir" },
+  { id: "facezoom", name: "Zoom Visage" },
+  { id: "vhs", name: "VHS" }
 ];
 
 const MUSICS = [
