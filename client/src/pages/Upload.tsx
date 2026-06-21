@@ -260,7 +260,9 @@ export default function Upload() {
     if (activeFilter.id === "cold") filter += " hue-rotate(180deg) saturate(120%)";
     
     // Add effects
-    if (activeEffect.id === "vhs") filter += " hue-rotate(90deg) contrast(1.5)";
+    if (activeEffect.id === "vhs") {
+  filter += " sepia(40%) contrast(1.4) saturate(0.8) hue-rotate(20deg)";
+    }
     if (activeEffect.id === "portrait") {
   filter += " contrast(1.3) saturate(1.25) brightness(105%)";
     }
