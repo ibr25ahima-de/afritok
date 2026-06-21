@@ -270,7 +270,7 @@ export default function Upload() {
 
   const getCameraTransform = () => {
     let transform = "";
-    if (activeEffect.id === "facezoom") transform += " scale(1.3)";
+    if (activeEffect.id === "facezoom") transform += " scale(1.5)";
     if (activeEffect.id === "mirror") transform += " scaleX(-1)";
     if (faceSlim > 50) transform += ` scaleX(${1 - (faceSlim - 50) * 0.002})`;
     return transform;
