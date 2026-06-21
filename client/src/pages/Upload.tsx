@@ -261,7 +261,9 @@ export default function Upload() {
     
     // Add effects
     if (activeEffect.id === "vhs") filter += " hue-rotate(90deg) contrast(1.5)";
-    if (activeEffect.id === "portrait") filter += " contrast(1.2) saturate(1.1)";
+    if (activeEffect.id === "portrait") {
+  filter += " contrast(1.3) saturate(1.25) brightness(105%)";
+    }
     if (activeEffect.id === "beauty") {
   filter += " blur(0.5px) brightness(110%) saturate(120%)";
 }
