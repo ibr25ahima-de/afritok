@@ -30,7 +30,7 @@ const EFFECTS = [
   { id: "none", name: "Aucun", preview: "/effects/none.jpg" },
   { id: "beauty", name: "Beauté", preview: "/effects/beauty.jpg" },
   { id: "portrait", name: "Portrait", preview: "/effects/portrait.jpg" },
-  { id: "green", name: "Fond Vert", preview: "/effects/green.jpg" },
+  { id: "greenscreen", name: "Fond Vert", preview: "/effects/green.jpg" },
   { id: "facezoom", name: "Face Zoom", preview: "/effects/zoom.jpg" },
   { id: "vhs", name: "VHS", preview: "/effects/vhs.jpg" },
   { id: "mirror", name: "Miroir", preview: "/effects/mirror.jpg" }
