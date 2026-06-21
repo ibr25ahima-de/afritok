@@ -306,7 +306,30 @@ export default function Upload() {
       {flashEnabled && <div className="absolute inset-0 bg-white/20 pointer-events-none z-0" />}
       <canvas ref={canvasRef} className="hidden" />
       <audio ref={audioRef} className="hidden" />
-      <input type="file" accept="audio/*" ref={audioInputRef} className="hidden" />
+      <input
+  type="file"
+  accept="audio/*"
+  ref={audioInputRef}
+  className="hidden"
+  onChange={(e) => {
+    const audio = e.target.files?.[0];
+    if (!audio) return;
+
+    const url = URL.createObjectURL(audio);
+
+    setSelectedMusic({
+      id: Date.now(),
+      name: audio.name,
+      artist: "Local",
+      url,
+    });
+
+    if (audioRef.current) {
+      audioRef.current.src = url;
+      audioRef.current.play();
+    }
+  }}
+/>
       
       {isRecording && (
         <div className="absolute top-0 left-0 right-0 h-1.5 bg-white/20 z-50">
