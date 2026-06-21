@@ -295,13 +295,30 @@ export default function Upload() {
   // --- STEP 1: CAPTURE ---
   if (step === "capture") return (
     <div className="h-screen bg-black text-white relative overflow-hidden flex flex-col">
-      <video 
-        ref={videoRef} 
-        autoPlay 
-        playsInline 
-        muted 
-        style={{ filter: getCameraFilter(), transform: getCameraTransform() }}
-        className="absolute inset-0 w-full h-full object-cover transition-all" 
+     {layoutMode ? (
+  <div className="absolute inset-0 grid grid-cols-2 grid-rows-2">
+    <video
+      ref={videoRef}
+      autoPlay
+      playsInline
+      muted
+      style={{ filter: getCameraFilter(), transform: getCameraTransform() }}
+      className="w-full h-full object-cover"
+    />
+    <div className="border border-white/20" />
+    <div className="border border-white/20" />
+    <div className="border border-white/20" />
+  </div>
+) : (
+  <video
+    ref={videoRef}
+    autoPlay
+    playsInline
+    muted
+    style={{ filter: getCameraFilter(), transform: getCameraTransform() }}
+    className="absolute inset-0 w-full h-full object-cover transition-all"
+  />
+)} 
       />
       {flashEnabled && <div className="absolute inset-0 bg-white/20 pointer-events-none z-0" />}
       <canvas ref={canvasRef} className="hidden" />
