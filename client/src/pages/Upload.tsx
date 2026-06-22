@@ -54,6 +54,7 @@ export default function Upload() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const faceCanvasRef = useRef<HTMLCanvasElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
