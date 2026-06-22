@@ -540,7 +540,6 @@ const rightEyeY = rightEye.y * canvas.height;
       {activeDrawer === "beauty" && (
         <Drawer title="Beauté" onClose={() => setActiveDrawer("none")}>
           <div className="space-y-6 py-4">
-            [
   { label: "Lissage peau", value: skinSmooth, setter: setSkinSmooth },
   { label: "Éclaircir visage", value: faceBright, setter: setFaceBright },
   { label: "Netteté visage", value: faceSharp, setter: setFaceSharp },
