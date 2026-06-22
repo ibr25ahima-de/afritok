@@ -9,6 +9,7 @@ import {
   Wand2, Play, Pause, ZapOff, Layout
 } from "lucide-react";
 import { toast } from "sonner";
+import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 
 // --- CONFIGURATION ---
 const FILTERS = [
