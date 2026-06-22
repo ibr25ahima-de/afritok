@@ -78,7 +78,8 @@ export default function Upload() {
   const [faceBright, setFaceBright] = useState(50);
   const [faceSharp, setFaceSharp] = useState(50);
   const [faceSlim, setFaceSlim] = useState(50);
-  
+  const [bigEyes, setBigEyes] = useState(50);
+const [lipSize, setLipSize] = useState(50);
   // UI Drawers
   const [activeDrawer, setActiveDrawer] = useState<"none" | "music" | "filters" | "effects" | "beauty">("none");
 
