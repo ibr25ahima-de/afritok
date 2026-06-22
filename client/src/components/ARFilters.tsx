@@ -155,7 +155,8 @@ export const ARFilters: React.FC<ARFiltersProps> = ({
   const [effects, setEffects] = useState<AREffect[]>([]);
   const [selectedTheme, setSelectedTheme] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
-
+const faceLandmarkerRef = useRef<any>(null);
+const [faceDetected, setFaceDetected] = useState(false);
   /**
    * Appliquer les filtres au canvas
    */
