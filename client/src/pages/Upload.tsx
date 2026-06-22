@@ -56,7 +56,7 @@ export default function Upload() {
   const inputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
-  
+  const faceLandmarkerRef = useRef<any>(null);
   // State Flux
   const [step, setStep] = useState<Step>("capture");
   const [isRecording, setIsRecording] = useState(false);
