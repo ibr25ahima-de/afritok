@@ -540,15 +540,31 @@ const rightEyeY = rightEye.y * canvas.height;
       {activeDrawer === "beauty" && (
         <Drawer title="Beauté" onClose={() => setActiveDrawer("none")}>
           <div className="space-y-6 py-4">
-  { label: "Lissage peau", value: skinSmooth, setter: setSkinSmooth },
-  { label: "Éclaircir visage", value: faceBright, setter: setFaceBright },
-  { label: "Netteté visage", value: faceSharp, setter: setFaceSharp },
-  { label: "Affiner visage", value: faceSlim, setter: setFaceSlim },
-  { label: "Grands yeux", value: bigEyes, setter: setBigEyes },
-  { label: "Lèvres", value: lipSize, setter: setLipSize }
-]
-              
-          map(item => (
+  {[
+    { label: "Lissage peau", value: skinSmooth, setter: setSkinSmooth },
+    { label: "Éclaircir visage", value: faceBright, setter: setFaceBright },
+    { label: "Netteté visage", value: faceSharp, setter: setFaceSharp },
+    { label: "Affiner visage", value: faceSlim, setter: setFaceSlim },
+    { label: "Grands yeux", value: bigEyes, setter: setBigEyes },
+    { label: "Lèvres", value: lipSize, setter: setLipSize }
+  ].map((item) => (
+    <div key={item.label} className="space-y-2">
+      <div className="flex justify-between text-sm font-bold">
+        <span>{item.label}</span>
+        <span>{item.value}%</span>
+      </div>
+
+      <input
+        type="range"
+        min="0"
+        max="100"
+        value={item.value}
+        onChange={(e) => item.setter(Number(e.target.value))}
+        className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-red-500"
+      />
+    </div>
+  ))}
+</div>
               <div key={item.label} className="space-y-2">
                 <div className="flex justify-between text-sm font-bold">
                   <span>{item.label}</span>
