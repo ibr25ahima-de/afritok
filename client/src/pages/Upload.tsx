@@ -540,12 +540,16 @@ const rightEyeY = rightEye.y * canvas.height;
       {activeDrawer === "beauty" && (
         <Drawer title="Beauté" onClose={() => setActiveDrawer("none")}>
           <div className="space-y-6 py-4">
-            {[
-              { label: "Lissage peau", value: skinSmooth, setter: setSkinSmooth },
-              { label: "Éclaircir visage", value: faceBright, setter: setFaceBright },
-              { label: "Netteté visage", value: faceSharp, setter: setFaceSharp },
-              { label: "Affiner visage", value: faceSlim, setter: setFaceSlim }
-            ].map(item => (
+            [
+  { label: "Lissage peau", value: skinSmooth, setter: setSkinSmooth },
+  { label: "Éclaircir visage", value: faceBright, setter: setFaceBright },
+  { label: "Netteté visage", value: faceSharp, setter: setFaceSharp },
+  { label: "Affiner visage", value: faceSlim, setter: setFaceSlim },
+  { label: "Grands yeux", value: bigEyes, setter: setBigEyes },
+  { label: "Lèvres", value: lipSize, setter: setLipSize }
+]
+              
+          map(item => (
               <div key={item.label} className="space-y-2">
                 <div className="flex justify-between text-sm font-bold">
                   <span>{item.label}</span>
