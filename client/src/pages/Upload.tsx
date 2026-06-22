@@ -194,14 +194,21 @@ const rightEyeY = rightEye.y * canvas.height;
   }, [facingMode]);
 
   useEffect(() => {
-    if (step === "capture") {
-      startCamera();
-    }
+  if (step === "capture") {
+    startCamera();
+
+    const timer = setTimeout(() => {
+      detectFace();
+    }, 1500);
+
     return () => {
+      clearTimeout(timer);
+
       const stream = videoRef.current?.srcObject as MediaStream;
       stream?.getTracks().forEach(t => t.stop());
     };
-  }, [step, facingMode, startCamera]);
+  }
+}, [step, facingMode, startCamera, detectFace]);
 
   // --- HANDLERS ---
   const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
