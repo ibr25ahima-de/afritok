@@ -154,7 +154,17 @@ useEffect(() => {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   if (result.faceLandmarks?.length) {
-    result.faceLandmarks[0].forEach((point: any) => {
+    const landmarks = result.faceLandmarks[0];
+
+const leftEye = landmarks[33];
+const rightEye = landmarks[263];
+
+const leftEyeX = leftEye.x * canvas.width;
+const leftEyeY = leftEye.y * canvas.height;
+
+const rightEyeX = rightEye.x * canvas.width;
+const rightEyeY = rightEye.y * canvas.height;
+    landmarks.forEach((point: any) => {
       ctx.beginPath();
       ctx.arc(
         point.x * canvas.width,
