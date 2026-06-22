@@ -349,7 +349,14 @@ useEffect(() => {
   />
 )} 
       {flashEnabled && <div className="absolute inset-0 bg-white/20 pointer-events-none z-0" />}
-      <canvas ref={canvasRef} className="hidden" />
+      <>
+  <canvas ref={canvasRef} className="hidden" />
+
+  <canvas
+    ref={faceCanvasRef}
+    className="absolute inset-0 w-full h-full pointer-events-none z-20"
+  />
+</>
       <audio ref={audioRef} className="hidden" />
       <input
   type="file"
