@@ -154,6 +154,7 @@ useEffect(() => {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   if (result.faceLandmarks?.length) {
+    console.log("VISAGE DETECTE");
     const landmarks = result.faceLandmarks[0];
 
 const leftEye = landmarks[33];
