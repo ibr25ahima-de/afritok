@@ -184,20 +184,22 @@ export const ARFilters: React.FC<ARFiltersProps> = ({
   }, []);
 
   const detectFace = useCallback(() => {
-    if (
-      !faceLandmarkerRef.current ||
-      !videoRef?.current ||
-      videoRef.current.readyState < 2
-    ) {
-      return;
-    }
+  console.log("videoRef:", videoRef?.current);
+
+  if (
+    !faceLandmarkerRef.current ||
+    !videoRef?.current ||
+    videoRef.current.readyState < 2
+  ) {
+    return;
+  }
 
     try {
       const results = faceLandmarkerRef.current.detectForVideo(
         videoRef.current,
         performance.now()
       );
-
+console.log("Résultat:", results);
       if (results.faceLandmarks?.length > 0) {
         setFaceDetected(true);
       } else {
