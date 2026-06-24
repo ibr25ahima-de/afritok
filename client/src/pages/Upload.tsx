@@ -110,18 +110,12 @@ const [lipSize, setLipSize] = useState(50);
   if (step === "capture") {
     startCamera();
 
-    const timer = setTimeout(() => {
-      detectFace();
-    }, 1500);
-
     return () => {
-      clearTimeout(timer);
-
       const stream = videoRef.current?.srcObject as MediaStream;
       stream?.getTracks().forEach(t => t.stop());
     };
   }
-}, [step, facingMode, startCamera, detectFace]);
+}, [step, facingMode, startCamera]);
 
   // --- HANDLERS ---
   const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
