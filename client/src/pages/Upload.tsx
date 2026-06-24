@@ -106,6 +106,7 @@ useEffect(() => {
 
     faceLandmarkerRef.current =
       await FaceLandmarker.createFromOptions(filesetResolver, {
+     console.log("MEDIAPIPE CHARGE");
         baseOptions: {
           modelAssetPath:
             "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
