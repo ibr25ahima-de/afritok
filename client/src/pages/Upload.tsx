@@ -93,58 +93,6 @@ const [lipSize, setLipSize] = useState(50);
   const [tempText, setTempText] = useState("");
 
   // State Publication
- video = videoRef.current;
-  const canvas = faceCanvasRef.current;
-
-  if (video.readyState < 2) {
-    requestAnimationFrame(detectFace);
-    return;
-  }
-
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
-    requestAnimationFrame(detectFace);
-    return;
-  }
-
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-
-  const result = faceLandmarkerRef.current.detectForVideo(
-    video,
-    performance.now()
-  );
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  if (result.faceLandmarks?.length) {
-    console.log("VISAGE DETECTE");
-    const landmarks = result.faceLandmarks[0];
-
-const leftEye = landmarks[33];
-const rightEye = landmarks[263];
-
-const leftEyeX = leftEye.x * canvas.width;
-const leftEyeY = leftEye.y * canvas.height;
-
-const rightEyeX = rightEye.x * canvas.width;
-const rightEyeY = rightEye.y * canvas.height;
-    landmarks.forEach((point: any) => {
-      ctx.beginPath();
-      ctx.arc(
-        point.x * canvas.width,
-        point.y * canvas.height,
-        2,
-        0,
-        Math.PI * 2
-      );
-      ctx.fillStyle = "#00ff00";
-      ctx.fill();
-    });
-  }
-
-  requestAnimationFrame(detectFace);
-}, []);
   const startCamera = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
