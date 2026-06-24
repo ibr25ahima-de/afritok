@@ -93,44 +93,7 @@ const [lipSize, setLipSize] = useState(50);
   const [tempText, setTempText] = useState("");
 
   // State Publication
-  const [description, setDescription] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [uploadSuccess, setUploadSuccess] = useState(false);
-
-  const uploadMutation = trpc.video.upload.useMutation();
-useEffect(() => {
-  const initFaceLandmarker = async () => {
-    const filesetResolver = await FilesetResolver.forVisionTasks(
-      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
-    );
-
-    faceLandmarkerRef.current =
-      await FaceLandmarker.createFromOptions(filesetResolver, {
-     console.log("MEDIAPIPE CHARGE");
-        baseOptions: {
-          modelAssetPath:
-            "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-          delegate: "GPU"
-        },
-        runningMode: "VIDEO",
-        numFaces: 1
-      });
-  };
-
-  initFaceLandmarker();
-}, []);
-  // --- CAMERA LOGIC ---
- const detectFace = useCallback(() => {
-  if (
-    !videoRef.current ||
-    !faceCanvasRef.current ||
-    !faceLandmarkerRef.current
-  ) {
-    requestAnimationFrame(detectFace);
-    return;
-  }
-
-  const video = videoRef.current;
+ video = videoRef.current;
   const canvas = faceCanvasRef.current;
 
   if (video.readyState < 2) {
