@@ -2,13 +2,14 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { CameraRecorder } from "@/components/CameraRecorder";
-import { RefreshCw } from "lucide-react";
+import Publish from "./Publish";
+import { RefreshCw, Type, Music, Smile, MapPin, Users } from "lucide-react";
 
 type Step = "capture" | "edit" | "publish";
 
 export default function Upload() {
   const [, navigate] = useLocation();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   
   const [step, setStep] = useState<Step>("capture");
   const [file, setFile] = useState<File | null>(null);
@@ -25,6 +26,7 @@ export default function Upload() {
 
   if (!isAuthenticated) return <div className="h-screen bg-black flex items-center justify-center text-white">Connexion requise</div>;
 
+  // --- ÉTAPE 1: CAPTURE ---
   if (step === "capture") {
     return (
       <CameraRecorder 
@@ -44,9 +46,11 @@ export default function Upload() {
     );
   }
 
+  // --- ÉTAPE 2: MODIFICATION (Style TikTok complet) ---
   if (step === "edit") {
     return (
-      <div className="h-screen bg-black text-white relative flex flex-col">
+      <div className="h-screen bg-black text-white relative flex flex-col overflow-hidden">
+        {/* Vidéo en plein écran */}
         <div className="absolute inset-0">
           {file?.type.startsWith("image/") ? (
             <img src={previewUrl!} className="w-full h-full object-cover" alt="preview" />
@@ -55,33 +59,60 @@ export default function Upload() {
           )}
         </div>
         
-        <div className="absolute right-4 top-20 flex flex-col gap-6 z-20">
-          <div className="flex flex-col items-center gap-1">
-            <div className="p-2 bg-black/20 rounded-full"><RefreshCw size={24}/></div>
-          </div>
-          <div className="flex flex-col items-center gap-1 text-sm font-bold">Aa</div>
+        {/* Barre latérale droite d'édition */}
+        <div className="absolute right-4 top-16 flex flex-col gap-6 z-20 items-center">
+          <button className="flex flex-col items-center gap-1">
+            <div className="p-2.5 bg-black/20 backdrop-blur-md rounded-full"><Type size={24}/></div>
+            <span className="text-[10px] font-bold">Texte</span>
+          </button>
+          <button className="flex flex-col items-center gap-1">
+            <div className="p-2.5 bg-black/20 backdrop-blur-md rounded-full"><Smile size={24}/></div>
+            <span className="text-[10px] font-bold">Stickers</span>
+          </button>
+          <button className="flex flex-col items-center gap-1">
+            <div className="p-2.5 bg-black/20 backdrop-blur-md rounded-full"><RefreshCw size={24}/></div>
+            <span className="text-[10px] font-bold">Effets</span>
+          </button>
+          <button className="flex flex-col items-center gap-1">
+            <div className="p-2.5 bg-black/20 backdrop-blur-md rounded-full"><Music size={24}/></div>
+            <span className="text-[10px] font-bold">Audio</span>
+          </button>
         </div>
 
-        <div className="mt-auto p-4 flex gap-3 z-20">
-          <button onClick={() => { setFile(null); setStep("capture"); }} className="flex-1 bg-white/20 py-3 rounded-full font-bold">
-            Retour
-          </button>
-          <button onClick={() => setStep("publish")} className="flex-1 bg-red-500 py-3 rounded-full font-bold">Suivant</button>
+        {/* Boutons du bas */}
+        <div className="mt-auto p-4 pb-10 z-20 bg-gradient-to-t from-black/60 to-transparent">
+          <div className="flex gap-4 mb-6 justify-center">
+            <button className="flex items-center gap-2 bg-black/20 backdrop-blur-md px-4 py-2 rounded-full text-xs font-bold border border-white/10">
+              <MapPin size={14}/> Lieu
+            </button>
+            <button className="flex items-center gap-2 bg-black/20 backdrop-blur-md px-4 py-2 rounded-full text-xs font-bold border border-white/10">
+              <Users size={14}/> Identifier
+            </button>
+          </div>
+
+          <div className="flex gap-3">
+            <button 
+              onClick={() => { setFile(null); setStep("capture"); }} 
+              className="flex-1 bg-white/10 backdrop-blur-md py-3.5 rounded-full font-bold flex items-center justify-center gap-2 active:scale-95 transition-all"
+            >
+              <div className="w-6 h-6 rounded-full bg-blue-400 overflow-hidden">
+                <img src={user?.image || ""} alt="" className="w-full h-full object-cover"/>
+              </div>
+              Ta Story
+            </button>
+            <button 
+              onClick={() => setStep("publish")} 
+              className="flex-1 bg-red-500 py-3.5 rounded-full font-black text-white active:scale-95 transition-all shadow-lg"
+            >
+              Suivant
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="h-screen bg-neutral-950 text-white flex flex-col">
-      <div className="p-4 border-b border-white/5 flex items-center">
-        <button onClick={() => setStep("edit")}>Retour</button>
-        <h1 className="flex-1 text-center font-black uppercase">Publier</h1>
-      </div>
-      <div className="p-5">
-        <p>Interface de publication en cours...</p>
-        <button onClick={() => setStep("capture")} className="mt-4 bg-red-500 px-4 py-2 rounded">Recommencer</button>
-      </div>
-    </div>
-  );
-}
+  // --- ÉTAPE 3: PUBLICATION ---
+  return <Publish />;
+        }
+      
