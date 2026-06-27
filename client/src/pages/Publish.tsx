@@ -8,7 +8,7 @@ import { useUpload } from "@/contexts/UploadContext";
 export default function Publish() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
-  const { file, preview } = useUpload();
+  const { file, preview, selectedMusic } = useUpload();
 
   const [caption, setCaption] = useState("");
   const [title, setTitle] = useState("");
@@ -74,10 +74,12 @@ export default function Publish() {
 
       // Save video metadata via tRPC
       await uploadMutation.mutateAsync({
-        title: title.trim(),
-        description: caption.trim(),
-        videoUrl,
-      });
+  title: title.trim(),
+  description: caption.trim(),
+  videoUrl,
+  musicUrl: selectedMusic?.url || null,
+  musicName: selectedMusic?.name || null,
+});
 
       setUploadProgress(100);
       console.log("✅ VIDEO SAVED TO DATABASE");
