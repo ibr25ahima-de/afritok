@@ -57,7 +57,7 @@ export default function Publish() {
       
       // Let's try to align with what the server likely expects based on the error.
       const uploadFileResult = await uploadFileMutation.mutateAsync({
-        file: buffer, // Changed from fileBuffer to file
+        fileBuffer: buffer, // Changed from fileBuffer to file
         fileName: file.name,
         fileType: file.type,
       });
