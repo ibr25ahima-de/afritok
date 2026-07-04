@@ -1,742 +1,216 @@
-import { eq, and, gt, desc, sql, ne } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
-import { MONETIZATION } from "./monetization-config";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
+import * as schema from "../drizzle/schema";
+import { eq, desc, sql, and } from "drizzle-orm";
 
-import {
-  users,
-  videos,
-  likes,
-  comments,
-  followers,
-  earnings,
-  withdrawals,
-  otps,
-  favorites,
-  shares,
-  InsertUser,
-  OTP,
-} from "../drizzle/schema";
+const connectionString = process.env.DATABASE_URL;
 
-/* =====================
-DATABASE
-===================== */
-
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL is not defined");
+if (!connectionString) {
+  throw new Error("DATABASE_URL is not set");
 }
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-});
+const client = postgres(connectionString);
+export const db = drizzle(client, { schema });
 
-export const db = drizzle(pool);
+// ✅ FORCE ADMIN PROMOTION ON STARTUP
+async function ensureAdmin() {
+  try {
+    const phone = "+225 05 64 19 41 33";
+    console.log(`🚀 [DB] Checking admin status for ${phone}...`);
+    
+    const user = await db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.phone, phone))
+      .limit(1);
 
-/* =====================
-USERS
-===================== */
+    if (user.length > 0 && user[0].role !== "admin") {
+      console.log(`🛠️ [DB] Promoting ${user[0].name} to admin...`);
+      await db
+        .update(schema.users)
+        .set({ role: "admin" })
+        .where(eq(schema.users.id, user[0].id));
+      console.log(`✅ [DB] Promotion successful.`);
+    } else if (user.length === 0) {
+      console.log(`⚠️ [DB] User with phone ${phone} not found in database yet.`);
+    } else {
+      console.log(`✅ [DB] User is already admin.`);
+    }
+  } catch (e) {
+    console.error(`❌ [DB] Admin promotion error:`, e);
+  }
+}
 
-export async function upsertUser(user: Partial<InsertUser>) {
-  if (!user.phone) throw new Error("Phone required");
+// Run promotion check
+ensureAdmin();
 
-  await db
-    .insert(users)
-    .values({
-      phone: user.phone,
-      name: user.name ?? null,
-      email: user.email ?? null,
-      loginMethod: user.loginMethod ?? "phone_otp",
-      role: user.role ?? "user",
-      totalEarnings: 0,
-      totalWithdrawals: 0,
-      lastSignedIn: new Date(),
-    })
+// --- Helper Functions ---
+
+export async function getUserByPhone(phone: string) {
+  const result = await db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.phone, phone));
+  return result[0];
+}
+
+export async function upsertUser(userData: any) {
+  return await db
+    .insert(schema.users)
+    .values(userData)
     .onConflictDoUpdate({
-      target: users.phone,
+      target: schema.users.phone,
       set: {
-        name: user.name ?? undefined,
-        email: user.email ?? undefined,
+        ...userData,
         lastSignedIn: new Date(),
-        updatedAt: new Date(),
       },
     });
 }
 
-export async function getUserById(userId: number) {
-  return (await db.select().from(users).where(eq(users.id, userId)).limit(1))[0];
+export async function updateUserProfile(userId: number, data: any) {
+  return await db
+    .update(schema.users)
+    .set(data)
+    .where(eq(schema.users.id, userId));
 }
 
-export async function getUserByPhone(phone: string) {
-  return (await db.select().from(users).where(eq(users.phone, phone)).limit(1))[0];
+export async function updateUserAvatar(userId: number, avatarUrl: string) {
+  return await db
+    .update(schema.users)
+    .set({ avatarUrl })
+    .where(eq(schema.users.id, userId));
 }
 
-/* =====================
-VIDEOS
-===================== */
-
-export async function getVideoById(videoId: number) {
-  return (await db.select().from(videos).where(eq(videos.id, videoId)).limit(1))[0];
-}
-
-export async function getFeedVideos(
-  limit: number,
-  offset: number
-) {
-  const result = await db
-    .select({
-      id: videos.id,
-      userId: videos.userId,
-      title: videos.title,
-      description: videos.description,
-      videoUrl: videos.videoUrl,
-      thumbnailUrl: videos.thumbnailUrl,
-      views: videos.views,
-      likes: videos.likes,
-      comments: videos.comments,
-      shares: videos.shares,
-      favorites: videos.favorites,
-      createdAt: videos.createdAt,
-
-      user: {
-        id: users.id,
-        name: users.name,
-        avatarUrl: users.avatarUrl,
-      },
-    })
-    .from(videos)
-    .leftJoin(users, eq(videos.userId, users.id))
-    .orderBy(desc(videos.createdAt))
-    .limit(limit)
-    .offset(offset);
-
-  return result;
-}
-
-export async function getUserVideos(userId: number) {
-  return db.select().from(videos).where(eq(videos.userId, userId)).orderBy(desc(videos.createdAt));
-}
-
-/* =====================
-OTP
-===================== */
-
+// OTP Helpers
 export async function createOTP(phone: string, code: string) {
-  await db.insert(otps).values({
+  return await db.insert(schema.otps).values({
     phone,
     code,
-    expiresAt: new Date(Date.now() + 10 * 60000),
-    attempts: 0,
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 mins
   });
 }
 
-export async function getValidOTP(phone: string, code: string): Promise<OTP | undefined> {
-  return (
-    await db
-      .select()
-      .from(otps)
-      .where(
-        and(
-          eq(otps.phone, phone),
-          eq(otps.code, code),
-          gt(otps.expiresAt, new Date())
-        )
+export async function getValidOTP(phone: string, code: string) {
+  const result = await db
+    .select()
+    .from(schema.otps)
+    .where(
+      and(
+        eq(schema.otps.phone, phone),
+        eq(schema.otps.code, code),
+        sql`${schema.otps.expiresAt} > now()`
       )
-      .limit(1)
-  )[0];
+    );
+  return result[0];
 }
 
 export async function deleteOTP(id: number) {
-  await db.delete(otps).where(eq(otps.id, id));
+  return await db.delete(schema.otps).where(eq(schema.otps.id, id));
 }
 
-/* =====================
-INTERACTIONS
-===================== */
-
-export async function getUserLike(userId: number, videoId: number) {
-  return (
-    await db
-      .select()
-      .from(likes)
-      .where(and(eq(likes.userId, userId), eq(likes.videoId, videoId)))
-      .limit(1)
-  )[0];
+export async function incrementOTPAttempts(id: number) {
+  return await db
+    .update(schema.otps)
+    .set({ attempts: sql`${schema.otps.attempts} + 1` })
+    .where(eq(schema.otps.id, id));
 }
 
-export async function likeVideo(userId: number, videoId: number) {
-  const exists = await getUserLike(userId, videoId);
-  if (exists) return;
-
-  await db.insert(likes).values({ userId, videoId });
-
-  await db
-    .update(videos)
-    .set({ likes: sql`${videos.likes} + 1` })
-    .where(eq(videos.id, videoId));
+// Video Helpers
+export async function getFeedVideos(limit: number, offset: number) {
+  return await db
+    .select({
+      id: schema.videos.id,
+      userId: schema.videos.userId,
+      title: schema.videos.title,
+      description: schema.videos.description,
+      videoUrl: schema.videos.videoUrl,
+      thumbnailUrl: schema.videos.thumbnailUrl,
+      views: schema.videos.views,
+      likes: schema.videos.likes,
+      comments: schema.videos.comments,
+      shares: schema.videos.shares,
+      createdAt: schema.videos.createdAt,
+      user: {
+        id: schema.users.id,
+        name: schema.users.name,
+        avatarUrl: schema.users.avatarUrl,
+      },
+    })
+    .from(schema.videos)
+    .leftJoin(schema.users, eq(schema.videos.userId, schema.users.id))
+    .orderBy(desc(schema.videos.createdAt))
+    .limit(limit)
+    .offset(offset);
 }
 
-export async function unlikeVideo(userId: number, videoId: number) {
-  await db
-    .delete(likes)
-    .where(and(eq(likes.userId, userId), eq(likes.videoId, videoId)));
-
-  // ✅ SÉCURITÉ COMPTEUR (GREATEST)
-  await db
-    .update(videos)
-    .set({ likes: sql`GREATEST(${videos.likes} - 1, 0)` })
-    .where(eq(videos.id, videoId));
-}
-
-/* COMMENTS */
-
-export async function getVideoComments(videoId: number) {
-  return db.select().from(comments).where(eq(comments.videoId, videoId));
-}
-
-export async function addComment(userId: number, videoId: number, text: string) {
-  await db.insert(comments).values({ userId, videoId, text });
-
-  await db
-    .update(videos)
-    .set({ comments: sql`${videos.comments} + 1` })
-    .where(eq(videos.id, videoId));
-}
-
-export async function deleteComment(commentId: number) {
-  try {
-    const comment = await db
-      .select()
-      .from(comments)
-      .where(eq(comments.id, commentId))
-      .limit(1);
-
-    if (!comment[0]) return { success: false };
-
-    await db
-      .delete(comments)
-      .where(eq(comments.id, commentId));
-
-    // ✅ SÉCURITÉ COMPTEUR (GREATEST)
-    await db
-      .update(videos)
-      .set({ comments: sql`GREATEST(${videos.comments} - 1, 0)` })
-      .where(eq(videos.id, comment[0].videoId));
-
-    return { success: true };
-  } catch (error) {
-    console.error("deleteComment error:", error);
-    return { success: false };
-  }
-}
-
-/* FAVORITES */
-
-export async function getUserFavorite(userId: number, videoId: number) {
-  return (
-    await db
-      .select()
-      .from(favorites)
-      .where(and(eq(favorites.userId, userId), eq(favorites.videoId, videoId)))
-      .limit(1)
-  )[0];
-}
-
-export async function favoriteVideo(userId: number, videoId: number) {
-  const exists = await getUserFavorite(userId, videoId);
-  if (exists) return;
-
-  await db.insert(favorites).values({ userId, videoId });
-
-  await db
-    .update(videos)
-    .set({ favorites: sql`${videos.favorites} + 1` })
-    .where(eq(videos.id, videoId));
-}
-
-export async function unfavoriteVideo(userId: number, videoId: number) {
-  try {
-    await db
-      .delete(favorites)
-      .where(and(eq(favorites.userId, userId), eq(favorites.videoId, videoId)));
-
-    // ✅ SÉCURITÉ COMPTEUR (GREATEST)
-    await db
-      .update(videos)
-      .set({ favorites: sql`GREATEST(${videos.favorites} - 1, 0)` })
-      .where(eq(videos.id, videoId));
-    
-    return { success: true };
-  } catch (error) {
-    console.error("unfavoriteVideo error:", error);
-    return { success: false };
-  }
-}
-
-/* SHARES */
-
-export async function shareVideo(userId: number, videoId: number, platform: string) {
-  await db.insert(shares).values({ userId, videoId, platform });
-
-  await db
-    .update(videos)
-    .set({ shares: sql`${videos.shares} + 1` })
-    .where(eq(videos.id, videoId));
-}
-
-/* VIEWS */
-
-export async function incrementVideoViews(videoId: number, userId?: number) {
-  // 1. Incrémenter la vue
-  await db
-    .update(videos)
-    .set({ views: sql`${videos.views} + 1` })
-    .where(eq(videos.id, videoId));
-
-  // 2. Récupérer la vidéo
-  const video = await getVideoById(videoId);
-  if (!video) return;
-
-  // 🔒 anti-spam simple (1 vue / 30 secondes / vidéo)
-  const recentView = await db
+export async function getUserVideos(userId: number) {
+  return await db
     .select()
-    .from(earnings)
-    .where(
-      and(
-        eq(earnings.userId, userId || 0),
-        eq(earnings.videoId, videoId),
-        gt(earnings.createdAt, new Date(Date.now() - 30000))
-      )
-    )
-    .limit(1);
-
-  if (recentView.length > 0) return;
-
-  // 3. 👤 PAYER LE VIEWER
-  if (userId) {
-    await createEarning(userId, 0.2, "view", videoId);
-  }
-
-  // 4. 🎬 PAYER LE CRÉATEUR (plus important)
-  if (video.userId && video.userId !== userId) {
-    await createEarning(video.userId, 0.5, "creator_view", videoId);
-  }
+    .from(schema.videos)
+    .where(eq(schema.videos.userId, userId))
+    .orderBy(desc(schema.videos.createdAt));
 }
-/* =====================
-FOLLOW
-===================== */
 
+export async function getVideoById(id: number) {
+  const result = await db
+    .select()
+    .from(schema.videos)
+    .where(eq(schema.videos.id, id));
+  return result[0];
+}
+
+// Interaction Helpers
 export async function isFollowing(followerId: number, followingId: number) {
-  const res = await db
+  const result = await db
     .select()
-    .from(followers)
+    .from(schema.followers)
     .where(
       and(
-        eq(followers.followerId, followerId),
-        eq(followers.followingId, followingId)
+        eq(schema.followers.followerId, followerId),
+        eq(schema.followers.followingId, followingId)
       )
-    )
-    .limit(1);
-
-  return res.length > 0;
+    );
+  return result.length > 0;
 }
 
 export async function getFollowerCount(userId: number) {
-  return (await db.select().from(followers).where(eq(followers.followingId, userId))).length;
+  const result = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(schema.followers)
+    .where(eq(schema.followers.followingId, userId));
+  return Number(result[0].count);
 }
 
 export async function getFollowingCount(userId: number) {
-  return (await db.select().from(followers).where(eq(followers.followerId, userId))).length;
+  const result = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(schema.followers)
+    .where(eq(schema.followers.followerId, userId));
+  return Number(result[0].count);
 }
 
-/* =====================
-EARNINGS (FINAL)
-===================== */
-
-export async function createEarning(
-  userId: number,
-  amount: number,
-  source: string,
-  videoId?: number
-) {
-  console.log("💰 CREATE EARNING CALLED", {
+// Earnings Helpers
+export async function createEarning(userId: number, amount: number, type: string, videoId?: number) {
+  return await db.insert(schema.earnings).values({
     userId,
-    amount,
-    source,
+    amount: amount.toString(),
+    type,
+    videoId,
   });
-  
-  if (amount <= 0) return;
-
-  try {
-    // 🔥 1. LIMITE GLOBALE (anti faillite)
-    const GLOBAL_DAILY_LIMIT = 999999;
-
-    const todayGlobal = new Date();
-    todayGlobal.setHours(0, 0, 0, 0);
-
-    const totalTodayResult = await db
-      .select({
-        total: sql<number>`SUM(${earnings.amount})`,
-      })
-      .from(earnings)
-      .where(
-        and(
-          gt(earnings.createdAt, todayGlobal),
-          ne(earnings.source, "platform_fee")
-        )
-      );
-
-    const totalToday = Number(totalTodayResult[0]?.total || 0);
-
-    if (totalToday >= GLOBAL_DAILY_LIMIT) {
-      console.log("🚫 GLOBAL LIMIT HIT", totalToday);
-      return { success: false, reason: "global_limit" };
-    }
-
-    // 🔥 2. PLAFOND PAR UTILISATEUR (réel - argent total)
-    const USER_DAILY_LIMIT = 100;   // ✅ AUGMENTÉ À 100
-
-    const todayUser = new Date();
-    todayUser.setHours(0, 0, 0, 0);
-
-    const userTodayResult = await db
-      .select({
-        total: sql<number>`SUM(${earnings.amount})`,
-      })
-      .from(earnings)
-      .where(
-        and(
-          eq(earnings.userId, userId),
-          gt(earnings.createdAt, todayUser),
-          ne(earnings.source, "platform_fee")
-        )
-      );
-
-    const userTotalToday = Number(userTodayResult[0]?.total || 0);
-
-    if (userTotalToday >= USER_DAILY_LIMIT) {
-      return { success: false, reason: "user_limit" };
-    }
-
-    // 🚨 3. LIMITES PAR TYPE (nombre d'actions)
-    const limits = MONETIZATION.dailyLimits;
-
-    const todayEarnings = await db
-      .select()
-      .from(earnings)
-      .where(
-        and(
-          eq(earnings.userId, userId),
-          eq(earnings.source, source),
-          gt(earnings.createdAt, todayUser)
-        )
-      );
-
-    // ✅ BLOC DÉSACTIVÉ (DEBUG)
-    /*
-    if (todayEarnings.length >= ((limits as Record<string, number>)[source] || 20)) {
-      return { success: false, shadow: true };
-    }
-    */
-
-    // ✅ FIX PROPRE (cleanSource pour éviter les undefined sur les suffixes _app)
-    const cleanSource = source.replace("_app", "");
-    
-    // 🚨 4. Vérifier éligibilité créateur réelle
-    // [Simulé pour la structure du fichier]
-    const eligible = true; // ✅ TEMPORAIRE: autoriser tous les créateurs
-    if (!eligible) {
-       // return { success: false, reason: "creator_not_eligible" };
-    }
-
-    // 🏦 3. Séparation des gains (Utilisateur vs Plateforme)
-    const PLATFORM_FEE = 0.3;
-    const userAmount = amount * (1 - PLATFORM_FEE);
-    const platformAmount = amount * PLATFORM_FEE;
-
-    // 🔒 TRANSACTION SÉCURISÉE
-    await db.transaction(async (tx) => {
-      // 👤 UTILISATEUR
-      await tx.insert(earnings).values({
-        userId,
-        amount: userAmount.toString(),
-        source,
-        videoId: videoId || null,
-      });
-
-      // 💰 PLATEFORME (TON ARGENT)
-      await tx.insert(earnings).values({
-        userId: 0, // ID spécial plateforme
-        amount: platformAmount.toString(),
-        source: "platform_fee",
-        videoId: videoId || null,
-      });
-
-      // ✅ MISE À JOUR SOLDE UTILISATEUR (OBLIGATOIRE POUR RETRAITS)
-      await tx.update(users)
-        .set({
-          totalEarnings: sql`${users.totalEarnings} + ${userAmount}`
-        })
-        .where(eq(users.id, userId));
-    });
-
-    return { success: true };
-
-  } catch (error) {
-    console.error("createEarning error:", error);
-    return { success: false };
-  }
 }
 
-// =======================
-// FIX MISSING EXPORTS
-// =======================
-
-// 💰 GET USER EARNINGS
 export async function getUserEarnings(userId: number) {
-  try {
-    const user = await getUserById(userId);
-    if (!user) return null;
-
-    const total = Number(user.totalEarnings || 0);
-    const withdrawn = Number(user.totalWithdrawals || 0);
-
-    return {
-      total: total + withdrawn,
-      available: total,
-      withdrawn: withdrawn,
-      pending: 0,
-    };
-  } catch (error) {
-    console.error("getUserEarnings error:", error);
-    return null;
-  }
+  const result = await db
+    .select({ total: sql<string>`sum(amount)` })
+    .from(schema.earnings)
+    .where(eq(schema.earnings.userId, userId));
+  return result[0].total || "0";
 }
 
-// 💸 GET USER WITHDRAWALS
 export async function getUserWithdrawals(userId: number) {
-  return db
+  return await db
     .select()
-    .from(withdrawals)
-    .where(eq(withdrawals.userId, userId))
-    .orderBy(desc(withdrawals.createdAt));
+    .from(schema.withdrawals)
+    .where(eq(schema.withdrawals.userId, userId))
+    .orderBy(desc(schema.withdrawals.createdAt));
 }
-
-// 💳 CREATE WITHDRAWAL
-export async function createWithdrawalRecord(
-  userId: number,
-  amount: number,
-  paymentMethod: string,
-  phone: string
-) {
-  const user = await getUserById(userId);
-  if (!user) throw new Error("User not found");
-
-  const balance = Number(user.totalEarnings || 0);
-
-  if (amount <= 0) {
-    throw new Error("Invalid amount");
-  }
-
-  if (amount > balance) {
-    throw new Error("Insufficient balance");
-  }
-
-  // ⚡ ÉTAPE 1 — BLOQUER LES RETRAITS EN DOUBLE
-  const existingPending = await db
-    .select()
-    .from(withdrawals)
-    .where(
-      and(
-        eq(withdrawals.userId, userId),
-        eq(withdrawals.status, "pending")
-      )
-    )
-    .limit(1);
-
-  if (existingPending.length > 0) {
-    console.warn("🚨 FRAUD ATTEMPT", {
-      userId,
-      reason: "pending_withdrawal",
-    });
-    throw new Error("Withdrawal already in progress");
-  }
-
-  // ⚡ ÉTAPE 2 — LIMITER LES RETRAITS PAR JOUR
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const todayWithdrawals = await db
-    .select()
-    .from(withdrawals)
-    .where(
-      and(
-        eq(withdrawals.userId, userId),
-        gt(withdrawals.createdAt, today)
-      )
-    );
-
-  if (todayWithdrawals.length >= 3) {
-    console.warn("🚨 FRAUD ATTEMPT", {
-      userId,
-      reason: "daily_limit_reached",
-    });
-    throw new Error("Daily withdrawal limit reached");
-  }
-
-  // ⚡ ÉTAPE 3 — MINIMUM ANTI-SPAM
-  const lastWithdrawal = await db
-    .select()
-    .from(withdrawals)
-    .where(eq(withdrawals.userId, userId))
-    .orderBy(desc(withdrawals.createdAt))
-    .limit(1);
-
-  if (lastWithdrawal[0]) {
-    const lastTime = new Date(lastWithdrawal[0].createdAt).getTime();
-    const now = Date.now();
-
-    if (now - lastTime < 60000) {
-      console.warn("🚨 FRAUD ATTEMPT", {
-        userId,
-        reason: "spam_withdrawal",
-      });
-      throw new Error("Please wait before another withdrawal");
-    }
-  }
-
-  // 🔒 TRANSACTION (OBLIGATOIRE)
-  await db.transaction(async (tx) => {
-
-    // 1. 💸 CRÉER LE RETRAIT (marqué 'completed' pour le test de validation immédiate)
-    await tx.insert(withdrawals).values({
-  userId,
-  amount: amount.toString(),
-  paymentMethod,
-  phone,
-  status: "pending",
-});
-
-    // 2. 💰 DÉDUIRE LE SOLDE
-    await tx.update(users)
-      .set({
-        totalEarnings: sql`${users.totalEarnings} - ${amount}`,
-        totalWithdrawals: sql`${users.totalWithdrawals} + ${amount}`,
-      })
-      .where(eq(users.id, userId));
-  });
-
-  return { success: true };
-}
-
-// 💰 PLATFORM TOTAL
-export async function getPlatformEarnings() {
-  try {
-    const result = await db
-      .select({
-        total: sql<number>`SUM(${earnings.amount})`,
-      })
-      .from(earnings)
-      .where(eq(earnings.source, "platform_fee"));
-
-    return Number(result[0]?.total || 0);
-  } catch (error) {
-    console.error("getPlatformEarnings error:", error);
-    return 0;
-  }
-}
-
-// 💰 PLATFORM TODAY
-export async function getPlatformEarningsToday() {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  try {
-    const result = await db
-      .select({
-        total: sql<number>`SUM(${earnings.amount})`,
-      })
-      .from(earnings)
-      .where(
-        and(
-          eq(earnings.source, "platform_fee"),
-          gt(earnings.createdAt, today)
-        )
-      );
-
-    return Number(result[0]?.total || 0);
-  } catch (error) {
-    console.error("getPlatformEarningsToday error:", error);
-    return 0;
-  }
-}
-
-/* 📊 PLATFORM STATS */
-export async function getPlatformStats() {
-  const total = await getPlatformEarnings();
-  const today = await getPlatformEarningsToday();
-
-  const count = await db
-    .select({ count: sql<number>`COUNT(*)` })
-    .from(earnings)
-    .where(eq(earnings.source, "platform_fee"));
-
-  return {
-    total,
-    today,
-    transactions: Number(count[0]?.count || 0),
-  };
-}
-
-/* 💰 LOG PLATFORM MONEY */
-export async function logPlatformMoney() {
-  const stats = await getPlatformStats();
-
-  console.log("\n💰 ===== ARGENT PLATEFORME =====");
-  console.log("💵 Total gagné :", stats.total.toFixed(2));
-  console.log("📅 Aujourd’hui :", stats.today.toFixed(2));
-  console.log("🔄 Transactions :", stats.transactions);
-
-  if (stats.today > 0) {
-    console.log("📈 Croissance active");
-  } else {
-    console.log("⚠️ Aucune activité");
-  }
-
-  console.log("================================\n");
-}
-export async function updateUserProfile(
-  userId: number,
-  data: {
-    name?: string;
-    bio?: string;
-    country?: string;
-    avatarUrl?: string;
-  }
-) {
-  await db
-    .update(users)
-    .set({
-      name: data.name,
-      bio: data.bio,
-      country: data.country,
-      updatedAt: new Date(),
-    })
-    .where(eq(users.id, userId));
-
-  return await getUserById(userId);
-              }
-export async function updateUserAvatar(
-  userId: number,
-  avatarUrl: string
-) {
-  await db
-    .update(users)
-    .set({
-      avatarUrl,
-      updatedAt: new Date(),
-    })
-    .where(eq(users.id, userId));
-
-  return await getUserById(userId);
-  }
