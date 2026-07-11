@@ -211,7 +211,11 @@ followMutation.mutate(
 );
 
 }}
-className={px-4 py-2 rounded-full font-semibold transition flex items-center gap-2 ${   isFollowing   ? "bg-gray-700 hover:bg-gray-600 text-white"   : "bg-red-500 hover:bg-red-600 text-white"   }}
+className={`px-4 py-2 rounded-full font-semibold transition flex items-center gap-2 ${
+  isFollowing
+    ? "bg-gray-700 hover:bg-gray-600 text-white"
+    : "bg-red-500 hover:bg-red-600 text-white"
+}`}
 >
 {isFollowing ? (
 <>
