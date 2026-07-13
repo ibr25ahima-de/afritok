@@ -367,6 +367,23 @@ export const appRouter = router({
           avatarUrl: input.avatarUrl,
         };
       }),
+
+    updateName: protectedProcedure
+      .input(
+        z.object({
+          name: z.string().min(2).max(50),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        await db
+          .update(users)
+          .set({
+            name: input.name,
+          })
+          .where(eq(users.id, ctx.user.id));
+
+        return { success: true };
+      }),
   }),
 
   // ============================================
