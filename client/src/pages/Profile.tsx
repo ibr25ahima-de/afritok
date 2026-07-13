@@ -142,8 +142,14 @@ className="block w-full text-left px-4 py-3 hover:bg-gray-800 text-sm border-b b
 <Flame size={16} className="text-red-500" />
 Monétisation
 </button>
-<button className="block w-full text-left px-4 py-3 hover:bg-gray-800 text-sm border-b border-gray-700">
-Paramètres
+<button
+  onClick={() => {
+    navigate("/settings");
+    setShowMenu(false);
+  }}
+  className="block w-full text-left px-4 py-3 hover:bg-gray-800 text-sm border-b border-gray-700"
+>
+  Paramètres
 </button>
 </>
 )}
