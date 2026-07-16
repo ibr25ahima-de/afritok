@@ -1,15 +1,120 @@
-import { Languages, Moon, Wifi, PlayCircle, Type, Sparkles, ChevronRight } from "lucide-react";
+import {
+  Languages,
+  Moon,
+  Wifi,
+  PlayCircle,
+  Type,
+  Sparkles,
+  ChevronRight,
+} from "lucide-react";
 import { Card } from "@/components/ui/card";
 
-export default function DisplaySettings() {
-  const settings = [
-    { icon: <Languages size={18} />, label: "Langue", value: "Français" },
-    { icon: <Moon size={18} />, label: "Mode sombre", value: "Système" },
-    { icon: <Wifi size={18} />, label: "Économie de données", value: "Désactivé" },
-    { icon: <PlayCircle size={18} />, label: "Lecture automatique", value: "Wi-Fi uniquement" },
-    { icon: <Type size={18} />, label: "Taille du texte", value: "Normale" },
-    { icon: <Sparkles size={18} />, label: "Animations", value: "Activées" },
+interface Props {
+  settings: {
+    language: string;
+    darkMode: string;
+    dataSaver: boolean;
+    autoPlay: string;
+    textSize: string;
+    animations: boolean;
+  };
+  updateSetting: (key: string, value: any) => void;
+}
+
+export default function DisplaySettings({
+  settings,
+  updateSetting,
+}: Props) {
+  const items = [
+    {
+      key: "language",
+      icon: <Languages size={18} />,
+      label: "Langue",
+      value: settings.language,
+    },
+    {
+      key: "darkMode",
+      icon: <Moon size={18} />,
+      label: "Mode sombre",
+      value: settings.darkMode,
+    },
+    {
+      key: "dataSaver",
+      icon: <Wifi size={18} />,
+      label: "Économie de données",
+      value: settings.dataSaver ? "Activé" : "Désactivé",
+    },
+    {
+      key: "autoPlay",
+      icon: <PlayCircle size={18} />,
+      label: "Lecture automatique",
+      value: settings.autoPlay,
+    },
+    {
+      key: "textSize",
+      icon: <Type size={18} />,
+      label: "Taille du texte",
+      value: settings.textSize,
+    },
+    {
+      key: "animations",
+      icon: <Sparkles size={18} />,
+      label: "Animations",
+      value: settings.animations ? "Activées" : "Désactivées",
+    },
   ];
+
+  const handleClick = (key: string) => {
+    switch (key) {
+      case "darkMode":
+        updateSetting(
+          "darkMode",
+          settings.darkMode === "Système"
+            ? "Sombre"
+            : settings.darkMode === "Sombre"
+            ? "Clair"
+            : "Système"
+        );
+        break;
+
+      case "dataSaver":
+        updateSetting("dataSaver", !settings.dataSaver);
+        break;
+
+      case "animations":
+        updateSetting("animations", !settings.animations);
+        break;
+
+      case "language":
+        updateSetting(
+          "language",
+          settings.language === "Français" ? "English" : "Français"
+        );
+        break;
+
+      case "autoPlay":
+        updateSetting(
+          "autoPlay",
+          settings.autoPlay === "Wi-Fi uniquement"
+            ? "Toujours"
+            : settings.autoPlay === "Toujours"
+            ? "Jamais"
+            : "Wi-Fi uniquement"
+        );
+        break;
+
+      case "textSize":
+        updateSetting(
+          "textSize",
+          settings.textSize === "Normale"
+            ? "Grande"
+            : settings.textSize === "Grande"
+            ? "Petite"
+            : "Normale"
+        );
+        break;
+    }
+  };
 
   return (
     <Card className="bg-gray-900 border-gray-800 p-6">
@@ -18,11 +123,14 @@ export default function DisplaySettings() {
       </h2>
 
       <div className="space-y-1">
-        {settings.map((item, index) => (
-          <button 
-            key={item.label}
+        {items.map((item, index) => (
+          <button
+            key={item.key}
+            onClick={() => handleClick(item.key)}
             className={`w-full flex items-center justify-between p-4 hover:bg-white/5 transition ${
-              index !== settings.length - 1 ? "border-b border-gray-800" : ""
+              index !== items.length - 1
+                ? "border-b border-gray-800"
+                : ""
             }`}
           >
             <div className="flex items-center gap-3">
