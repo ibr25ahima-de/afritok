@@ -1,0 +1,91 @@
+import { User, Phone, Mail, LogOut, Trash2 } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+
+interface Props {
+  user: any;
+  isLoading: boolean;
+  handleLogout: () => void;
+  handleDeleteAccount: () => void;
+}
+
+export default function AccountSettings({
+  user,
+  isLoading,
+  handleLogout,
+  handleDeleteAccount,
+}: Props) {
+  return (
+    <div className="space-y-6">
+
+      <Card className="bg-gray-900 border-gray-800 p-6">
+        <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+          <User size={20} className="text-purple-400" />
+          Informations du compte
+        </h2>
+
+        <div className="space-y-1">
+
+          <div className="flex items-center justify-between p-4 border-b border-gray-800">
+            <div className="flex items-center gap-3">
+              <User size={18} />
+              <span>Nom</span>
+            </div>
+
+            <span>{user?.name || "Non défini"}</span>
+          </div>
+
+          <div className="flex items-center justify-between p-4 border-b border-gray-800">
+            <div className="flex items-center gap-3">
+              <Phone size={18} />
+              <span>Téléphone</span>
+            </div>
+
+            <span>{user?.phone || "Non défini"}</span>
+          </div>
+
+          <div className="flex items-center justify-between p-4">
+            <div className="flex items-center gap-3">
+              <Mail size={18} />
+              <span>Email</span>
+            </div>
+
+            <span>{user?.email || "Non défini"}</span>
+          </div>
+
+        </div>
+      </Card>
+
+      <Card className="bg-gray-900 border-gray-800 p-6">
+        <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+          <LogOut size={20} className="text-orange-400" />
+          Déconnexion
+        </h2>
+
+        <Button
+          onClick={handleLogout}
+          disabled={isLoading}
+          className="w-full"
+        >
+          Déconnexion
+        </Button>
+      </Card>
+
+      <Card className="bg-red-950/20 border-red-900/50 p-6">
+        <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-red-500">
+          <Trash2 size={20} />
+          Zone de danger
+        </h2>
+
+        <Button
+          onClick={handleDeleteAccount}
+          disabled={isLoading}
+          className="w-full bg-red-600 hover:bg-red-700"
+        >
+          Supprimer le compte
+        </Button>
+      </Card>
+
+    </div>
+  );
+}
