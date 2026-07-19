@@ -1,17 +1,21 @@
 import { router, publicProcedure } from "./_core/trpc";
-import { db } from "./db";
-import { music } from "../drizzle/schema";
-import { eq, desc, ilike } from "drizzle-orm";
+import { storageList } from "./storage";
 import { z } from "zod";
 
 export const musicRouter = router({
   getTrending: publicProcedure.query(async () => {
-    return await db
-      .select()
-      .from(music)
-      .where(eq(music.isActive, true))
-      .orderBy(desc(music.plays))
-      .limit(50);
+    const files = await storageList("music");
+
+    return files.map((file, index) => ({
+      id: String(index + 1),
+      title: file.name.replace(".mp3", ""),
+      artist: "Afritok",
+      audioUrl: file.url,
+      category: "popular",
+      duration: 0,
+      plays: 0,
+      isActive: true,
+    }));
   }),
 
   getByTab: publicProcedure
@@ -20,43 +24,19 @@ export const musicRouter = router({
         tab: z.enum(["popular", "forYou", "favorites", "recent"]),
       })
     )
-    .query(async ({ input }) => {
-      switch (input.tab) {
-        case "popular":
-          return await db
-            .select()
-            .from(music)
-            .where(eq(music.isActive, true))
-            .orderBy(desc(music.plays))
-            .limit(50);
+    .query(async () => {
+      const files = await storageList("music");
 
-        case "recent":
-          return await db
-            .select()
-            .from(music)
-            .where(eq(music.isActive, true))
-            .orderBy(desc(music.createdAt))
-            .limit(50);
-
-        case "forYou":
-          return await db
-            .select()
-            .from(music)
-            .where(eq(music.isActive, true))
-            .orderBy(desc(music.plays))
-            .limit(50);
-
-        case "favorites":
-          return await db
-            .select()
-            .from(music)
-            .where(eq(music.isActive, true))
-            .orderBy(desc(music.plays))
-            .limit(50);
-
-        default:
-          return [];
-      }
+      return files.map((file, index) => ({
+        id: String(index + 1),
+        title: file.name.replace(".mp3", ""),
+        artist: "Afritok",
+        audioUrl: file.url,
+        category: "popular",
+        duration: 0,
+        plays: 0,
+        isActive: true,
+      }));
     }),
 
   search: publicProcedure
@@ -66,9 +46,21 @@ export const musicRouter = router({
       })
     )
     .query(async ({ input }) => {
-      return await db
-        .select()
-        .from(music)
-        .where(ilike(music.title, `%${input.query}%`));
+      const files = await storageList("music");
+
+      return files
+        .filter((file) =>
+          file.name.toLowerCase().includes(input.query.toLowerCase())
+        )
+        .map((file, index) => ({
+          id: String(index + 1),
+          title: file.name.replace(".mp3", ""),
+          artist: "Afritok",
+          audioUrl: file.url,
+          category: "popular",
+          duration: 0,
+          plays: 0,
+          isActive: true,
+        }));
     }),
 });
