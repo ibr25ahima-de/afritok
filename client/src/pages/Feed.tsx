@@ -48,7 +48,7 @@ export default function Feed() {
 
   // ✅ NOUVEAU SYSTÈME DE FEED (trpc.feed.getFeed)
   const { data: trpcVideos, isLoading: trpcLoading } = trpc.feed.getFeed.useQuery({
-    limit: 10,
+    limit: 1000,
     offset: 0,
   });
 
