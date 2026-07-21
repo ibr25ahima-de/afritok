@@ -6,7 +6,7 @@ export const feedRouter = router({
   getFeed: publicProcedure
     .input(
       z.object({
-        limit: z.number().default(10),
+        limit: z.number().default(1000),
         offset: z.number().default(0),
       })
     )
