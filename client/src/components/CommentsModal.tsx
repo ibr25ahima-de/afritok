@@ -66,7 +66,7 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
 
   return (
     <div className="fixed inset-0 bg-black/80 z-50 flex items-end">
-      <div className="bg-slate-900 w-full h-[85vh] flex flex-col rounded-t-lg">
+      <div className="bg-slate-900 w-full h-[70vh] flex flex-col rounded-t-lg shadow-2xl">
 
         {/* Header */}
         <div className="border-b border-purple-800/30 p-4 flex items-center justify-between">
@@ -112,28 +112,30 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
         </div>
 
         {/* Comment Input */}
-        <div className="border-t border-purple-800/30 p-4 flex gap-2">
-          <input
-            type="text"
-            value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
-            placeholder="Add a comment..."
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                handleSubmitComment();
-              }
-            }}
-            className="flex-1 bg-slate-800 border border-purple-800/50 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-purple-600 text-sm"
-          />
-
-          <Button
-            onClick={handleSubmitComment}
-            disabled={!newComment.trim() || createCommentMutation.isPending}
-            className="bg-purple-600 hover:bg-purple-700 text-white p-2"
-          >
-            <Send className="w-4 h-4" />
-          </Button>
-        </div>
+        <div className="border-t border-purple-800/30 p-4 bg-slate-900 sticky bottom-0">
+  <div className="flex items-center gap-2 bg-slate-800 border border-purple-800/50 rounded-full px-4 py-1">
+    <input
+      type="text"
+      value={newComment}
+      onChange={(e) => setNewComment(e.target.value)}
+      placeholder="Add a comment..."
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          handleSubmitComment();
+        }
+      }}
+      className="flex-1 bg-transparent border-none text-white placeholder-gray-500 focus:outline-none text-sm py-2"
+    />
+    <button
+      onClick={handleSubmitComment}
+      disabled={!newComment.trim() || createCommentMutation.isPending}
+      className="text-purple-400 hover:text-purple-300 disabled:text-gray-600 p-1"
+    >
+      <Send className="w-5 h-5" />
+    </button>
+  </div>
+</div>
+        
 
       </div>
     </div>
