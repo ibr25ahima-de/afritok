@@ -38,10 +38,9 @@ export const users = pgTable("users", {
   country: varchar("country", { length: 64 }),
   currency: varchar("currency", { length: 3 }).default("USD"),
 
-  totalEarnings: integer("totalEarnings").default(0),
-  totalWithdrawals: integer("totalWithdrawals").default(0),
-
-  // =====================
+  totalEarnings: numeric("totalEarnings", { precision: 10, scale: 4 }).default("0"),
+totalWithdrawals: numeric("totalWithdrawals", { precision: 10, scale: 4 }).default("0"),
+// =====================
   // PRIVACY
   // =====================
   profilePublic: boolean("profilePublic").default(true).notNull(),
