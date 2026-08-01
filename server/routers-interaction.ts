@@ -93,7 +93,7 @@ export const commentRouter = router({
         .set({ comments: (video.comments || 0) + 1 })
         .where(eq(videos.id, input.videoId));
 
-      const earning = await recordCommentEarning(user.id, input.videoId, input.text.length);
+      const earning = await recordCommentEarning(user.id, input.videoId);
 
       return {
         success: true,
