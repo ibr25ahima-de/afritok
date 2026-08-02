@@ -22,6 +22,9 @@ export const dashboardRouter = router({
   getDashboardStats: protectedProcedure.query(async ({ ctx }) => {
     console.log("===== DASHBOARD =====");
     console.log("Utilisateur :", ctx.user);
+   console.log("ROLE =", ctx.user?.role);
+console.log("ID =", ctx.user?.id);
+console.log("PHONE =", ctx.user?.phone);
     if (!ctx.user || ctx.user.role !== "admin") {
       throw new TRPCError({ code: "FORBIDDEN" });
     }
