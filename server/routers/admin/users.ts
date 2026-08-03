@@ -117,5 +117,31 @@ export const usersRouter = router({
         .where(eq(users.id, input.userId));
 
       return { success: true };
+        }),
+
+  /**
+   * 👤 Voir les détails d'un utilisateur
+   */
+  getUserDetails: protectedProcedure
+    .input((val: { userId: number }) => val)
+    .query(async ({ ctx, input }) => {
+      if (!ctx.user || ctx.user.role !== "admin") {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      const user = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, input.userId))
+        .then((rows) => rows[0]);
+
+      if (!user) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Utilisateur introuvable",
+        });
+      }
+
+      return user;
     }),
 });
