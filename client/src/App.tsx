@@ -11,6 +11,7 @@ import Profile from "./pages/Profile";
 import Monetization from "./pages/Monetization";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminMusic from "./pages/AdminMusic";
+import UserDetails from "./pages/admin/UserDetails";
 import Upload from "./pages/Upload";
 import Publish from "./pages/Publish";
 import Search from "./pages/Search";
@@ -93,7 +94,9 @@ function Router() {
       <Route path="/admin/music">
         {(params) => <AdminRoute component={AdminMusic} {...params} />}
       </Route>
-
+<Route path="/admin/users/:userId">
+  {(params) => <AdminRoute component={UserDetails} {...params} />}
+</Route>
       {/* Errors */}
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
