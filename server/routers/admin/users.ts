@@ -119,26 +119,3 @@ export const usersRouter = router({
       return { success: true };
     }),
 });
-/**
- * 👤 Voir les détails d'un utilisateur
- */
-getUserDetails: protectedProcedure
-  .input((val: { userId: number }) => val)
-  .query(async ({ ctx, input }) => {
-    if (!ctx.user || ctx.user.role !== "admin") {
-      throw new TRPCError({ code: "FORBIDDEN" });
-    }
-
-    const user = await db.query.users.findFirst({
-      where: eq(users.id, input.userId),
-    });
-
-    if (!user) {
-      throw new TRPCError({
-        code: "NOT_FOUND",
-        message: "Utilisateur introuvable",
-      });
-    }
-
-    return user;
-  }),
