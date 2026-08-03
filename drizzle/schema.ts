@@ -323,7 +323,10 @@ export const withdrawals = pgTable("withdrawals", {
   id: serial("id").primaryKey(),
   userId: integer("userId").notNull(),
 
-  amount: integer("amount").notNull(),
+  amount: numeric("amount", {
+  precision: 12,
+  scale: 4,
+}).notNull(),
   paymentMethod: varchar("paymentMethod", { length: 50 }).notNull(),
 
   phone: varchar("phone", { length: 20 }).notNull(), // ✅ AJOUT IMPORTANT
