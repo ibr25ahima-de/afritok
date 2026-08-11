@@ -3,10 +3,10 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { db } from "../../db";
 import {
-  microEarnings,
+  earnings,
   platformWithdrawals,
 } from "../../../drizzle/schema";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { eq, sql, desc } from "drizzle-orm";
 
 const ADMIN_ID = 1;
 
@@ -19,11 +19,13 @@ function safeParse(value: unknown): number {
 }
 
 export const financeRouter = router({
+
   // ============================================
   // 💰 SOLDE AFritok
   // ============================================
 
   getPlatformBalance: protectedProcedure.query(async ({ ctx }) => {
+
     if (!ctx.user || ctx.user.role !== "admin") {
       throw new TRPCError({
         code: "FORBIDDEN",
@@ -31,30 +33,36 @@ export const financeRouter = router({
       });
     }
 
-    // 💰 Total gagné par AfriTok
+    // ==========================================
+    // 💰 PART AFritok
+    // Même source que le Dashboard
+    // ==========================================
+
     const earningsResult = await db
       .select({
         total: sql<string>`
           COALESCE(
-            SUM(CAST(${microEarnings.amount} AS double precision)),
+            SUM(
+              CAST(${earnings.amount} AS double precision)
+            ),
             0
           )
         `,
       })
-      .from(microEarnings)
-      .where(
-        and(
-          eq(microEarnings.userId, ADMIN_ID),
-          eq(microEarnings.type, "platform_fee")
-        )
-      );
+      .from(earnings)
+      .where(eq(earnings.userId, ADMIN_ID));
 
-    // 💸 Total déjà retiré par le propriétaire
+    // ==========================================
+    // 💸 RETRAITS AFritok DÉJÀ PAYÉS
+    // ==========================================
+
     const withdrawalsResult = await db
       .select({
         total: sql<string>`
           COALESCE(
-            SUM(CAST(${platformWithdrawals.amount} AS double precision)),
+            SUM(
+              CAST(${platformWithdrawals.amount} AS double precision)
+            ),
             0
           )
         `,
@@ -62,10 +70,18 @@ export const financeRouter = router({
       .from(platformWithdrawals)
       .where(eq(platformWithdrawals.status, "paid"));
 
-    const totalEarned = safeParse(earningsResult[0]?.total);
-    const totalWithdrawn = safeParse(withdrawalsResult[0]?.total);
+    const totalEarned = safeParse(
+      earningsResult[0]?.total
+    );
 
-    const available = Math.max(0, totalEarned - totalWithdrawn);
+    const totalWithdrawn = safeParse(
+      withdrawalsResult[0]?.total
+    );
+
+    const available = Math.max(
+      0,
+      totalEarned - totalWithdrawn
+    );
 
     return {
       totalEarned,
@@ -79,6 +95,7 @@ export const financeRouter = router({
   // ============================================
 
   requestPlatformWithdrawal: protectedProcedure
+
     .input(
       z.object({
         amount: z.number().positive(),
@@ -86,7 +103,9 @@ export const financeRouter = router({
         phone: z.string().min(8),
       })
     )
+
     .mutation(async ({ ctx, input }) => {
+
       if (!ctx.user || ctx.user.role !== "admin") {
         throw new TRPCError({
           code: "FORBIDDEN",
@@ -94,29 +113,31 @@ export const financeRouter = router({
         });
       }
 
-      // Récupérer le solde actuel
+      // ========================================
+      // 💰 RÉCUPÉRER LE SOLDE AFritok
+      // ========================================
+
       const earningsResult = await db
         .select({
           total: sql<string>`
             COALESCE(
-              SUM(CAST(${microEarnings.amount} AS double precision)),
+              SUM(
+                CAST(${earnings.amount} AS double precision)
+              ),
               0
             )
           `,
         })
-        .from(microEarnings)
-        .where(
-          and(
-            eq(microEarnings.userId, ADMIN_ID),
-            eq(microEarnings.type, "platform_fee")
-          )
-        );
+        .from(earnings)
+        .where(eq(earnings.userId, ADMIN_ID));
 
       const withdrawalsResult = await db
         .select({
           total: sql<string>`
             COALESCE(
-              SUM(CAST(${platformWithdrawals.amount} AS double precision)),
+              SUM(
+                CAST(${platformWithdrawals.amount} AS double precision)
+              ),
               0
             )
           `,
@@ -124,17 +145,34 @@ export const financeRouter = router({
         .from(platformWithdrawals)
         .where(eq(platformWithdrawals.status, "paid"));
 
-      const totalEarned = safeParse(earningsResult[0]?.total);
-      const totalWithdrawn = safeParse(withdrawalsResult[0]?.total);
+      const totalEarned = safeParse(
+        earningsResult[0]?.total
+      );
 
-      const available = Math.max(0, totalEarned - totalWithdrawn);
+      const totalWithdrawn = safeParse(
+        withdrawalsResult[0]?.total
+      );
+
+      const available = Math.max(
+        0,
+        totalEarned - totalWithdrawn
+      );
+
+      // ========================================
+      // ❌ SOLDE INSUFFISANT
+      // ========================================
 
       if (input.amount > available) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: `Solde insuffisant. Disponible : ${available.toFixed(2)} $`,
+          message:
+            `Solde insuffisant. Disponible : ${available.toFixed(2)} $`,
         });
       }
+
+      // ========================================
+      // 💸 CRÉER LA DEMANDE DE RETRAIT
+      // ========================================
 
       const withdrawal = await db
         .insert(platformWithdrawals)
@@ -156,17 +194,22 @@ export const financeRouter = router({
   // 📋 HISTORIQUE DES RETRAITS AFritok
   // ============================================
 
-  getPlatformWithdrawals: protectedProcedure.query(async ({ ctx }) => {
-    if (!ctx.user || ctx.user.role !== "admin") {
-      throw new TRPCError({
-        code: "FORBIDDEN",
-        message: "Accès réservé aux administrateurs.",
-      });
-    }
+  getPlatformWithdrawals: protectedProcedure.query(
+    async ({ ctx }) => {
 
-    return await db
-      .select()
-      .from(platformWithdrawals)
-      .orderBy(desc(platformWithdrawals.createdAt));
-  }),
+      if (!ctx.user || ctx.user.role !== "admin") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Accès réservé aux administrateurs.",
+        });
+      }
+
+      return await db
+        .select()
+        .from(platformWithdrawals)
+        .orderBy(
+          desc(platformWithdrawals.createdAt)
+        );
+    }
+  ),
 });
