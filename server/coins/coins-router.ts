@@ -10,7 +10,7 @@ import {
 import {
   getActiveGifts,
   sendGift,
-} from "./gifts";
+} from "./gifts-service";
 
 /**
  * ============================================
