@@ -131,7 +131,18 @@ export const walletTransactions = pgTable(
     referenceId: varchar("referenceId", {
       length: 150,
     }),
-
+/**
+ * État de l'opération.
+ *
+ * pending  = paiement en attente
+ * success  = paiement confirmé
+ * failed   = paiement échoué
+ */
+status: varchar("status", {
+  length: 20,
+})
+  .default("pending")
+  .notNull(),
     /**
      * orange_money
      * mtn_money
