@@ -28,6 +28,7 @@ import Balance from "./pages/Balance";
 import QRCode from "./pages/QRCode";
 import Wallet from "./pages/Wallet";
 import Coins from "./pages/Coins";
+import Gifts from "./pages/Gifts";
 /* ✅ NEW Routenavigation pages */
 import Discover from "./pages/Discover";
 import Inbox from "./pages/Inbox";
@@ -74,6 +75,7 @@ function Router() {
       <Route path="/inbox" component={Inbox} />
       <Route path="/profile/:userId" component={Profile} />
       <Route path="/profile" component={Profile} />
+      <Route path="/gifts" component={Gifts} />
       <Route path="/audio/:videoId" component={AudioDetail} /> {/* 👈 AJOUTÉ ICI */}
       
       {/* Features */}
