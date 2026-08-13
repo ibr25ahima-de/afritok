@@ -130,4 +130,4 @@ function App() {
   );
 }
 
-export dedefaultpp;
+export default App;
