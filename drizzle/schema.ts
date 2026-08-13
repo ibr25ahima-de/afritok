@@ -479,3 +479,4 @@ export const warningsRelations = relations(warnings, ({ one }) => ({
 }));
 
 export * from "./schema-coins";
+export * from "./schema-gifts";
