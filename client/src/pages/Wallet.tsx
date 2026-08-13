@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
-
+import { WalletTopUp } from "@/components/WalletTopUp";
 export default function Wallet() {
   const [showRecharge, setShowRecharge] = useState(false);
 
@@ -56,8 +56,7 @@ export default function Wallet() {
             </h2>
 
             <p className="text-sm text-muted-foreground mt-2">
-              Le choix de l'opérateur et le paiement
-              Mobile Money seront ajoutés à l'étape suivante.
+              <WalletTopUp />
             </p>
           </div>
         )}
