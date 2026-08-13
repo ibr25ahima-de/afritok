@@ -1,0 +1,172 @@
+import { useState } from "react";
+import { trpc } from "@/lib/trpc";
+
+type WalletPaymentProps = {
+  operator: string;
+  amount: number;
+  onBack: () => void;
+};
+
+const OPERATOR_NAMES: Record<string, string> = {
+  orange: "Orange Money",
+  mtn: "MTN Mobile Money",
+  moov: "Moov Money",
+  wave: "Wave",
+};
+
+export function WalletPayment({
+  operator,
+  amount,
+  onBack,
+}: WalletPaymentProps) {
+  const [phone, setPhone] = useState("");
+  const [error, setError] = useState("");
+
+  const prepareRecharge =
+    trpc.wallet.prepareRecharge.useMutation();
+
+  const isValidPhone =
+    phone.replace(/\D/g, "").length >= 8;
+
+  const handlePayment = async () => {
+    if (!isValidPhone) {
+      setError("Entre un numéro de téléphone valide.");
+      return;
+    }
+
+    setError("");
+
+    try {
+      const result =
+        await prepareRecharge.mutateAsync({
+          operator: operator as
+            | "orange"
+            | "mtn"
+            | "moov"
+            | "wave",
+
+          amount,
+
+          phone: phone.trim(),
+        });
+
+      if (result.success) {
+        alert(
+          `Recharge préparée : ${result.amount.toLocaleString(
+            "fr-FR"
+          )} XOF avec ${
+            OPERATOR_NAMES[result.operator] ??
+            result.operator
+          }.`
+        );
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Impossible de préparer la recharge."
+      );
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <button
+          type="button"
+          onClick={onBack}
+          className="text-gray-400 hover:text-white text-sm"
+        >
+          ← Modifier la recharge
+        </button>
+      </div>
+
+      <div>
+        <h2 className="text-xl font-bold text-white">
+          Confirmer le paiement
+        </h2>
+
+        <p className="text-gray-400 text-sm mt-1">
+          Vérifie les informations avant de continuer.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-white/10 bg-white/5 p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <span className="text-gray-400">
+            Opérateur
+          </span>
+
+          <span className="text-white font-semibold">
+            {OPERATOR_NAMES[operator] ?? operator}
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <span className="text-gray-400">
+            Montant
+          </span>
+
+          <span className="text-white font-bold text-lg">
+            {amount.toLocaleString("fr-FR")} XOF
+          </span>
+        </div>
+      </div>
+
+      <div>
+        <label
+          htmlFor="walletPaymentPhone"
+          className="text-white font-semibold block mb-3"
+        >
+          Numéro de téléphone
+        </label>
+
+        <input
+          id="walletPaymentPhone"
+          type="tel"
+          inputMode="tel"
+          value={phone}
+          onChange={(event) => {
+            setPhone(event.target.value);
+            setError("");
+          }}
+          placeholder="Exemple : 05 00 00 00 00"
+          className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-4 text-white outline-none focus:border-green-400"
+        />
+
+        {!isValidPhone && phone.length > 0 && (
+          <p className="text-red-400 text-sm mt-2">
+            Entre un numéro de téléphone valide.
+          </p>
+        )}
+      </div>
+
+      {error && (
+        <p className="text-red-400 text-sm">
+          {error}
+        </p>
+      )}
+
+      <button
+        type="button"
+        disabled={
+          !isValidPhone ||
+          prepareRecharge.isPending
+        }
+        onClick={handlePayment}
+        className="w-full rounded-xl bg-green-500 py-4 text-white font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        {prepareRecharge.isPending
+          ? "Préparation..."
+          : `Payer ${amount.toLocaleString(
+              "fr-FR"
+            )} XOF`}
+      </button>
+
+      <p className="text-center text-gray-500 text-xs">
+        Le paiement Mobile Money réel sera connecté
+        ensuite.
+      </p>
+    </div>
+  );
+}
