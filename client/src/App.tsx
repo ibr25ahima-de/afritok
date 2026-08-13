@@ -26,7 +26,7 @@ import InstantWithdraw from "./pages/InstantWithdraw";
 import AfritokStudio from "./pages/AfritokStudio";
 import Balance from "./pages/Balance";
 import QRCode from "./pages/QRCode";
-
+import Coins from "./pages/Coins";
 /* ✅ NEW TikTok navigation pages */
 import Discover from "./pages/Discover";
 import Inbox from "./pages/Inbox";
@@ -86,6 +86,7 @@ function Router() {
       <Route path="/instant-withdraw" component={InstantWithdraw} />
       <Route path="/afritok-studio" component={AfritokStudio} />
       <Route path="/balance" component={Balance} />
+     <Route path="/coins" component={Coins} />
       <Route path="/qr-code" component={QRCode} />
 
       {/* Admin Routes - Déclarées explicitement avec protection */}
