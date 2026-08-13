@@ -5,7 +5,7 @@ import { useLocation, useRoute } from "wouter";
 import { ArrowLeft, Play, Heart, MessageCircle, Share2, MapPin, Edit3, UserPlus, UserCheck, MoreVertical, Flame, Lock, Share, Flag, Eye } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-
+import { Coins } from "lucide-react";
 interface Video {
 id: number;
 userId: number;
