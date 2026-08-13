@@ -1,11 +1,15 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { WalletTopUp } from "@/components/WalletTopUp";
+
 export default function Wallet() {
   const [showRecharge, setShowRecharge] = useState(false);
 
   const { data: wallet, isLoading } =
     trpc.wallet.getBalance.useQuery();
+
+  const { data: transactions } =
+    trpc.wallet.getTransactions.useQuery();
 
   if (isLoading) {
     return (
@@ -43,7 +47,7 @@ export default function Wallet() {
 
         <button
           type="button"
-          onClick={() => setShowRecharge(true)}
+          onClick={() => setShowRecharge(!showRecharge)}
           className="w-full rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground"
         >
           + Recharger mon portefeuille
@@ -51,17 +55,65 @@ export default function Wallet() {
 
         {showRecharge && (
           <div className="rounded-2xl border p-5">
-            <h2 className="text-lg font-semibold">
-              Recharger mon portefeuille
-            </h2>
-
-            <p className="text-sm text-muted-foreground mt-2">
-              <WalletTopUp />
-            </p>
+            <WalletTopUp />
           </div>
         )}
+
+        <div className="rounded-2xl border p-5">
+          <h2 className="text-lg font-bold">
+            Historique de mes opérations
+          </h2>
+
+          {!transactions || transactions.length === 0 ? (
+            <p className="text-sm text-muted-foreground mt-4">
+              Aucune opération pour le moment.
+            </p>
+          ) : (
+            <div className="mt-4 space-y-3">
+              {transactions.map((transaction) => (
+                <div
+                  key={transaction.id}
+                  className="rounded-xl border p-4"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold">
+                      {transaction.type === "deposit"
+                        ? "Recharge"
+                        : transaction.type}
+                    </span>
+
+                    <span className="font-bold">
+                      {Number(
+                        transaction.amount
+                      ).toLocaleString("fr-FR")}{" "}
+                      XOF
+                    </span>
+                  </div>
+
+                  <div className="mt-2 text-sm text-muted-foreground">
+                    {transaction.paymentMethod && (
+                      <p>
+                        Opérateur :{" "}
+                        {transaction.paymentMethod}
+                      </p>
+                    )}
+
+                    <p>
+                      Statut :{" "}
+                      {transaction.status === "pending"
+                        ? "En attente"
+                        : transaction.status === "success"
+                          ? "Réussi"
+                          : "Échoué"}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
       </div>
     </div>
   );
-}
+            }
