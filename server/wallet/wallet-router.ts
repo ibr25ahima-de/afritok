@@ -1,4 +1,5 @@
 import { router, protectedProcedure } from "../_core/trpc";
+import { z } from "zod";
 
 import {
   getUserWallet,
@@ -12,16 +13,21 @@ import {
  *
  * Routes du portefeuille XOF.
  *
- * Pour cette première étape :
- *
  * ✅ récupérer le portefeuille
  * ✅ récupérer le solde
+ * ✅ préparer une recharge
  *
- * ❌ recharge Mobile Money
- * ❌ achat de Coins
+ * ❌ paiement Mobile Money réel
  *
- * Ces parties viendront après.
+ * Le paiement réel sera connecté ensuite.
  */
+
+const MOBILE_MONEY_OPERATORS = [
+  "orange",
+  "mtn",
+  "moov",
+  "wave",
+] as const;
 
 export const walletRouter = router({
 
@@ -80,4 +86,59 @@ export const walletRouter = router({
       };
     }
   ),
+
+  /**
+   * ========================================================
+   * 📱 PRÉPARER UNE RECHARGE
+   * ========================================================
+   *
+   * Cette route ne fait PAS encore de paiement réel.
+   *
+   * Elle vérifie simplement les informations envoyées
+   * par l'utilisateur avant la connexion Mobile Money.
+   */
+
+  prepareRecharge: protectedProcedure
+    .input(
+      z.object({
+        operator: z.enum(
+          MOBILE_MONEY_OPERATORS
+        ),
+
+        amount: z
+          .number()
+          .int()
+          .min(
+            1000,
+            "Le montant minimum est de 1 000 XOF."
+          ),
+
+        phone: z
+          .string()
+          .min(
+            8,
+            "Numéro de téléphone invalide."
+          ),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      return {
+        success: true,
+
+        userId: ctx.user.id,
+
+        operator: input.operator,
+
+        amount: input.amount,
+
+        currency: "XOF",
+
+        phone: input.phone,
+
+        status: "pending",
+
+        message:
+          "Recharge prête pour le paiement Mobile Money.",
+      };
+    }),
 });
