@@ -1310,7 +1310,75 @@ export function applyBeautyEffects(
     );
   }
 
-  if (
+    if (
     (config.brightenSkin ?? 0) > 0
   ) {
-    applyBrightenSki
+    applyBrightenSkin(
+      ctx,
+      landmarks,
+      width,
+      height,
+      config.brightenSkin ?? 0
+    );
+  }
+
+  if (
+    (config.enlargeEyes ?? 0) > 0
+  ) {
+    applyEnlargeEyes(
+      ctx,
+      landmarks,
+      width,
+      height,
+      config.enlargeEyes ?? 0
+    );
+  }
+
+  if (
+    (config.slimFace ?? 0) > 0
+  ) {
+    applySlimFace(
+      ctx,
+      landmarks,
+      width,
+      height,
+      config.slimFace ?? 0
+    );
+  }
+
+  if (
+    (config.whitenTeeth ?? 0) > 0
+  ) {
+    applyWhitenTeeth(
+      ctx,
+      landmarks,
+      width,
+      height,
+      config.whitenTeeth ?? 0
+    );
+  }
+
+  if (
+    (config.enlargeLips ?? 0) > 0
+  ) {
+    applyEnlargeLips(
+      ctx,
+      landmarks,
+      width,
+      height,
+      config.enlargeLips ?? 0
+    );
+  }
+
+  if (
+    (config.symmetry ?? 0) > 0
+  ) {
+    applySymmetry(
+      ctx,
+      landmarks,
+      width,
+      height,
+      config.symmetry ?? 0
+    );
+  }
+}
