@@ -14,7 +14,7 @@ import { runMigrations } from "./migrate";
 import { uploadVideoToSupabase } from "../supabase-storage";
 import { getUserEarnings, getPlatformStats } from "../db";
 import { exec } from "child_process";
-
+import paymentWebhookRouter from "../payments/payment-webhook-router";
 const upload = multer({ 
   storage: multer.memoryStorage(),
   limits: { fileSize: 100 * 1024 * 1024 }
@@ -60,7 +60,7 @@ async function startServer() {
 
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
-
+app.use("/api/payments", paymentWebhookRouter);
   app.post(
     "/api/upload-avatar",
     upload.single("file"),
