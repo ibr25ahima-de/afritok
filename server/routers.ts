@@ -19,6 +19,7 @@ import { giftRouter } from "./gifts/gift-router";
 import { walletRouter } from "./wallet/wallet-router";
 import { paymentRouter } from "./payments/payment-router";
 import { platformFinanceRouter } from "./platform-finance-router";
+import paymentWebhookRouter from "./payments/payment-webhook-router";
 import {
   recordWatchEarning,
 } from "./micro-earnings";
