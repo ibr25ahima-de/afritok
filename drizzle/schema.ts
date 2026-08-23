@@ -487,3 +487,4 @@ export * from "./schema-gifts";
  */
 
 export * from "./schema-platform-finance";
+export * from "./schema-creator-finance";
