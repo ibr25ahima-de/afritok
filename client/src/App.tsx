@@ -29,27 +29,23 @@ import QRCode from "./pages/QRCode";
 import Wallet from "./pages/Wallet";
 import Coins from "./pages/Coins";
 import Gifts from "./pages/Gifts";
-/* ✅ NEW Routenavigation pages */
 import Discover from "./pages/Discover";
 import Inbox from "./pages/Inbox";
-import AudioDetail from "./pages/AudioDetail"; // 👈 AJOUTÉ
+import AudioDetail from "./pages/AudioDetail";
+import Advertising from "./pages/Advertising";
 
 import { useAuth } from "./_core/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 
-// Composant pour protéger les routes admin
 function AdminRoute({ component: Component, ...rest }: any) {
   const { user, loading } = useAuth();
-
   if (loading) return null;
   if (user?.role !== "admin") return <Redirect to="/feed" />;
-
   return <Component {...rest} />;
 }
 
 function Router() {
   const { loading } = useAuth();
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
@@ -63,11 +59,8 @@ function Router() {
 
   return (
     <Switch>
-      {/* Public */}
       <Route path="/" component={Home} />
       <Route path="/login" component={Login} />
-
-      {/* TikTok main */}
       <Route path="/feed" component={Feed} />
       <Route path="/discover" component={Discover} />
       <Route path="/upload/:videoId?" component={Upload} />
@@ -76,9 +69,8 @@ function Router() {
       <Route path="/profile/:userId" component={Profile} />
       <Route path="/profile" component={Profile} />
       <Route path="/gifts" component={Gifts} />
-      <Route path="/audio/:videoId" component={AudioDetail} /> {/* 👈 AJOUTÉ ICI */}
-      
-      {/* Features */}
+      <Route path="/audio/:videoId" component={AudioDetail} />
+      <Route path="/advertising" component={Advertising} />
       <Route path="/monetization" component={Monetization} />
       <Route path="/search" component={Search} />
       <Route path="/trending" component={Trending} />
@@ -89,28 +81,21 @@ function Router() {
       <Route path="/instant-withdraw" component={InstantWithdraw} />
       <Route path="/afritok-studio" component={AfritokStudio} />
       <Route path="/balance" component={Balance} />
-     <Route path="/wallet" component={Wallet} />
+      <Route path="/wallet" component={Wallet} />
       <Route path="/coins" component={Coins} />
       <Route path="/qr-code" component={QRCode} />
-
-      {/* Admin Routes - Déclarées explicitement avec protection */}
       <Route path="/admin/users/:userId">
         {(params) => <AdminRoute component={UserDetails} {...params} />}
       </Route>
-
       <Route path="/admin/music">
         {(params) => <AdminRoute component={AdminMusic} {...params} />}
       </Route>
-
       <Route path="/admin/finance">
         {(params) => <AdminRoute component={PlatformFinance} {...params} />}
       </Route>
-
       <Route path="/admin">
         {(params) => <AdminRoute component={AdminDashboard} {...params} />}
       </Route>
-
-      {/* Errors */}
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
