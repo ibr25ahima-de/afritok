@@ -33,9 +33,11 @@ import Discover from "./pages/Discover";
 import Inbox from "./pages/Inbox";
 import AudioDetail from "./pages/AudioDetail";
 import Advertising from "./pages/Advertising";
+import AdvertisingButton from "./components/AdvertisingButton";
 
 import { useAuth } from "./_core/hooks/useAuth";
 import { Loader2 } from "lucide-react";
+import { useLocation } from "wouter";
 
 function AdminRoute({ component: Component, ...rest }: any) {
   const { user, loading } = useAuth();
@@ -102,6 +104,20 @@ function Router() {
   );
 }
 
+function GlobalAdvertisingButton() {
+  const [location] = useLocation();
+
+  if (location === "/advertising" || location.startsWith("/admin")) {
+    return null;
+  }
+
+  return (
+    <div className="fixed bottom-24 right-4 z-[90]">
+      <AdvertisingButton />
+    </div>
+  );
+}
+
 function App() {
   return (
     <ErrorBoundary>
@@ -110,6 +126,7 @@ function App() {
           <TooltipProvider>
             <Toaster />
             <Router />
+            <GlobalAdvertisingButton />
           </TooltipProvider>
         </NotificationProvider>
       </ThemeProvider>
