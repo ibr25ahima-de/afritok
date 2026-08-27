@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef } from "react";
 import { FaceLandmarker, FilesetResolver, NormalizedLandmark } from "@mediapipe/tasks-vision";
 import type { AREffect } from "./EffectsPanel";
 import { applyBeautyEffects } from "./beautyEffects";
-import { smoothLandmarks } from "./faceUtils";
+import { smoothLandmarks, LM, getFaceGeometry, getPoints } from "./faceUtils";
 
 interface AREngineProps {
   videoRef: React.RefObject<HTMLVideoElement | null>;
@@ -14,20 +14,86 @@ const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/w
 const MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 const DETECTION_INTERVAL_MS = 80;
 
-// Beauté de base, toujours active comme sur les caméras sociales modernes.
-// Les effets sélectionnés peuvent renforcer ou compléter ces réglages.
+// Beauté naturelle de base : active même sans filtre sélectionné.
+// Les effets choisis peuvent ensuite renforcer ces valeurs.
 const DEFAULT_BEAUTY = {
-  smoothSkin: 0.72,
-  brightenSkin: 0.10,
+  smoothSkin: 1,
+  brightenSkin: 0.06,
   enlargeEyes: 0,
   slimFace: 0,
   whitenTeeth: 0,
   enlargeLips: 0,
-  symmetry: 0.05,
+  symmetry: 0,
 };
+
+/**
+ * Lissage beauté supplémentaire, local au visage.
+ *
+ * On travaille uniquement sur le rectangle du visage puis on le
+ * découpe avec l'ovale facial. Cela donne un rendu beaucoup plus
+ * proche d'une caméra sociale moderne sans flouter l'arrière-plan.
+ * Le canvas temporaire est réutilisé pour limiter les allocations
+ * sur téléphone.
+ */
+function applyLiveSkinPolish(
+  ctx: CanvasRenderingContext2D,
+  landmarks: NormalizedLandmark[],
+  width: number,
+  height: number,
+  buffer: HTMLCanvasElement
+) {
+  if (landmarks.length === 0) return;
+
+  const face = getFaceGeometry(landmarks, width, height);
+  const points = getPoints(landmarks, LM.faceOval, width, height);
+  if (points.length < 3) return;
+
+  const padding = Math.max(6, Math.round(Math.min(face.width, face.height) * 0.035));
+  const left = Math.max(0, Math.floor(face.left - padding));
+  const top = Math.max(0, Math.floor(face.top - padding));
+  const right = Math.min(width, Math.ceil(face.right + padding));
+  const bottom = Math.min(height, Math.ceil(face.bottom + padding));
+  const cropWidth = right - left;
+  const cropHeight = bottom - top;
+
+  if (cropWidth < 8 || cropHeight < 8) return;
+
+  if (buffer.width !== cropWidth || buffer.height !== cropHeight) {
+    buffer.width = cropWidth;
+    buffer.height = cropHeight;
+  }
+
+  const bctx = buffer.getContext("2d");
+  if (!bctx) return;
+
+  bctx.clearRect(0, 0, cropWidth, cropHeight);
+  bctx.save();
+  bctx.filter = "blur(3.2px)";
+  bctx.drawImage(ctx.canvas, left, top, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+  bctx.restore();
+
+  ctx.save();
+  ctx.beginPath();
+
+  points.forEach((point, index) => {
+    const x = point.x;
+    const y = point.y;
+    if (index === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.closePath();
+  ctx.clip();
+
+  // Mélange doux : conserve les détails du visage tout en masquant
+  // les petites imperfections et les pores trop marqués.
+  ctx.globalAlpha = 0.62;
+  ctx.drawImage(buffer, left, top);
+  ctx.restore();
+}
 
 export const AREngine: React.FC<AREngineProps> = ({ videoRef, activeEffect }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const skinBufferRef = useRef<HTMLCanvasElement | null>(null);
   const landmarkerRef = useRef<FaceLandmarker | null>(null);
   const animationRef = useRef<number | null>(null);
   const previousLandmarksRef = useRef<NormalizedLandmark[] | null>(null);
@@ -53,11 +119,7 @@ export const AREngine: React.FC<AREngineProps> = ({ videoRef, activeEffect }) =>
       const current = result.faceLandmarks?.[0];
       if (!current) return previousLandmarksRef.current;
 
-      const stable = smoothLandmarks(
-        current,
-        previousLandmarksRef.current,
-        0.30
-      );
+      const stable = smoothLandmarks(current, previousLandmarksRef.current, 0.30);
       previousLandmarksRef.current = stable;
       return stable;
     } catch (error) {
@@ -113,6 +175,7 @@ export const AREngine: React.FC<AREngineProps> = ({ videoRef, activeEffect }) =>
       landmarkerRef.current?.close();
       landmarkerRef.current = null;
       previousLandmarksRef.current = null;
+      skinBufferRef.current = null;
     };
   }, []);
 
@@ -144,13 +207,27 @@ export const AREngine: React.FC<AREngineProps> = ({ videoRef, activeEffect }) =>
     const width = canvas.width;
     const height = canvas.height;
 
-    // Le canvas est le rendu visible : caméra + beauté + effets en temps réel.
     ctx.clearRect(0, 0, width, height);
     ctx.drawImage(video, 0, 0, width, height);
 
     const landmarks = detectFace(video, performance.now());
     if (landmarks && landmarks.length > 0) {
       try {
+        // Buffer réutilisé : pas de création d'un nouveau canvas à chaque frame.
+        if (!skinBufferRef.current) {
+          skinBufferRef.current = document.createElement("canvas");
+        }
+
+        // Couche beauté naturelle toujours active.
+        applyLiveSkinPolish(
+          ctx,
+          landmarks,
+          width,
+          height,
+          skinBufferRef.current
+        );
+
+        // Puis les réglages/effets déjà présents dans AfriTok.
         const beautyConfig = {
           ...DEFAULT_BEAUTY,
           ...(activeEffect?.beautyConfig ?? {}),
