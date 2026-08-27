@@ -1,17 +1,6 @@
-import React, {
-  useCallback,
-  useEffect,
-  useRef,
-} from "react";
-
-import {
-  FaceLandmarker,
-  FilesetResolver,
-  NormalizedLandmark,
-} from "@mediapipe/tasks-vision";
-
+import React, { useCallback, useEffect, useRef } from "react";
+import { FaceLandmarker, FilesetResolver, NormalizedLandmark } from "@mediapipe/tasks-vision";
 import type { AREffect } from "./EffectsPanel";
-
 import { applyBeautyEffects } from "./beautyEffects";
 import { smoothLandmarks } from "./faceUtils";
 
@@ -21,134 +10,93 @@ interface AREngineProps {
   isRecording?: boolean;
 }
 
-const WASM_URL =
-  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm";
+const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm";
+const MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+const DETECTION_INTERVAL_MS = 80;
 
-const MODEL_URL =
-  "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
-
-const DETECTION_INTERVAL = 80;
-
-const BASE_BEAUTY_CONFIG = {
-  smoothSkin: 0.45,
-  brightenSkin: 0.15,
+// Beauté de base, toujours active comme sur les caméras sociales modernes.
+// Les effets sélectionnés peuvent renforcer ou compléter ces réglages.
+const DEFAULT_BEAUTY = {
+  smoothSkin: 0.72,
+  brightenSkin: 0.10,
   enlargeEyes: 0,
   slimFace: 0,
   whitenTeeth: 0,
   enlargeLips: 0,
-  symmetry: 0,
+  symmetry: 0.05,
 };
 
-export const AREngine: React.FC<AREngineProps> = ({
-  videoRef,
-  activeEffect,
-}) => {
-  const canvasRef =
-    useRef<HTMLCanvasElement | null>(null);
+export const AREngine: React.FC<AREngineProps> = ({ videoRef, activeEffect }) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const landmarkerRef = useRef<FaceLandmarker | null>(null);
+  const animationRef = useRef<number | null>(null);
+  const previousLandmarksRef = useRef<NormalizedLandmark[] | null>(null);
+  const lastDetectionRef = useRef(0);
+  const lastVideoTimeRef = useRef(-1);
+  const initializingRef = useRef(false);
 
-  const landmarkerRef =
-    useRef<FaceLandmarker | null>(null);
+  const detectFace = useCallback((video: HTMLVideoElement, timestamp: number) => {
+    const landmarker = landmarkerRef.current;
+    if (!landmarker) return previousLandmarksRef.current;
+    if (timestamp - lastDetectionRef.current < DETECTION_INTERVAL_MS) {
+      return previousLandmarksRef.current;
+    }
+    if (video.currentTime === lastVideoTimeRef.current) {
+      return previousLandmarksRef.current;
+    }
 
-  const animationRef =
-    useRef<number | null>(null);
+    lastVideoTimeRef.current = video.currentTime;
+    lastDetectionRef.current = timestamp;
 
-  const previousLandmarksRef =
-    useRef<NormalizedLandmark[] | null>(null);
+    try {
+      const result = landmarker.detectForVideo(video, timestamp);
+      const current = result.faceLandmarks?.[0];
+      if (!current) return previousLandmarksRef.current;
 
-  const lastDetectionRef =
-    useRef(0);
-
-  const lastVideoTimeRef =
-    useRef(-1);
-
-  const initializingRef =
-    useRef(false);
-
-  /**
-   * IMPORTANT :
-   * Aucun effet = aucun moteur AR.
-   *
-   * Le canvas est vidé et la caméra originale
-   * reste totalement naturelle.
-   */
-  const clearCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-
-    if (!canvas) return;
-
-    const ctx = canvas.getContext("2d");
-
-    if (!ctx) return;
-
-    ctx.clearRect(
-      0,
-      0,
-      canvas.width,
-      canvas.height
-    );
+      const stable = smoothLandmarks(
+        current,
+        previousLandmarksRef.current,
+        0.30
+      );
+      previousLandmarksRef.current = stable;
+      return stable;
+    } catch (error) {
+      console.error("[AREngine] Face detection error:", error);
+      return previousLandmarksRef.current;
+    }
   }, []);
 
-  /**
-   * Initialisation MediaPipe.
-   */
   useEffect(() => {
     let cancelled = false;
 
     const initialize = async () => {
-      if (initializingRef.current) {
-        return;
-      }
-
+      if (initializingRef.current) return;
       initializingRef.current = true;
 
       try {
-        const vision =
-          await FilesetResolver.forVisionTasks(
-            WASM_URL
-          );
-
+        const vision = await FilesetResolver.forVisionTasks(WASM_URL);
         if (cancelled) return;
 
-        const landmarker =
-          await FaceLandmarker.createFromOptions(
-            vision,
-            {
-              baseOptions: {
-                modelAssetPath: MODEL_URL,
-              },
-
-              runningMode: "VIDEO",
-
-              numFaces: 1,
-
-              minFaceDetectionConfidence: 0.6,
-
-              minFacePresenceConfidence: 0.6,
-
-              minTrackingConfidence: 0.7,
-
-              outputFaceBlendshapes: false,
-
-              outputFacialTransformationMatrixes: false,
-            }
-          );
+        const landmarker = await FaceLandmarker.createFromOptions(vision, {
+          baseOptions: { modelAssetPath: MODEL_URL },
+          runningMode: "VIDEO",
+          numFaces: 1,
+          minFaceDetectionConfidence: 0.55,
+          minFacePresenceConfidence: 0.55,
+          minTrackingConfidence: 0.65,
+          outputFaceBlendshapes: false,
+          outputFacialTransformationMatrixes: false,
+        });
 
         if (cancelled) {
           landmarker.close();
           return;
         }
 
-        landmarkerRef.current =
-          landmarker;
-
-        console.log(
-          "[AREngine] TikTok-style face engine ready"
-        );
+        landmarkerRef.current = landmarker;
+        console.log("[AREngine] Real-time beauty engine ready");
       } catch (error) {
-        console.error(
-          "[AREngine] MediaPipe error:",
-          error
-        );
+        console.error("[AREngine] MediaPipe initialization failed:", error);
       } finally {
         initializingRef.current = false;
       }
@@ -158,332 +106,80 @@ export const AREngine: React.FC<AREngineProps> = ({
 
     return () => {
       cancelled = true;
-
-      if (
-        animationRef.current !== null
-      ) {
-        cancelAnimationFrame(
-          animationRef.current
-        );
-
+      if (animationRef.current !== null) {
+        cancelAnimationFrame(animationRef.current);
         animationRef.current = null;
       }
-
-      if (landmarkerRef.current) {
-        landmarkerRef.current.close();
-        landmarkerRef.current = null;
-      }
-
+      landmarkerRef.current?.close();
+      landmarkerRef.current = null;
       previousLandmarksRef.current = null;
     };
   }, []);
 
-  /**
-   * Détection stable du visage.
-   *
-   * On ne cherche PAS le visage à chaque frame.
-   * MediaPipe travaille à intervalle régulier,
-   * puis smoothLandmarks stabilise le résultat.
-   */
-  const detectFace = useCallback(
-    (
-      video: HTMLVideoElement,
-      timestamp: number
-    ): NormalizedLandmark[] | null => {
-      const landmarker =
-        landmarkerRef.current;
-
-      if (!landmarker) {
-        return previousLandmarksRef.current;
-      }
-
-      /**
-       * Ne pas relancer MediaPipe trop rapidement.
-       */
-      if (
-        timestamp -
-          lastDetectionRef.current <
-        DETECTION_INTERVAL
-      ) {
-        return previousLandmarksRef.current;
-      }
-
-      /**
-       * Ne pas traiter plusieurs fois
-       * exactement la même frame vidéo.
-       */
-      if (
-        video.currentTime ===
-        lastVideoTimeRef.current
-      ) {
-        return previousLandmarksRef.current;
-      }
-
-      lastVideoTimeRef.current =
-        video.currentTime;
-
-      lastDetectionRef.current =
-        timestamp;
-
-      try {
-        const result =
-          landmarker.detectForVideo(
-            video,
-            timestamp
-          );
-
-        if (
-          !result.faceLandmarks ||
-          result.faceLandmarks.length === 0
-        ) {
-          return previousLandmarksRef.current;
-        }
-
-        const current =
-          result.faceLandmarks[0];
-
-        /**
-         * Lissage plus fort pour éviter
-         * le tremblement du visage.
-         */
-        const stable =
-          smoothLandmarks(
-            current,
-            previousLandmarksRef.current,
-            0.35
-          );
-
-        previousLandmarksRef.current =
-          stable;
-
-        return stable;
-      } catch (error) {
-        console.error(
-          "[AREngine] Face detection error:",
-          error
-        );
-
-        return previousLandmarksRef.current;
-      }
-    },
-    []
-  );
-
-  /**
-   * Boucle d'affichage.
-   */
   const renderFrame = useCallback(() => {
-    const video =
-      videoRef.current;
-
-    const canvas =
-      canvasRef.current;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
 
     if (!video || !canvas) {
-      animationRef.current =
-        requestAnimationFrame(
-          renderFrame
-        );
-
+      animationRef.current = requestAnimationFrame(renderFrame);
       return;
     }
 
-    /**
-     * SI AUCUN EFFET :
-     *
-     * On ne fait absolument rien.
-     *
-     * La vidéo <video> de CameraRecorder
-     * reste l'affichage principal.
-     */
-    if (!activeEffect) {
-      clearCanvas();
-
-      previousLandmarksRef.current =
-        null;
-
-      lastVideoTimeRef.current = -1;
-
-      animationRef.current =
-        requestAnimationFrame(
-          renderFrame
-        );
-
+    if (video.readyState < 2 || video.videoWidth <= 0 || video.videoHeight <= 0) {
+      animationRef.current = requestAnimationFrame(renderFrame);
       return;
     }
 
-    /**
-     * Attendre la caméra.
-     */
-    if (
-      video.readyState < 2 ||
-      video.videoWidth <= 0 ||
-      video.videoHeight <= 0
-    ) {
-      animationRef.current =
-        requestAnimationFrame(
-          renderFrame
-        );
-
-      return;
+    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
     }
 
-    /**
-     * Canvas aux dimensions de la caméra.
-     */
-    if (
-      canvas.width !==
-        video.videoWidth ||
-      canvas.height !==
-        video.videoHeight
-    ) {
-      canvas.width =
-        video.videoWidth;
-
-      canvas.height =
-        video.videoHeight;
-    }
-
-    const ctx =
-      canvas.getContext("2d");
-
+    const ctx = canvas.getContext("2d", { alpha: true });
     if (!ctx) {
-      animationRef.current =
-        requestAnimationFrame(
-          renderFrame
-        );
-
+      animationRef.current = requestAnimationFrame(renderFrame);
       return;
     }
 
-    const width =
-      canvas.width;
+    const width = canvas.width;
+    const height = canvas.height;
 
-    const height =
-      canvas.height;
+    // Le canvas est le rendu visible : caméra + beauté + effets en temps réel.
+    ctx.clearRect(0, 0, width, height);
+    ctx.drawImage(video, 0, 0, width, height);
 
-    /**
-     * Le canvas devient le rendu AR.
-     *
-     * On commence par recopier la caméra.
-     */
-    ctx.clearRect(
-      0,
-      0,
-      width,
-      height
-    );
+    const landmarks = detectFace(video, performance.now());
+    if (landmarks && landmarks.length > 0) {
+      try {
+        const beautyConfig = {
+          ...DEFAULT_BEAUTY,
+          ...(activeEffect?.beautyConfig ?? {}),
+        };
 
-    ctx.drawImage(
-      video,
-      0,
-      0,
-      width,
-      height
-    );
-
-    /**
-     * Détecter le visage.
-     */
-    const timestamp =
-      performance.now();
-
-    const landmarks =
-      detectFace(
-        video,
-        timestamp
-      );
-
-    /**
-     * Pas de visage :
-     * afficher simplement la caméra.
-     */
-    if (
-      !landmarks ||
-      landmarks.length === 0
-    ) {
-      animationRef.current =
-        requestAnimationFrame(
-          renderFrame
-        );
-
-      return;
+        applyBeautyEffects(ctx, landmarks, width, height, beautyConfig);
+      } catch (error) {
+        console.error("[AREngine] Beauty rendering error:", error);
+      }
     }
 
-    /**
-     * Appliquer l'effet.
-     */
-    try {
-      const beautyConfig = {
-        ...BASE_BEAUTY_CONFIG,
-        ...(activeEffect?.beautyConfig ?? {}),
-      };
+    animationRef.current = requestAnimationFrame(renderFrame);
+  }, [videoRef, activeEffect, detectFace]);
 
-      applyBeautyEffects(
-        ctx,
-        landmarks,
-        width,
-        height,
-        beautyConfig
-      );
-    } catch (error) {
-      console.error(
-        "[AREngine] Beauty effect error:",
-        error
-      );
-    }
-
-    animationRef.current =
-      requestAnimationFrame(
-        renderFrame
-      );
-  }, [
-    videoRef,
-    activeEffect,
-    detectFace,
-    clearCanvas,
-  ]);
-
-  /**
-   * Démarrer / arrêter la boucle.
-   */
   useEffect(() => {
-    animationRef.current =
-      requestAnimationFrame(
-        renderFrame
-      );
-
+    animationRef.current = requestAnimationFrame(renderFrame);
     return () => {
-      if (
-        animationRef.current !== null
-      ) {
-        cancelAnimationFrame(
-          animationRef.current
-        );
-
+      if (animationRef.current !== null) {
+        cancelAnimationFrame(animationRef.current);
         animationRef.current = null;
       }
     };
   }, [renderFrame]);
 
-  /**
-   * Le canvas est uniquement une couche AR.
-   * Il ne bloque jamais les boutons.
-   */
   return (
     <canvas
       ref={canvasRef}
-      className="
-        absolute
-        inset-0
-        w-full
-        h-full
-        pointer-events-none
-        z-20
-      "
-      style={{
-        objectFit: "cover",
-      }}
+      className="absolute inset-0 w-full h-full pointer-events-none z-20"
+      style={{ objectFit: "cover" }}
     />
   );
 };
