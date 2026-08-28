@@ -9,6 +9,7 @@ import jwt from "jsonwebtoken";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
+import { serveStatic, setupVite } from "./vite";
 import { handleStripeWebhook, testStripeWebhook } from "../webhook-endpoint";
 import { runMigrations } from "./migrate";
 import { uploadVideoToSupabase } from "../supabase-storage";
