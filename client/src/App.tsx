@@ -35,7 +35,7 @@ import AudioDetail from "./pages/AudioDetail";
 import Advertising from "./pages/Advertising";
 import AdvertisingButton from "./components/AdvertisingButton";
 import GlobalAdSlot from "./components/advertising/GlobalAdSlot";
-
+import ProfileMessageLauncher from "./components/ProfileMessageLauncher";
 import { useAuth } from "./_core/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 import { useLocation } from "wouter";
@@ -49,17 +49,7 @@ function AdminRoute({ component: Component, ...rest }: any) {
 
 function Router() {
   const { loading } = useAuth();
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-        <div className="text-center space-y-4">
-          <Loader2 className="animate-spin w-12 h-12 text-purple-500 mx-auto" />
-          <p className="text-purple-300">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
+  if (loading) return <div className="flex items-center justify-center min-h-screen bg-black text-white"><Loader2 className="animate-spin w-12 h-12" /></div>;
   return (
     <Switch>
       <Route path="/" component={Home} />
@@ -87,18 +77,10 @@ function Router() {
       <Route path="/wallet" component={Wallet} />
       <Route path="/coins" component={Coins} />
       <Route path="/qr-code" component={QRCode} />
-      <Route path="/admin/users/:userId">
-        {(params) => <AdminRoute component={UserDetails} {...params} />}
-      </Route>
-      <Route path="/admin/music">
-        {(params) => <AdminRoute component={AdminMusic} {...params} />}
-      </Route>
-      <Route path="/admin/finance">
-        {(params) => <AdminRoute component={PlatformFinance} {...params} />}
-      </Route>
-      <Route path="/admin">
-        {(params) => <AdminRoute component={AdminDashboard} {...params} />}
-      </Route>
+      <Route path="/admin/users/:userId">{(params) => <AdminRoute component={UserDetails} {...params} />}</Route>
+      <Route path="/admin/music">{(params) => <AdminRoute component={AdminMusic} {...params} />}</Route>
+      <Route path="/admin/finance">{(params) => <AdminRoute component={PlatformFinance} {...params} />}</Route>
+      <Route path="/admin">{(params) => <AdminRoute component={AdminDashboard} {...params} />}</Route>
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
@@ -107,43 +89,15 @@ function Router() {
 
 function GlobalAdvertisingButton() {
   const [location] = useLocation();
-
-  if (location === "/advertising" || location.startsWith("/admin")) {
-    return null;
-  }
-
-  return (
-    <div className="fixed bottom-24 right-4 z-[90]">
-      <AdvertisingButton />
-    </div>
-  );
+  if (location === "/advertising" || location.startsWith("/admin")) return null;
+  return <div className="fixed bottom-24 right-4 z-[90]"><AdvertisingButton /></div>;
 }
-
 function GlobalAdvertisingDisplay() {
   const [location] = useLocation();
-
-  if (location === "/advertising" || location.startsWith("/admin")) {
-    return null;
-  }
-
+  if (location === "/advertising" || location.startsWith("/admin")) return null;
   return <GlobalAdSlot />;
 }
-
 function App() {
-  return (
-    <ErrorBoundary>
-      <ThemeProvider defaultTheme="dark">
-        <NotificationProvider>
-          <TooltipProvider>
-            <Toaster />
-            <Router />
-            <GlobalAdvertisingButton />
-            <GlobalAdvertisingDisplay />
-          </TooltipProvider>
-        </NotificationProvider>
-      </ThemeProvider>
-    </ErrorBoundary>
-  );
+  return <ErrorBoundary><ThemeProvider defaultTheme="dark"><NotificationProvider><TooltipProvider><Toaster /><Router /><ProfileMessageLauncher /><GlobalAdvertisingButton /><GlobalAdvertisingDisplay /></TooltipProvider></NotificationProvider></ThemeProvider></ErrorBoundary>;
 }
-
 export default App;
