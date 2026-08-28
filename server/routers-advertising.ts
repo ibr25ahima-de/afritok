@@ -1,4 +1,4 @@
-import { router, protectedProcedure } from "./_core/trpc";
+import { router, protectedProcedure, publicProcedure } from "./_core/trpc";
 import { z } from "zod";
 import {
   createAdvertisingCampaign,
@@ -75,7 +75,8 @@ export const advertisingRouter = router({
       cancelAdvertisingCampaign(input.campaignId, ctx.user.id)
     }),
 
-  getNextAdvertisement: protectedProcedure
+  /** Public: une publicité peut être affichée à un visiteur non connecté. */
+  getNextAdvertisement: publicProcedure
     .input(z.object({
       country: z.string().optional(),
       gender: z.string().optional(),
@@ -83,7 +84,7 @@ export const advertisingRouter = router({
     }))
     .query(async ({ ctx, input }) =>
       getNextAdvertisement({
-        userId: ctx.user.id,
+        userId: ctx.user?.id,
         country: input.country,
         gender: input.gender,
         age: input.age,
@@ -97,16 +98,18 @@ export const advertisingRouter = router({
       return getAdvertisingCampaign(input.campaignId);
     }),
 
-  recordImpression: protectedProcedure
+  /** Public: les impressions peuvent être comptées même sans compte. */
+  recordImpression: publicProcedure
     .input(z.object({ campaignId: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) =>
-      recordAdImpression({ campaignId: input.campaignId, userId: ctx.user.id })
+      recordAdImpression({ campaignId: input.campaignId, userId: ctx.user?.id })
     ),
 
-  recordClick: protectedProcedure
+  /** Public: un visiteur non connecté peut cliquer sur une publicité. */
+  recordClick: publicProcedure
     .input(z.object({ campaignId: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) =>
-      recordAdClick({ campaignId: input.campaignId, userId: ctx.user.id })
+      recordAdClick({ campaignId: input.campaignId, userId: ctx.user?.id })
     ),
 
   getStatistics: protectedProcedure
