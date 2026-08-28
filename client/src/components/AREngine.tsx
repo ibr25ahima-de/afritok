@@ -12,13 +12,13 @@ interface AREngineProps {
 
 const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm";
 const MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
-const DETECTION_INTERVAL_MS = 80;
+const DETECTION_INTERVAL_MS = 50;
 
-// Beauté naturelle de base : active même sans filtre sélectionné.
-// Les effets choisis peuvent ensuite renforcer ces valeurs.
+// TikTok-style base beauty: it is active even when the user selects "Aucun".
+// Selecting an effect adds its own adjustments on top of this natural base.
 const DEFAULT_BEAUTY = {
   smoothSkin: 1,
-  brightenSkin: 0.06,
+  brightenSkin: 0.045,
   enlargeEyes: 0,
   slimFace: 0,
   whitenTeeth: 0,
@@ -26,15 +26,6 @@ const DEFAULT_BEAUTY = {
   symmetry: 0,
 };
 
-/**
- * Lissage beauté supplémentaire, local au visage.
- *
- * On travaille uniquement sur le rectangle du visage puis on le
- * découpe avec l'ovale facial. Cela donne un rendu beaucoup plus
- * proche d'une caméra sociale moderne sans flouter l'arrière-plan.
- * Le canvas temporaire est réutilisé pour limiter les allocations
- * sur téléphone.
- */
 function applyLiveSkinPolish(
   ctx: CanvasRenderingContext2D,
   landmarks: NormalizedLandmark[],
@@ -42,21 +33,18 @@ function applyLiveSkinPolish(
   height: number,
   buffer: HTMLCanvasElement
 ) {
-  if (landmarks.length === 0) return;
-
-  const face = getFaceGeometry(landmarks, width, height);
   const points = getPoints(landmarks, LM.faceOval, width, height);
   if (points.length < 3) return;
 
-  const padding = Math.max(6, Math.round(Math.min(face.width, face.height) * 0.035));
+  const face = getFaceGeometry(landmarks, width, height);
+  const padding = Math.max(8, Math.round(Math.min(face.width, face.height) * 0.045));
   const left = Math.max(0, Math.floor(face.left - padding));
   const top = Math.max(0, Math.floor(face.top - padding));
   const right = Math.min(width, Math.ceil(face.right + padding));
   const bottom = Math.min(height, Math.ceil(face.bottom + padding));
   const cropWidth = right - left;
   const cropHeight = bottom - top;
-
-  if (cropWidth < 8 || cropHeight < 8) return;
+  if (cropWidth < 16 || cropHeight < 16) return;
 
   if (buffer.width !== cropWidth || buffer.height !== cropHeight) {
     buffer.width = cropWidth;
@@ -65,28 +53,21 @@ function applyLiveSkinPolish(
 
   const bctx = buffer.getContext("2d");
   if (!bctx) return;
-
   bctx.clearRect(0, 0, cropWidth, cropHeight);
   bctx.save();
-  bctx.filter = "blur(3.2px)";
+  bctx.filter = "blur(4.5px)";
   bctx.drawImage(ctx.canvas, left, top, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
   bctx.restore();
 
   ctx.save();
   ctx.beginPath();
-
-  points.forEach((point, index) => {
-    const x = point.x;
-    const y = point.y;
-    if (index === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
+  points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
   ctx.closePath();
   ctx.clip();
 
-  // Mélange doux : conserve les détails du visage tout en masquant
-  // les petites imperfections et les pores trop marqués.
-  ctx.globalAlpha = 0.62;
+  // Strong enough to remove small spots/black points, but blended so eyes,
+  // nose, lips and the natural shape remain sharp.
+  ctx.globalAlpha = 0.68;
   ctx.drawImage(buffer, left, top);
   ctx.restore();
 }
@@ -104,22 +85,19 @@ export const AREngine: React.FC<AREngineProps> = ({ videoRef, activeEffect }) =>
   const detectFace = useCallback((video: HTMLVideoElement, timestamp: number) => {
     const landmarker = landmarkerRef.current;
     if (!landmarker) return previousLandmarksRef.current;
-    if (timestamp - lastDetectionRef.current < DETECTION_INTERVAL_MS) {
-      return previousLandmarksRef.current;
-    }
-    if (video.currentTime === lastVideoTimeRef.current) {
-      return previousLandmarksRef.current;
-    }
+    if (timestamp - lastDetectionRef.current < DETECTION_INTERVAL_MS) return previousLandmarksRef.current;
+    if (video.currentTime === lastVideoTimeRef.current) return previousLandmarksRef.current;
 
-    lastVideoTimeRef.current = video.currentTime;
     lastDetectionRef.current = timestamp;
+    lastVideoTimeRef.current = video.currentTime;
 
     try {
       const result = landmarker.detectForVideo(video, timestamp);
       const current = result.faceLandmarks?.[0];
       if (!current) return previousLandmarksRef.current;
 
-      const stable = smoothLandmarks(current, previousLandmarksRef.current, 0.30);
+      // Fast smoothing so the beauty mask follows the face immediately.
+      const stable = smoothLandmarks(current, previousLandmarksRef.current, 0.42);
       previousLandmarksRef.current = stable;
       return stable;
     } catch (error) {
@@ -130,31 +108,26 @@ export const AREngine: React.FC<AREngineProps> = ({ videoRef, activeEffect }) =>
 
   useEffect(() => {
     let cancelled = false;
-
     const initialize = async () => {
       if (initializingRef.current) return;
       initializingRef.current = true;
-
       try {
         const vision = await FilesetResolver.forVisionTasks(WASM_URL);
         if (cancelled) return;
-
         const landmarker = await FaceLandmarker.createFromOptions(vision, {
           baseOptions: { modelAssetPath: MODEL_URL },
           runningMode: "VIDEO",
           numFaces: 1,
-          minFaceDetectionConfidence: 0.55,
-          minFacePresenceConfidence: 0.55,
-          minTrackingConfidence: 0.65,
+          minFaceDetectionConfidence: 0.35,
+          minFacePresenceConfidence: 0.35,
+          minTrackingConfidence: 0.45,
           outputFaceBlendshapes: false,
           outputFacialTransformationMatrixes: false,
         });
-
         if (cancelled) {
           landmarker.close();
           return;
         }
-
         landmarkerRef.current = landmarker;
         console.log("[AREngine] Real-time beauty engine ready");
       } catch (error) {
@@ -163,15 +136,12 @@ export const AREngine: React.FC<AREngineProps> = ({ videoRef, activeEffect }) =>
         initializingRef.current = false;
       }
     };
-
     initialize();
 
     return () => {
       cancelled = true;
-      if (animationRef.current !== null) {
-        cancelAnimationFrame(animationRef.current);
-        animationRef.current = null;
-      }
+      if (animationRef.current !== null) cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
       landmarkerRef.current?.close();
       landmarkerRef.current = null;
       previousLandmarksRef.current = null;
@@ -182,13 +152,7 @@ export const AREngine: React.FC<AREngineProps> = ({ videoRef, activeEffect }) =>
   const renderFrame = useCallback(() => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-
-    if (!video || !canvas) {
-      animationRef.current = requestAnimationFrame(renderFrame);
-      return;
-    }
-
-    if (video.readyState < 2 || video.videoWidth <= 0 || video.videoHeight <= 0) {
+    if (!video || !canvas || video.readyState < 2 || video.videoWidth <= 0 || video.videoHeight <= 0) {
       animationRef.current = requestAnimationFrame(renderFrame);
       return;
     }
@@ -198,7 +162,7 @@ export const AREngine: React.FC<AREngineProps> = ({ videoRef, activeEffect }) =>
       canvas.height = video.videoHeight;
     }
 
-    const ctx = canvas.getContext("2d", { alpha: true });
+    const ctx = canvas.getContext("2d", { alpha: false });
     if (!ctx) {
       animationRef.current = requestAnimationFrame(renderFrame);
       return;
@@ -207,32 +171,25 @@ export const AREngine: React.FC<AREngineProps> = ({ videoRef, activeEffect }) =>
     const width = canvas.width;
     const height = canvas.height;
 
-    ctx.clearRect(0, 0, width, height);
+    // The AREngine canvas is the actual visible camera surface.
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
+    ctx.filter = "none";
     ctx.drawImage(video, 0, 0, width, height);
 
     const landmarks = detectFace(video, performance.now());
-    if (landmarks && landmarks.length > 0) {
+    if (landmarks?.length) {
       try {
-        // Buffer réutilisé : pas de création d'un nouveau canvas à chaque frame.
-        if (!skinBufferRef.current) {
-          skinBufferRef.current = document.createElement("canvas");
-        }
+        if (!skinBufferRef.current) skinBufferRef.current = document.createElement("canvas");
 
-        // Couche beauté naturelle toujours active.
-        applyLiveSkinPolish(
-          ctx,
-          landmarks,
-          width,
-          height,
-          skinBufferRef.current
-        );
+        // Base beauty is always applied, including when no effect is selected.
+        applyLiveSkinPolish(ctx, landmarks, width, height, skinBufferRef.current);
 
-        // Puis les réglages/effets déjà présents dans AfriTok.
+        // Selected effect is layered after the base beauty so it is visibly different.
         const beautyConfig = {
           ...DEFAULT_BEAUTY,
           ...(activeEffect?.beautyConfig ?? {}),
         };
-
         applyBeautyEffects(ctx, landmarks, width, height, beautyConfig);
       } catch (error) {
         console.error("[AREngine] Beauty rendering error:", error);
@@ -245,10 +202,8 @@ export const AREngine: React.FC<AREngineProps> = ({ videoRef, activeEffect }) =>
   useEffect(() => {
     animationRef.current = requestAnimationFrame(renderFrame);
     return () => {
-      if (animationRef.current !== null) {
-        cancelAnimationFrame(animationRef.current);
-        animationRef.current = null;
-      }
+      if (animationRef.current !== null) cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
     };
   }, [renderFrame]);
 
