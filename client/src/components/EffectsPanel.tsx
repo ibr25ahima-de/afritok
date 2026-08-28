@@ -1,8 +1,7 @@
 /**
  * EffectsPanel Component
  * Carousel horizontal d'effets Beauté TikTok-style.
- * L'effet sélectionné est automatiquement recentré et le panneau reste ouvert
- * afin de pouvoir faire défiler les effets en continu.
+ * L'effet sélectionné reste au centre et le panneau reste ouvert.
  */
 import React, { useEffect, useRef } from 'react';
 
@@ -50,24 +49,8 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({ selectedEffect, onSe
     const container = scrollRef.current;
     const selected = container?.querySelector<HTMLElement>(`[data-effect-id="${selectedId}"]`);
     if (!container || !selected) return;
-
-    requestAnimationFrame(() => {
-      selected.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-    });
+    requestAnimationFrame(() => selected.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' }));
   }, [selectedId]);
-
-  const selectEffectAndKeepPanelOpen = (effect: AREffect | null) => {
-    onSelectEffect(effect);
-
-    // CameraRecorder ferme actuellement le panneau après une sélection.
-    // Réouvre immédiatement le bouton Effets afin que l'utilisateur puisse
-    // continuer à glisser gauche/droite, comme dans TikTok.
-    window.setTimeout(() => {
-      const effectsButton = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
-        .find((button) => button.textContent?.trim().toLowerCase().includes('effets'));
-      effectsButton?.click();
-    }, 0);
-  };
 
   return (
     <div className="fixed left-0 right-0 bottom-[108px] z-[60] pointer-events-none">
@@ -82,8 +65,9 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({ selectedEffect, onSe
             return (
               <button
                 key={effect.id}
+                type="button"
                 data-effect-id={effect.id}
-                onClick={() => selectEffectAndKeepPanelOpen(effect.id === 'beauty-none' ? null : effect)}
+                onClick={() => onSelectEffect(effect.id === 'beauty-none' ? null : effect)}
                 className={`flex-shrink-0 w-[68px] snap-center flex flex-col items-center gap-1 transition-transform duration-150 ${selected ? 'scale-110' : 'opacity-75'}`}
                 aria-label={effect.name}
               >
