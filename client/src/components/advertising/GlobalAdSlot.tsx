@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ExternalLink, Megaphone, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
@@ -7,7 +7,7 @@ import { trpc } from "@/lib/trpc";
  * Il reste séparé du composant Feed afin de ne pas alourdir Feed.tsx.
  */
 export default function GlobalAdSlot() {
-  const [closed, setClosed] = useStateSafe(false);
+  const [closed, setClosed] = useState(false);
   const impressionSent = useRef(false);
   const { data: ad } = trpc.advertising.getNextAdvertisement.useQuery({}, {
     staleTime: 30_000,
@@ -63,10 +63,4 @@ export default function GlobalAdSlot() {
       </div>
     </div>
   );
-}
-
-function useStateSafe(initial: boolean) {
-  // Petit wrapper pour garder ce composant autonome et facile à déplacer.
-  const [value, setValue] = require("react").useState(initial) as [boolean, (next: boolean) => void];
-  return [value, setValue] as const;
 }
