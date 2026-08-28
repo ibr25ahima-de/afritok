@@ -14,6 +14,10 @@ import {
   getAdStatistics,
 } from "./advertising/ad-events-service";
 import { getOwnedAdvertisingCampaign } from "./advertising/ad-access-security-service";
+import {
+  getNextAdvertisement,
+  getAdvertisingCampaign,
+} from "./advertising/ad-delivery-service";
 
 export const advertisingRouter = router({
   createCampaign: protectedProcedure
@@ -45,31 +49,53 @@ export const advertisingRouter = router({
     }))
     .mutation(async ({ ctx, input }) =>
       attachAdvertisingPayment(input.campaignId, input.paymentReference, ctx.user.id)
-    ),
+    }),
 
   activateCampaign: protectedProcedure
     .input(z.object({ campaignId: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) =>
       activateAdvertisingCampaign(input.campaignId, ctx.user.id)
-    ),
+    }),
 
   pauseCampaign: protectedProcedure
     .input(z.object({ campaignId: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) =>
       pauseAdvertisingCampaign(input.campaignId, ctx.user.id)
-    ),
+    }),
 
   resumeCampaign: protectedProcedure
     .input(z.object({ campaignId: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) =>
       resumeAdvertisingCampaign(input.campaignId, ctx.user.id)
-    ),
+    }),
 
   cancelCampaign: protectedProcedure
     .input(z.object({ campaignId: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) =>
       cancelAdvertisingCampaign(input.campaignId, ctx.user.id)
+    }),
+
+  getNextAdvertisement: protectedProcedure
+    .input(z.object({
+      country: z.string().optional(),
+      gender: z.string().optional(),
+      age: z.number().int().positive().optional(),
+    }))
+    .query(async ({ ctx, input }) =>
+      getNextAdvertisement({
+        userId: ctx.user.id,
+        country: input.country,
+        gender: input.gender,
+        age: input.age,
+      })
     ),
+
+  getCampaign: protectedProcedure
+    .input(z.object({ campaignId: z.number().int().positive() }))
+    .query(async ({ ctx, input }) => {
+      await getOwnedAdvertisingCampaign(input.campaignId, ctx.user.id);
+      return getAdvertisingCampaign(input.campaignId);
+    }),
 
   recordImpression: protectedProcedure
     .input(z.object({ campaignId: z.number().int().positive() }))
