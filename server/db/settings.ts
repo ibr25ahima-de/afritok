@@ -3,12 +3,13 @@ import { db } from "./index";
 import { users } from "../../drizzle/schema";
 
 /* =====================
-DISPLAY SETTINGS
+DISPLAY + PRIVACY SETTINGS
 ===================== */
 
 export async function getDisplaySettings(userId: number) {
   const user = (await db.select().from(users).where(eq(users.id, userId)).limit(1))[0];
   if (!user) throw new Error("User not found");
+
   return {
     language: user.language,
     darkMode: user.darkMode,
@@ -16,6 +17,11 @@ export async function getDisplaySettings(userId: number) {
     autoPlay: user.autoPlay,
     textSize: user.textSize,
     animations: user.animations,
+    profilePublic: user.profilePublic,
+    allowMessages: user.allowMessages,
+    allowComments: user.allowComments,
+    showFollowers: user.showFollowers,
+    showFollowing: user.showFollowing,
   };
 }
 
@@ -26,6 +32,11 @@ export async function updateDisplaySettings(userId: number, settings: {
   autoPlay: string;
   textSize: string;
   animations: boolean;
+  profilePublic?: boolean;
+  allowMessages?: boolean;
+  allowComments?: boolean;
+  showFollowers?: boolean;
+  showFollowing?: boolean;
 }) {
   await db.update(users).set({
     language: settings.language,
@@ -34,8 +45,14 @@ export async function updateDisplaySettings(userId: number, settings: {
     autoPlay: settings.autoPlay,
     textSize: settings.textSize,
     animations: settings.animations,
+    ...(settings.profilePublic !== undefined && { profilePublic: settings.profilePublic }),
+    ...(settings.allowMessages !== undefined && { allowMessages: settings.allowMessages }),
+    ...(settings.allowComments !== undefined && { allowComments: settings.allowComments }),
+    ...(settings.showFollowers !== undefined && { showFollowers: settings.showFollowers }),
+    ...(settings.showFollowing !== undefined && { showFollowing: settings.showFollowing }),
     updatedAt: new Date(),
   }).where(eq(users.id, userId));
+
   return { success: true };
 }
 
