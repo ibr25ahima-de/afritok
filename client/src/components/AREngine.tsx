@@ -14,17 +14,34 @@ const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/w
 const MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 const DETECTION_INTERVAL_MS = 50;
 
-// TikTok-style base beauty: it is active even when the user selects "Aucun".
-// Selecting an effect adds its own adjustments on top of this natural base.
 const DEFAULT_BEAUTY = {
   smoothSkin: 1,
-  brightenSkin: 0.045,
+  brightenSkin: 0.05,
   enlargeEyes: 0,
   slimFace: 0,
   whitenTeeth: 0,
   enlargeLips: 0,
   symmetry: 0,
 };
+
+/** A small global camera grade guarantees that every selected preset has a
+ * visible filter component even on phones where face landmarks temporarily
+ * drop out. The face-specific transformations are still applied below. */
+function getCameraFilter(effect: AREffect | null): string {
+  if (!effect) return "none";
+  const c = effect.beautyConfig ?? {};
+  const smooth = c.smoothSkin ?? 0;
+  const bright = c.brightenSkin ?? 0;
+  const eyes = c.enlargeEyes ?? 0;
+  const slim = c.slimFace ?? 0;
+  const lips = c.enlargeLips ?? 0;
+  const symmetry = c.symmetry ?? 0;
+
+  const brightness = 1 + Math.min(0.10, bright * 0.16 + smooth * 0.018);
+  const contrast = 1 - Math.min(0.045, smooth * 0.025);
+  const saturation = 1 + Math.min(0.12, bright * 0.10 + (eyes + lips + symmetry + slim) * 0.018);
+  return `brightness(${brightness.toFixed(3)}) contrast(${contrast.toFixed(3)}) saturate(${saturation.toFixed(3)})`;
+}
 
 function applyLiveSkinPolish(
   ctx: CanvasRenderingContext2D,
@@ -55,7 +72,7 @@ function applyLiveSkinPolish(
   if (!bctx) return;
   bctx.clearRect(0, 0, cropWidth, cropHeight);
   bctx.save();
-  bctx.filter = "blur(4.5px)";
+  bctx.filter = "blur(4px)";
   bctx.drawImage(ctx.canvas, left, top, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
   bctx.restore();
 
@@ -64,10 +81,7 @@ function applyLiveSkinPolish(
   points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
   ctx.closePath();
   ctx.clip();
-
-  // Strong enough to remove small spots/black points, but blended so eyes,
-  // nose, lips and the natural shape remain sharp.
-  ctx.globalAlpha = 0.68;
+  ctx.globalAlpha = 0.62;
   ctx.drawImage(buffer, left, top);
   ctx.restore();
 }
@@ -95,9 +109,7 @@ export const AREngine: React.FC<AREngineProps> = ({ videoRef, activeEffect }) =>
       const result = landmarker.detectForVideo(video, timestamp);
       const current = result.faceLandmarks?.[0];
       if (!current) return previousLandmarksRef.current;
-
-      // Fast smoothing so the beauty mask follows the face immediately.
-      const stable = smoothLandmarks(current, previousLandmarksRef.current, 0.42);
+      const stable = smoothLandmarks(current, previousLandmarksRef.current, 0.55);
       previousLandmarksRef.current = stable;
       return stable;
     } catch (error) {
@@ -118,16 +130,13 @@ export const AREngine: React.FC<AREngineProps> = ({ videoRef, activeEffect }) =>
           baseOptions: { modelAssetPath: MODEL_URL },
           runningMode: "VIDEO",
           numFaces: 1,
-          minFaceDetectionConfidence: 0.35,
-          minFacePresenceConfidence: 0.35,
-          minTrackingConfidence: 0.45,
+          minFaceDetectionConfidence: 0.30,
+          minFacePresenceConfidence: 0.30,
+          minTrackingConfidence: 0.40,
           outputFaceBlendshapes: false,
           outputFacialTransformationMatrixes: false,
         });
-        if (cancelled) {
-          landmarker.close();
-          return;
-        }
+        if (cancelled) { landmarker.close(); return; }
         landmarkerRef.current = landmarker;
         console.log("[AREngine] Real-time beauty engine ready");
       } catch (error) {
@@ -137,7 +146,6 @@ export const AREngine: React.FC<AREngineProps> = ({ videoRef, activeEffect }) =>
       }
     };
     initialize();
-
     return () => {
       cancelled = true;
       if (animationRef.current !== null) cancelAnimationFrame(animationRef.current);
@@ -171,25 +179,23 @@ export const AREngine: React.FC<AREngineProps> = ({ videoRef, activeEffect }) =>
     const width = canvas.width;
     const height = canvas.height;
 
-    // The AREngine canvas is the actual visible camera surface.
-    ctx.globalAlpha = 1;
+    // First render the camera with the selected preset's visible color grade.
     ctx.globalCompositeOperation = "source-over";
-    ctx.filter = "none";
+    ctx.globalAlpha = 1;
+    ctx.filter = getCameraFilter(activeEffect);
     ctx.drawImage(video, 0, 0, width, height);
+    ctx.filter = "none";
 
     const landmarks = detectFace(video, performance.now());
     if (landmarks?.length) {
       try {
         if (!skinBufferRef.current) skinBufferRef.current = document.createElement("canvas");
 
-        // Base beauty is always applied, including when no effect is selected.
+        // Natural beauty is always on, even with "Aucun".
         applyLiveSkinPolish(ctx, landmarks, width, height, skinBufferRef.current);
 
-        // Selected effect is layered after the base beauty so it is visibly different.
-        const beautyConfig = {
-          ...DEFAULT_BEAUTY,
-          ...(activeEffect?.beautyConfig ?? {}),
-        };
+        // Selected face effect is applied after the base beauty layer.
+        const beautyConfig = { ...DEFAULT_BEAUTY, ...(activeEffect?.beautyConfig ?? {}) };
         applyBeautyEffects(ctx, landmarks, width, height, beautyConfig);
       } catch (error) {
         console.error("[AREngine] Beauty rendering error:", error);
