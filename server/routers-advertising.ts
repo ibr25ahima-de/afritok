@@ -8,37 +8,85 @@ import {
   resumeAdvertisingCampaign,
   cancelAdvertisingCampaign,
 } from "./advertising/advertising-service";
-import { recordAdImpression, recordAdClick, getAdStatistics } from "./advertising/ad-events-service";
+import {
+  recordAdImpression,
+  recordAdClick,
+  getAdStatistics,
+} from "./advertising/ad-events-service";
+import { getOwnedAdvertisingCampaign } from "./advertising/ad-access-security-service";
 
 export const advertisingRouter = router({
-  createCampaign: protectedProcedure.input(z.object({
-    advertiserName: z.string().min(1), name: z.string().min(1), adType: z.enum(["text", "image", "video"]),
-    textContent: z.string().optional(), imageUrl: z.string().optional(), videoUrl: z.string().optional(), destinationUrl: z.string().url().optional(),
-    budget: z.number().positive(), currency: z.string().length(3).default("XOF"), startDate: z.coerce.date(), endDate: z.coerce.date(),
-    targetCountry: z.string().optional(), targetGender: z.string().optional(), targetAgeMin: z.number().int().positive().optional(), targetAgeMax: z.number().int().positive().optional(),
-  })).mutation(async ({ ctx, input }) => createAdvertisingCampaign({ advertiserId: ctx.user.id, ...input })),
+  createCampaign: protectedProcedure
+    .input(z.object({
+      advertiserName: z.string().min(1),
+      name: z.string().min(1),
+      adType: z.enum(["text", "image", "video"]),
+      textContent: z.string().optional(),
+      imageUrl: z.string().optional(),
+      videoUrl: z.string().optional(),
+      destinationUrl: z.string().url().optional(),
+      budget: z.number().positive(),
+      currency: z.string().length(3).default("XOF"),
+      startDate: z.coerce.date(),
+      endDate: z.coerce.date(),
+      targetCountry: z.string().optional(),
+      targetGender: z.string().optional(),
+      targetAgeMin: z.number().int().positive().optional(),
+      targetAgeMax: z.number().int().positive().optional(),
+    }))
+    .mutation(async ({ ctx, input }) =>
+      createAdvertisingCampaign({ advertiserId: ctx.user.id, ...input })
+    ),
 
-  attachPayment: protectedProcedure.input(z.object({ campaignId: z.number().int().positive(), paymentReference: z.string().min(1) })).mutation(async ({ ctx, input }) =>
-    attachAdvertisingPayment(input.campaignId, input.paymentReference, ctx.user.id)),
+  attachPayment: protectedProcedure
+    .input(z.object({
+      campaignId: z.number().int().positive(),
+      paymentReference: z.string().min(1),
+    }))
+    .mutation(async ({ ctx, input }) =>
+      attachAdvertisingPayment(input.campaignId, input.paymentReference, ctx.user.id)
+    ),
 
-  activateCampaign: protectedProcedure.input(z.object({ campaignId: z.number().int().positive() })).mutation(async ({ ctx, input }) =>
-    activateAdvertisingCampaign(input.campaignId, ctx.user.id)),
+  activateCampaign: protectedProcedure
+    .input(z.object({ campaignId: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) =>
+      activateAdvertisingCampaign(input.campaignId, ctx.user.id)
+    ),
 
-  pauseCampaign: protectedProcedure.input(z.object({ campaignId: z.number().int().positive() })).mutation(async ({ ctx, input }) =>
-    pauseAdvertisingCampaign(input.campaignId, ctx.user.id)),
+  pauseCampaign: protectedProcedure
+    .input(z.object({ campaignId: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) =>
+      pauseAdvertisingCampaign(input.campaignId, ctx.user.id)
+    ),
 
-  resumeCampaign: protectedProcedure.input(z.object({ campaignId: z.number().int().positive() })).mutation(async ({ ctx, input }) =>
-    resumeAdvertisingCampaign(input.campaignId, ctx.user.id)),
+  resumeCampaign: protectedProcedure
+    .input(z.object({ campaignId: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) =>
+      resumeAdvertisingCampaign(input.campaignId, ctx.user.id)
+    ),
 
-  cancelCampaign: protectedProcedure.input(z.object({ campaignId: z.number().int().positive() })).mutation(async ({ ctx, input }) =>
-    cancelAdvertisingCampaign(input.campaignId, ctx.user.id)),
+  cancelCampaign: protectedProcedure
+    .input(z.object({ campaignId: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) =>
+      cancelAdvertisingCampaign(input.campaignId, ctx.user.id)
+    ),
 
-  recordImpression: protectedProcedure.input(z.object({ campaignId: z.number().int().positive() })).mutation(async ({ ctx, input }) =>
-    recordAdImpression({ campaignId: input.campaignId, userId: ctx.user?.id })),
+  recordImpression: protectedProcedure
+    .input(z.object({ campaignId: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) =>
+      recordAdImpression({ campaignId: input.campaignId, userId: ctx.user.id })
+    ),
 
-  recordClick: protectedProcedure.input(z.object({ campaignId: z.number().int().positive() })).mutation(async ({ ctx, input }) =>
-    recordAdClick({ campaignId: input.campaignId, userId: ctx.user?.id })),
+  recordClick: protectedProcedure
+    .input(z.object({ campaignId: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) =>
+      recordAdClick({ campaignId: input.campaignId, userId: ctx.user.id })
+    ),
 
-  getStatistics: protectedProcedure.input(z.object({ campaignId: z.number().int().positive() })).query(async ({ input }) =>
-    getAdStatistics(input.campaignId)),
+  getStatistics: protectedProcedure
+    .input(z.object({ campaignId: z.number().int().positive() }))
+    .query(async ({ ctx, input }) => {
+      await getOwnedAdvertisingCampaign(input.campaignId, ctx.user.id);
+      return getAdStatistics(input.campaignId);
+    }),
 });
