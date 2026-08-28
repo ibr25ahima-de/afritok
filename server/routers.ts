@@ -10,6 +10,7 @@ import { instantWithdrawalRouter } from "./routers-instant-withdrawal";
 import { monetizationRouter } from "./routers-monetization";
 import { liveRouter } from "./routers-live";
 import { liveChatRouter } from "./live-chat";
+import { directMessagesRouter } from "./routers-direct-messages";
 import { likeRouter, commentRouter, favoriteRouter, shareRouter } from "./routers-interaction";
 import { adminRouter } from "./routers-admin";
 import { musicRouter } from "./routers-music";
@@ -39,6 +40,7 @@ export const appRouter = router({
   advertising: advertisingRouter,
   live: liveRouter,
   liveChat: liveChatRouter,
+  directMessages: directMessagesRouter,
   instantWithdrawal: instantWithdrawalRouter,
   monetization: monetizationRouter,
 
@@ -120,7 +122,7 @@ export const appRouter = router({
       if (!video) throw new TRPCError({ code: "NOT_FOUND" });
       await db.update(videos).set({ views: (video.views || 0) + 1 }).where(eq(videos.id, input.videoId));
       await recordWatchEarning(video.userId, input.videoId, 10);
-      if (ctx.user?.id && (isDebug || ctx.user.id !== video.userId)) await recordWatchEarning(ctx.user.id, input.videoId, 10);
+      if (ctx.user?.id && ctx.user.id !== video.userId) await recordWatchEarning(ctx.user.id, input.videoId, 10);
       return { success: true };
     }),
     getByUser: publicProcedure.input(z.object({ userId: z.number() })).query(async ({ input }) => getUserVideos(input.userId)),
