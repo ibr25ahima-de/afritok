@@ -34,6 +34,7 @@ import Inbox from "./pages/Inbox";
 import AudioDetail from "./pages/AudioDetail";
 import Advertising from "./pages/Advertising";
 import AdvertisingButton from "./components/AdvertisingButton";
+import GlobalAdSlot from "./components/advertising/GlobalAdSlot";
 
 import { useAuth } from "./_core/hooks/useAuth";
 import { Loader2 } from "lucide-react";
@@ -118,6 +119,16 @@ function GlobalAdvertisingButton() {
   );
 }
 
+function GlobalAdvertisingDisplay() {
+  const [location] = useLocation();
+
+  if (location === "/advertising" || location.startsWith("/admin")) {
+    return null;
+  }
+
+  return <GlobalAdSlot />;
+}
+
 function App() {
   return (
     <ErrorBoundary>
@@ -127,6 +138,7 @@ function App() {
             <Toaster />
             <Router />
             <GlobalAdvertisingButton />
+            <GlobalAdvertisingDisplay />
           </TooltipProvider>
         </NotificationProvider>
       </ThemeProvider>
