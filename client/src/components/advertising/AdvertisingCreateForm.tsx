@@ -24,6 +24,8 @@ export default function AdvertisingCreateForm() {
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
   const [paymentReference, setPaymentReference] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [message, setMessage] = useState("");
+  const [uploading, setUploading] = useState(false);
 
   const createCampaign = trpc.advertising.createCampaign.useMutation();
   const createPayment = trpc.payment.createPayment.useMutation();
@@ -37,48 +39,82 @@ export default function AdvertisingCreateForm() {
 
   const handlePay = async () => {
     if (!canPrepare || !phone.trim()) return;
+    setMessage("");
     setPaymentConfirmed(false);
+    try {
+      const payment = await createPayment.mutateAsync({
+        amount: duration.price,
+        currency: "XOF",
+        operator,
+        phone: phone.trim(),
+        purpose: "advertisement",
+      });
+      setPaymentReference(payment.referenceId);
+      if (payment.status === "success") {
+        setPaymentConfirmed(true);
+        setMessage("Paiement confirmé. Vous pouvez maintenant envoyer votre publicité.");
+      } else {
+        setMessage("Paiement créé mais pas encore confirmé. La publicité reste inactive.");
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Le paiement n'a pas pu être créé.");
+    }
+  };
 
-    const payment = await createPayment.mutateAsync({
-      amount: duration.price,
-      currency: "XOF",
-      operator,
-      phone: phone.trim(),
-      purpose: "advertisement",
+  const uploadAdMedia = async (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await fetch("/api/upload-ad-media", {
+      method: "POST",
+      credentials: "include",
+      body: formData,
     });
-
-    setPaymentReference(payment.referenceId);
-    if (payment.status === "success") setPaymentConfirmed(true);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.url) {
+      throw new Error(data.error || "Impossible d'envoyer le média publicitaire.");
+    }
+    return data.url as string;
   };
 
   const handleSubmit = async () => {
     if (!paymentConfirmed || !paymentReference || !canPrepare) return;
+    setMessage("");
 
-    const startDate = new Date();
-    const endDate = new Date(startDate);
-    const days = duration.key === "1w" ? 7 : duration.key === "2w" ? 14 : duration.key === "3w" ? 21 : 30;
-    endDate.setDate(endDate.getDate() + days);
+    try {
+      setUploading(format !== "text");
+      let mediaUrl: string | undefined;
+      if (format !== "text") {
+        if (!selectedFile) throw new Error("Sélectionnez d'abord une photo ou une vidéo.");
+        mediaUrl = await uploadAdMedia(selectedFile);
+      }
 
-    // Le média doit être uploadé par le service de stockage avant cette étape.
-    // Cette interface ne considère jamais un blob local comme une URL de diffusion permanente.
-    if (format !== "text") {
-      throw new Error("Le service d'upload publicitaire doit fournir une URL permanente avant l'envoi.");
+      const startDate = new Date();
+      const endDate = new Date(startDate);
+      const days = duration.key === "1w" ? 7 : duration.key === "2w" ? 14 : duration.key === "3w" ? 21 : 30;
+      endDate.setDate(endDate.getDate() + days);
+
+      const campaign = await createCampaign.mutateAsync({
+        advertiserName: advertiserName.trim(),
+        name: campaignName.trim(),
+        adType: format,
+        textContent: format === "text" ? textContent.trim() : undefined,
+        imageUrl: format === "image" ? mediaUrl : undefined,
+        videoUrl: format === "video" ? mediaUrl : undefined,
+        destinationUrl: destinationUrl.trim() || undefined,
+        budget: duration.price,
+        currency: "XOF",
+        startDate,
+        endDate,
+        targetCountry: country.trim() || undefined,
+      });
+
+      await attachPayment.mutateAsync({ campaignId: campaign.id, paymentReference });
+      setMessage("Publicité envoyée. Elle reste inactive jusqu'à la confirmation réelle du paiement et aux contrôles prévus.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Impossible d'envoyer la publicité.");
+    } finally {
+      setUploading(false);
     }
-
-    const campaign = await createCampaign.mutateAsync({
-      advertiserName: advertiserName.trim(),
-      name: campaignName.trim(),
-      adType: format,
-      textContent: textContent.trim(),
-      destinationUrl: destinationUrl.trim() || undefined,
-      budget: duration.price,
-      currency: "XOF",
-      startDate,
-      endDate,
-      targetCountry: country.trim() || undefined,
-    });
-
-    await attachPayment.mutateAsync({ campaignId: campaign.id, paymentReference });
   };
 
   return (
@@ -93,7 +129,7 @@ export default function AdvertisingCreateForm() {
         <p className="mb-2 font-black">1. Choisissez ce que vous voulez publier</p>
         <div className="grid grid-cols-3 gap-2">
           {(["text", "image", "video"] as Format[]).map((item) => (
-            <button key={item} type="button" onClick={() => { setFormat(item); setSelectedFile(null); }} className={`rounded-xl border-2 p-3 font-bold ${format === item ? "border-amber-500 bg-amber-50" : "border-gray-200"}`}>
+            <button key={item} type="button" onClick={() => { setFormat(item); setSelectedFile(null); setPaymentConfirmed(false); }} className={`rounded-xl border-2 p-3 font-bold ${format === item ? "border-amber-500 bg-amber-50" : "border-gray-200"}`}>
               {item === "text" ? "Texte" : item === "image" ? "Photo" : "Vidéo"}
             </button>
           ))}
@@ -104,7 +140,7 @@ export default function AdvertisingCreateForm() {
         <p className="mb-2 font-black">2. Choisissez la durée et le prix</p>
         <div className="grid grid-cols-2 gap-2">
           {DURATIONS.map((item) => (
-            <button key={item.key} type="button" onClick={() => setDuration(item)} className={`rounded-xl border-2 p-3 text-left ${duration.key === item.key ? "border-amber-500 bg-amber-50" : "border-gray-200"}`}>
+            <button key={item.key} type="button" onClick={() => { setDuration(item); setPaymentConfirmed(false); }} className={`rounded-xl border-2 p-3 text-left ${duration.key === item.key ? "border-amber-500 bg-amber-50" : "border-gray-200"}`}>
               <span className="block font-bold">{item.label}</span>
               <span className="font-black">{item.price.toLocaleString("fr-FR")} XOF</span>
             </button>
@@ -131,8 +167,9 @@ export default function AdvertisingCreateForm() {
         <input className="mt-3 w-full rounded-xl border p-3" placeholder="Numéro Mobile Money" value={phone} onChange={(e) => setPhone(e.target.value)} />
         <p className="mt-3 font-black">Prix à payer : {duration.price.toLocaleString("fr-FR")} XOF</p>
         <button type="button" disabled={!canPrepare || !phone.trim() || createPayment.isPending} onClick={handlePay} className="mt-3 w-full rounded-xl bg-black p-4 font-black text-white disabled:opacity-40">{createPayment.isPending ? "Paiement en cours…" : "Payer"}</button>
-        <button type="button" disabled={!paymentConfirmed || createCampaign.isPending || attachPayment.isPending} onClick={handleSubmit} className={`mt-3 w-full rounded-xl p-4 font-black text-white ${paymentConfirmed ? "bg-blue-600" : "bg-black"}`}>{paymentConfirmed ? "Envoyer et commencer la publicité" : "Envoyer et payer"}</button>
-        {!paymentConfirmed && <p className="mt-2 text-center text-xs font-semibold text-gray-500">Le bouton Envoyer reste inactif jusqu'à la confirmation réelle du paiement.</p>}
+        <button type="button" disabled={!paymentConfirmed || uploading || createCampaign.isPending || attachPayment.isPending} onClick={handleSubmit} className={`mt-3 w-full rounded-xl p-4 font-black text-white ${paymentConfirmed ? "bg-blue-600" : "bg-black"}`}>{uploading ? "Envoi du média…" : paymentConfirmed ? "Envoyer et commencer la publicité" : "Envoyer et payer"}</button>
+        {message && <p className="mt-3 rounded-xl bg-gray-100 p-3 text-sm font-semibold">{message}</p>}
+        {!paymentConfirmed && <p className="mt-2 text-center text-xs font-semibold text-gray-500">Le bouton Envoyer reste noir et inactif jusqu'à la confirmation réelle du paiement.</p>}
       </div>
 
       <div className="mt-6 rounded-2xl bg-gray-50 p-4 text-sm">
