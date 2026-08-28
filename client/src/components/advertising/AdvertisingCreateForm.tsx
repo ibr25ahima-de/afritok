@@ -1,5 +1,6 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import AdMediaPicker from "./AdMediaPicker";
 
 const DURATIONS = [
   { key: "1w", label: "1 semaine", price: 15000 },
@@ -23,7 +24,6 @@ export default function AdvertisingCreateForm() {
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
   const [paymentReference, setPaymentReference] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   const createCampaign = trpc.advertising.createCampaign.useMutation();
   const createPayment = trpc.payment.createPayment.useMutation();
@@ -35,15 +35,9 @@ export default function AdvertisingCreateForm() {
     return !!selectedFile;
   }, [advertiserName, campaignName, format, textContent, selectedFile]);
 
-  const handleFile = (file?: File) => {
-    if (!file) return;
-    const accepted = format === "image" ? file.type.startsWith("image/") : file.type.startsWith("video/");
-    if (!accepted) return;
-    setSelectedFile(file);
-  };
-
   const handlePay = async () => {
     if (!canPrepare || !phone.trim()) return;
+    setPaymentConfirmed(false);
 
     const payment = await createPayment.mutateAsync({
       amount: duration.price,
@@ -54,12 +48,7 @@ export default function AdvertisingCreateForm() {
     });
 
     setPaymentReference(payment.referenceId);
-
-    // La couleur du bouton final dépend uniquement de la confirmation réelle.
-    // Un paiement "pending" ne déverrouille jamais l'envoi.
-    if (payment.status === "success") {
-      setPaymentConfirmed(true);
-    }
+    if (payment.status === "success") setPaymentConfirmed(true);
   };
 
   const handleSubmit = async () => {
@@ -70,13 +59,17 @@ export default function AdvertisingCreateForm() {
     const days = duration.key === "1w" ? 7 : duration.key === "2w" ? 14 : duration.key === "3w" ? 21 : 30;
     endDate.setDate(endDate.getDate() + days);
 
+    // Le média doit être uploadé par le service de stockage avant cette étape.
+    // Cette interface ne considère jamais un blob local comme une URL de diffusion permanente.
+    if (format !== "text") {
+      throw new Error("Le service d'upload publicitaire doit fournir une URL permanente avant l'envoi.");
+    }
+
     const campaign = await createCampaign.mutateAsync({
       advertiserName: advertiserName.trim(),
       name: campaignName.trim(),
       adType: format,
-      textContent: format === "text" ? textContent.trim() : undefined,
-      imageUrl: format === "image" ? (selectedFile ? URL.createObjectURL(selectedFile) : undefined) : undefined,
-      videoUrl: format === "video" ? (selectedFile ? URL.createObjectURL(selectedFile) : undefined) : undefined,
+      textContent: textContent.trim(),
       destinationUrl: destinationUrl.trim() || undefined,
       budget: duration.price,
       currency: "XOF",
@@ -85,20 +78,14 @@ export default function AdvertisingCreateForm() {
       targetCountry: country.trim() || undefined,
     });
 
-    await attachPayment.mutateAsync({
-      campaignId: campaign.id,
-      paymentReference,
-    });
+    await attachPayment.mutateAsync({ campaignId: campaign.id, paymentReference });
   };
 
   return (
     <section className="mx-auto w-full max-w-lg rounded-3xl bg-white p-5 text-black shadow-xl">
       <h1 className="text-3xl font-black">Faire de la publicité</h1>
       <p className="mt-1 text-lg font-bold">Présentez votre entreprise sur AfriTok</p>
-      <p className="mt-4 rounded-2xl bg-amber-50 p-4 text-sm font-bold">
-        Toutes les personnes qui utilisent cette application verront votre publicité.
-      </p>
-
+      <p className="mt-4 rounded-2xl bg-amber-50 p-4 text-sm font-bold">Toutes les personnes qui utilisent cette application verront votre publicité.</p>
       <h2 className="mt-6 text-xl font-black uppercase">PAYEZ POUR FAIRE LA PUBLICITÉ DE VOTRE ENTREPRISE, DE VOS PRODUITS OU DE VOTRE BOUTIQUE</h2>
       <p className="mt-2 text-sm text-gray-600">Choisissez votre format, votre durée et votre tarif. Remplissez votre publicité, puis payez. L'envoi et la diffusion sont validés uniquement après confirmation réelle du paiement.</p>
 
@@ -129,17 +116,8 @@ export default function AdvertisingCreateForm() {
         <p className="font-black">3. Préparez votre publicité</p>
         <input className="w-full rounded-xl border p-3" placeholder="Nom de l'entreprise" value={advertiserName} onChange={(e) => setAdvertiserName(e.target.value)} />
         <input className="w-full rounded-xl border p-3" placeholder="Nom de la campagne" value={campaignName} onChange={(e) => setCampaignName(e.target.value)} />
-
         {format === "text" && <textarea className="min-h-32 w-full rounded-xl border p-3" placeholder="Écrivez votre publicité" value={textContent} onChange={(e) => setTextContent(e.target.value)} />}
-
-        {format !== "text" && (
-          <>
-            <input ref={fileRef} type="file" accept={format === "image" ? "image/*" : "video/*"} className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} />
-            <button type="button" onClick={() => fileRef.current?.click()} className="w-full rounded-xl border-2 border-dashed p-5 font-bold">Choisir {format === "image" ? "une photo" : "une vidéo"}</button>
-            {selectedFile && <p className="text-sm font-semibold">Fichier choisi : {selectedFile.name}</p>}
-          </>
-        )}
-
+        {format !== "text" && <AdMediaPicker type={format} file={selectedFile} onChange={setSelectedFile} />}
         <input className="w-full rounded-xl border p-3" placeholder="Lien vers votre entreprise / boutique (facultatif)" value={destinationUrl} onChange={(e) => setDestinationUrl(e.target.value)} />
         <input className="w-full rounded-xl border p-3" placeholder="Pays ciblé (ex. CI) — facultatif" value={country} onChange={(e) => setCountry(e.target.value)} />
       </div>
@@ -152,24 +130,14 @@ export default function AdvertisingCreateForm() {
         </select>
         <input className="mt-3 w-full rounded-xl border p-3" placeholder="Numéro Mobile Money" value={phone} onChange={(e) => setPhone(e.target.value)} />
         <p className="mt-3 font-black">Prix à payer : {duration.price.toLocaleString("fr-FR")} XOF</p>
-        <button type="button" disabled={!canPrepare || !phone.trim() || createPayment.isPending} onClick={handlePay} className="mt-3 w-full rounded-xl bg-black p-4 font-black text-white disabled:opacity-40">
-          {createPayment.isPending ? "Paiement en cours…" : "Payer"}
-        </button>
-        <button type="button" disabled={!paymentConfirmed || createCampaign.isPending || attachPayment.isPending} onClick={handleSubmit} className={`mt-3 w-full rounded-xl p-4 font-black text-white ${paymentConfirmed ? "bg-blue-600" : "bg-black"}`}>
-          {paymentConfirmed ? "Envoyer et commencer la publicité" : "Envoyer et payer"}
-        </button>
+        <button type="button" disabled={!canPrepare || !phone.trim() || createPayment.isPending} onClick={handlePay} className="mt-3 w-full rounded-xl bg-black p-4 font-black text-white disabled:opacity-40">{createPayment.isPending ? "Paiement en cours…" : "Payer"}</button>
+        <button type="button" disabled={!paymentConfirmed || createCampaign.isPending || attachPayment.isPending} onClick={handleSubmit} className={`mt-3 w-full rounded-xl p-4 font-black text-white ${paymentConfirmed ? "bg-blue-600" : "bg-black"}`}>{paymentConfirmed ? "Envoyer et commencer la publicité" : "Envoyer et payer"}</button>
         {!paymentConfirmed && <p className="mt-2 text-center text-xs font-semibold text-gray-500">Le bouton Envoyer reste inactif jusqu'à la confirmation réelle du paiement.</p>}
       </div>
 
       <div className="mt-6 rounded-2xl bg-gray-50 p-4 text-sm">
         <p className="font-black">Conditions de publicité AfriTok</p>
-        <ul className="mt-2 list-disc space-y-1 pl-5">
-          <li>Le tarif dépend du format et de la durée.</li>
-          <li>Les campagnes sont contrôlées selon les règles publicitaires AfriTok.</li>
-          <li>Une campagne non payée ou non confirmée reste inactive.</li>
-          <li>Aucun contenu n'est diffusé avant confirmation réelle du paiement.</li>
-          <li>La diffusion commence selon la période choisie et les règles de la plateforme.</li>
-        </ul>
+        <ul className="mt-2 list-disc space-y-1 pl-5"><li>Le tarif dépend du format et de la durée.</li><li>Les campagnes sont contrôlées selon les règles publicitaires AfriTok.</li><li>Une campagne non payée ou non confirmée reste inactive.</li><li>Aucun contenu n'est diffusé avant confirmation réelle du paiement.</li><li>La diffusion commence selon la période choisie et les règles de la plateforme.</li></ul>
       </div>
     </section>
   );
