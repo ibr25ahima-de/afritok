@@ -1,7 +1,6 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { X, Music, RefreshCw, Zap, ZapOff, Timer, Gauge, Layout, Palette } from 'lucide-react';
 import { toast } from 'sonner';
-import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 import { AudioPlayer } from "@/services/audioService";
 import { EffectsPanel, AREffect } from './EffectsPanel';
 import { AREngine } from './AREngine';
@@ -23,7 +22,6 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const faceLandmarkerRef = useRef<FaceLandmarker | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const musicPlayerRef = useRef<AudioPlayer | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -56,7 +54,6 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
 
   const handleAREffectSelect = (effect: AREffect | null) => {
     setActiveAREffect(effect);
-    // Keep the carousel open while the user scrolls between effects.
     setShowAREffectsPanel(true);
     if (effect) toast.info(`Effet AR "${effect.name}" activé`);
   };
@@ -77,20 +74,6 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
     musicPlayerRef.current = new AudioPlayer(selectedMusic.url);
     return () => { musicPlayerRef.current?.stop(); };
   }, [selectedMusic]);
-
-  useEffect(() => {
-    const init = async () => {
-      try {
-        const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm");
-        faceLandmarkerRef.current = await FaceLandmarker.createFromOptions(vision, {
-          baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task" },
-          runningMode: "VIDEO", numFaces: 1
-        });
-      } catch (err) { console.error("MediaPipe initialization failed:", err); }
-    };
-    init();
-    return () => { faceLandmarkerRef.current?.close(); faceLandmarkerRef.current = null; };
-  }, []);
 
   const startCamera = useCallback(async () => {
     try {
@@ -189,7 +172,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
 
   return (
     <div className="h-screen bg-black text-white relative overflow-hidden flex flex-col">
-      {/* Hidden source video: AREngine is the visible camera renderer so the beauty layer cannot sit behind it. */}
+      {/* Source video is hidden; AREngine is the single visible renderer. */}
       <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover opacity-0 pointer-events-none" />
 
       <AREngine videoRef={videoRef} activeEffect={activeAREffect} isRecording={isRecording} />
