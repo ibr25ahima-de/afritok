@@ -31,6 +31,7 @@ import Coins from "./pages/Coins";
 import Gifts from "./pages/Gifts";
 import Discover from "./pages/Discover";
 import Inbox from "./pages/Inbox";
+import Live from "./pages/Live";
 import AudioDetail from "./pages/AudioDetail";
 import Advertising from "./pages/Advertising";
 import AfritokPremium from "./pages/AfritokPremium";
@@ -61,6 +62,8 @@ function Router() {
       <Route path="/upload/:videoId?" component={Upload} />
       <Route path="/publish" component={Publish} />
       <Route path="/inbox" component={Inbox} />
+      <Route path="/live" component={Live} />
+      <Route path="/live/:sessionId" component={Live} />
       <Route path="/profile/:userId" component={Profile} />
       <Route path="/profile" component={Profile} />
       <Route path="/gifts" component={Gifts} />
