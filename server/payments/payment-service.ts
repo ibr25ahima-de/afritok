@@ -10,28 +10,17 @@ export async function createPaymentTransaction({ userId, amount, currency, opera
   if (!operator) throw new Error("Opérateur de paiement invalide.");
   if (!purpose) throw new Error("Motif du paiement invalide.");
   if (!referenceId) throw new Error("Référence de paiement invalide.");
-
   const existing = await db.select().from(payments).where(eq(payments.referenceId, referenceId)).limit(1);
   if (existing.length > 0) return existing[0];
-
-  const result = await db.insert(payments).values({
-    userId, amount: amount.toFixed(2), confirmedAmount: "0", currency,
-    operator, phone: phone ?? null, purpose, referenceId,
-    providerReference: null, status: "pending", confirmedAt: null,
-  }).returning();
+  const result = await db.insert(payments).values({ userId, amount: amount.toFixed(2), confirmedAmount: "0", currency, operator, phone: phone ?? null, purpose, referenceId, providerReference: null, status: "pending", confirmedAt: null }).returning();
   return result[0];
 }
 
 export async function confirmPayment({ referenceId, providerReference, confirmedAmount }: { referenceId: string; providerReference: string; confirmedAmount: number }) {
   const settled = await settleConfirmedPayment({ referenceId, providerReference, confirmedAmount });
-  if (settled && (settled as any).purpose === "subscription") {
+  const payment = await db.select().from(payments).where(eq(payments.referenceId, referenceId)).limit(1);
+  if (payment[0]?.purpose === "subscription" && payment[0]?.status === "success") {
     await syncPremiumSubscriptionAfterConfirmedPayment(referenceId);
-  } else {
-    // Re-read the transaction when settlement implementations return a reduced payload.
-    const payment = await db.select().from(payments).where(eq(payments.referenceId, referenceId)).limit(1);
-    if (payment[0]?.purpose === "subscription" && payment[0]?.status === "confirmed") {
-      await syncPremiumSubscriptionAfterConfirmedPayment(referenceId);
-    }
   }
   return settled;
 }
