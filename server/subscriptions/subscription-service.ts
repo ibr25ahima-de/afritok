@@ -1,10 +1,11 @@
 import { db } from "../db";
 import { payments } from "../../drizzle/schema-payments";
 import { eq, and } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { getPremiumPlan } from "./subscription-plans";
 
 export async function ensurePremiumSubscriptionTable() {
-  await db.execute(`
+  await db.execute(sql`
     CREATE TABLE IF NOT EXISTS afritok_premium_subscriptions (
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL,
@@ -19,23 +20,12 @@ export async function ensurePremiumSubscriptionTable() {
   `);
 }
 
-export async function createPremiumSubscriptionPayment({
-  userId,
-  planId,
-  operator,
-  phone,
-}: {
-  userId: number;
-  planId: string;
-  operator: string;
-  phone: string;
-}) {
+export async function createPremiumSubscriptionPayment({ userId, planId, operator, phone }: { userId: number; planId: string; operator: string; phone: string }) {
   const plan = getPremiumPlan(planId);
   if (!plan) throw new Error("Formule Premium invalide.");
   if (!phone.trim()) throw new Error("Le numéro Mobile Money est obligatoire.");
 
   await ensurePremiumSubscriptionTable();
-
   const referenceId = `afritok_premium_${userId}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
   const payment = await db.insert(payments).values({
@@ -52,26 +42,17 @@ export async function createPremiumSubscriptionPayment({
     confirmedAt: null,
   }).returning();
 
-  await db.execute(`
+  await db.execute(sql`
     INSERT INTO afritok_premium_subscriptions (user_id, plan_id, payment_reference, status)
-    VALUES (${userId}, '${plan.id}', '${referenceId}', 'pending')
+    VALUES (${userId}, ${plan.id}, ${referenceId}, 'pending')
   `);
 
-  return {
-    paymentId: payment[0].id,
-    referenceId,
-    amount: plan.price,
-    currency: "XOF",
-    status: "pending" as const,
-    message: "Demande de paiement créée. L'abonnement sera activé uniquement après confirmation réelle du paiement.",
-  };
+  return { paymentId: payment[0].id, referenceId, amount: plan.price, currency: "XOF", status: "pending" as const, message: "Demande de paiement créée. L'abonnement sera activé uniquement après confirmation réelle du paiement." };
 }
 
 export async function getPremiumPaymentStatus(userId: number, referenceId: string) {
   await ensurePremiumSubscriptionTable();
-  const result = await db.select().from(payments).where(
-    and(eq(payments.userId, userId), eq(payments.referenceId, referenceId))
-  ).limit(1);
+  const result = await db.select().from(payments).where(and(eq(payments.userId, userId), eq(payments.referenceId, referenceId))).limit(1);
   if (!result[0]) throw new Error("Paiement Premium introuvable.");
   return result[0];
 }
@@ -81,7 +62,7 @@ export async function syncPremiumSubscriptionAfterConfirmedPayment(referenceId: 
   const payment = await db.select().from(payments).where(eq(payments.referenceId, referenceId)).limit(1);
   if (!payment[0] || payment[0].status !== "confirmed") return null;
 
-  const rows = await db.execute(`SELECT * FROM afritok_premium_subscriptions WHERE payment_reference = '${referenceId}' LIMIT 1`);
+  const rows = await db.execute(sql`SELECT * FROM afritok_premium_subscriptions WHERE payment_reference = ${referenceId} LIMIT 1`);
   const subscription = (rows as any)?.rows?.[0];
   if (!subscription) return null;
   if (subscription.status === "active") return subscription;
@@ -91,10 +72,10 @@ export async function syncPremiumSubscriptionAfterConfirmedPayment(referenceId: 
 
   const now = new Date();
   const expires = new Date(now.getTime() + plan.durationDays * 86400000);
-  await db.execute(`
+  await db.execute(sql`
     UPDATE afritok_premium_subscriptions
-    SET status = 'active', starts_at = '${now.toISOString()}', expires_at = '${expires.toISOString()}', updated_at = NOW()
-    WHERE payment_reference = '${referenceId}'
+    SET status = 'active', starts_at = ${now.toISOString()}, expires_at = ${expires.toISOString()}, updated_at = NOW()
+    WHERE payment_reference = ${referenceId}
   `);
 
   return { ...subscription, status: "active", starts_at: now.toISOString(), expires_at: expires.toISOString() };
