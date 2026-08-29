@@ -33,7 +33,9 @@ import Discover from "./pages/Discover";
 import Inbox from "./pages/Inbox";
 import AudioDetail from "./pages/AudioDetail";
 import Advertising from "./pages/Advertising";
+import AfritokPremium from "./pages/AfritokPremium";
 import AdvertisingButton from "./components/AdvertisingButton";
+import PremiumButton from "./components/PremiumButton";
 import GlobalAdSlot from "./components/advertising/GlobalAdSlot";
 import ProfileMessageLauncher from "./components/ProfileMessageLauncher";
 import { useAuth } from "./_core/hooks/useAuth";
@@ -64,6 +66,7 @@ function Router() {
       <Route path="/gifts" component={Gifts} />
       <Route path="/audio/:videoId" component={AudioDetail} />
       <Route path="/advertising" component={Advertising} />
+      <Route path="/premium" component={AfritokPremium} />
       <Route path="/monetization" component={Monetization} />
       <Route path="/search" component={Search} />
       <Route path="/trending" component={Trending} />
@@ -92,12 +95,21 @@ function GlobalAdvertisingButton() {
   if (location === "/advertising" || location.startsWith("/admin")) return null;
   return <div className="fixed bottom-24 right-4 z-[90]"><AdvertisingButton /></div>;
 }
+
+function GlobalPremiumButton() {
+  const [location] = useLocation();
+  if (!location.startsWith("/profile") || location.startsWith("/admin")) return null;
+  return <div className="fixed bottom-24 left-4 z-[90]"><PremiumButton /></div>;
+}
+
 function GlobalAdvertisingDisplay() {
   const [location] = useLocation();
   if (location === "/advertising" || location.startsWith("/admin")) return null;
   return <GlobalAdSlot />;
 }
+
 function App() {
-  return <ErrorBoundary><ThemeProvider defaultTheme="dark"><NotificationProvider><TooltipProvider><Toaster /><Router /><ProfileMessageLauncher /><GlobalAdvertisingButton /><GlobalAdvertisingDisplay /></TooltipProvider></NotificationProvider></ThemeProvider></ErrorBoundary>;
+  return <ErrorBoundary><ThemeProvider defaultTheme="dark"><NotificationProvider><TooltipProvider><Toaster /><Router /><ProfileMessageLauncher /><GlobalAdvertisingButton /><GlobalPremiumButton /><GlobalAdvertisingDisplay /></TooltipProvider></NotificationProvider></ThemeProvider></ErrorBoundary>;
 }
+
 export default App;
