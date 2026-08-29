@@ -41,6 +41,15 @@ export async function settleConfirmedPayment(params: {
     }
 
     const payment = paymentRows[0];
+    const requestedAmount = Number(payment.amount);
+
+    if (!Number.isFinite(requestedAmount) || requestedAmount <= 0) {
+      throw new Error("Montant demandé du paiement invalide.");
+    }
+
+    if (Math.abs(params.confirmedAmount - requestedAmount) > 0.001) {
+      throw new Error("Le montant confirmé ne correspond pas au montant demandé.");
+    }
 
     if (payment.status !== "success") {
       const updated = await tx
