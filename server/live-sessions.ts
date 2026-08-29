@@ -1,4 +1,5 @@
 import { getLogger } from './logging';
+import { isStageRole, normalizeStageCapacity } from './live/stage-rules';
 
 const logger = getLogger();
 export type LiveType = 'video' | 'audio' | 'screen-share';
@@ -41,7 +42,7 @@ export class LiveSessionsManager {
 
   createSession(hostId: number, hostUsername: string, title: string, description: string, type: LiveType = 'video', isPublic = true, maxParticipants = 50): LiveSession {
     const sessionId = 'live_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-    const capacity = Math.max(1, Math.min(100, Math.floor(maxParticipants)));
+    const capacity = normalizeStageCapacity(maxParticipants);
     const session: LiveSession = { sessionId, hostId, hostUsername, title, description, type, state: 'pending', participants: new Map(), maxParticipants: capacity, viewerCount: 0, startedAt: new Date(), isPublic, giftRevenue: 0 };
     session.participants.set(hostId, { userId: hostId, username: hostUsername, joinedAt: new Date(), role: 'host', isMuted: false, isVideoOff: false });
     this.sessions.set(sessionId, session);
@@ -58,11 +59,17 @@ export class LiveSessionsManager {
     if (!session || session.state === 'ended') return false;
     const existing = session.participants.get(userId);
     if (existing) {
-      if (role === 'guest' && existing.role === 'viewer') { existing.role = 'guest'; session.viewerCount = Math.max(0, session.viewerCount - 1); return true; }
+      if (role === 'guest' && existing.role === 'viewer') {
+        const stageCount = Array.from(session.participants.values()).filter((p) => isStageRole(p.role)).length;
+        if (stageCount >= session.maxParticipants) return false;
+        existing.role = 'guest';
+        session.viewerCount = Math.max(0, session.viewerCount - 1);
+        return true;
+      }
       return true;
     }
-    const guestCount = Array.from(session.participants.values()).filter((p) => p.role === 'guest' || p.role === 'admin').length;
-    if (role === 'guest' && guestCount >= session.maxParticipants) return false;
+    const stageCount = Array.from(session.participants.values()).filter((p) => isStageRole(p.role)).length;
+    if (role === 'guest' && stageCount >= session.maxParticipants) return false;
     session.participants.set(userId, { userId, username, joinedAt: new Date(), role, isMuted: false, isVideoOff: false });
     if (role === 'viewer') session.viewerCount++;
     return true;
@@ -92,7 +99,11 @@ export class LiveSessionsManager {
     const participant = session.participants.get(userId); if (!participant || participant.role === 'host') return false;
     const wasViewer = participant.role === 'viewer';
     const willViewer = role === 'viewer';
-    if (wasViewer && !willViewer) session.viewerCount = Math.max(0, session.viewerCount - 1);
+    if (wasViewer && !willViewer) {
+      const stageCount = Array.from(session.participants.values()).filter((p) => isStageRole(p.role)).length;
+      if (stageCount >= session.maxParticipants) return false;
+      session.viewerCount = Math.max(0, session.viewerCount - 1);
+    }
     if (!wasViewer && willViewer) session.viewerCount++;
     participant.role = role;
     return true;
@@ -100,7 +111,7 @@ export class LiveSessionsManager {
 
   setGuestLiveState(sessionId: string, userId: number, isMuted: boolean, isVideoOff: boolean): boolean {
     const session = this.sessions.get(sessionId); if (!session) return false;
-    const participant = session.participants.get(userId); if (!participant || !['guest', 'admin'].includes(participant.role)) return false;
+    const participant = session.participants.get(userId); if (!participant || !isStageRole(participant.role)) return false;
     participant.isMuted = isMuted; participant.isVideoOff = isVideoOff; return true;
   }
 
