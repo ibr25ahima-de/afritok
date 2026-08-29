@@ -35,13 +35,16 @@ export default function AdvertisingCreateFormSecure() {
 
   const ready = useMemo(() => {
     if (!advertiserName.trim() || !campaignName.trim()) return false;
-    return format === "text" ? !!textContent.trim() : !!file;
+    if (format === "text") return Boolean(textContent.trim());
+    return Boolean(file);
   }, [advertiserName, campaignName, format, textContent, file]);
 
   async function pay() {
     if (!ready || !phone.trim()) return;
+
     setMessage("");
     setPaymentConfirmed(false);
+
     try {
       const payment = await createPayment.mutateAsync({
         amount: duration.price,
@@ -50,39 +53,58 @@ export default function AdvertisingCreateFormSecure() {
         phone: phone.trim(),
         purpose: "advertisement",
       });
+
       setPaymentReference(payment.referenceId);
+
       if (payment.status === "success") {
         setPaymentConfirmed(true);
         setMessage("Paiement confirmé. Le bouton Envoyer est maintenant bleu.");
       } else {
         setMessage("Paiement en attente : la publicité reste inactive.");
       }
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Le paiement n'a pas pu être créé.");
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Le paiement n'a pas pu être créé."
+      );
     }
   }
 
   async function upload(fileToUpload: File) {
     const body = new FormData();
     body.append("file", fileToUpload);
+
     const response = await fetch("/api/upload-ad-media", {
       method: "POST",
       credentials: "include",
       body,
     });
+
     const data = await response.json().catch(() => ({}));
-    if (!response.ok || !data.url) throw new Error(data.error || "Impossible d'envoyer le média publicitaire.");
+
+    if (!response.ok || !data.url) {
+      throw new Error(
+        data.error || "Impossible d'envoyer le média publicitaire."
+      );
+    }
+
     return String(data.url);
   }
 
   async function send() {
     if (!paymentConfirmed || !paymentReference || !ready) return;
+
     setBusy(true);
     setMessage("");
+
     try {
       let mediaUrl: string | undefined;
+
       if (format !== "text") {
-        if (!file) throw new Error("Sélectionnez une photo ou une vidéo.");
+        if (!file) {
+          throw new Error("Sélectionnez une photo ou une vidéo.");
+        }
         mediaUrl = await upload(file);
       }
 
@@ -105,14 +127,24 @@ export default function AdvertisingCreateFormSecure() {
         targetCountry: country.trim() || undefined,
       });
 
-      await attachPayment.mutateAsync({ campaignId: campaign.id, paymentReference });
+      await attachPayment.mutateAsync({
+        campaignId: campaign.id,
+        paymentReference,
+      });
+
       await activateCampaign.mutateAsync({ campaignId: campaign.id });
 
-      setMessage("Publicité envoyée et activée. La diffusion commence selon la durée choisie et les règles AfriTok.");
+      setMessage(
+        "Publicité envoyée et activée. La diffusion commence selon la durée choisie et les règles AfriTok."
+      );
       setPaymentConfirmed(false);
       setPaymentReference("");
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "La publicité n'a pas pu être envoyée.");
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "La publicité n'a pas pu être envoyée."
+      );
     } finally {
       setBusy(false);
     }
@@ -122,65 +154,186 @@ export default function AdvertisingCreateFormSecure() {
     <section className="mx-auto w-full max-w-lg rounded-3xl bg-white p-5 text-black shadow-xl">
       <h1 className="text-3xl font-black">Faire de la publicité</h1>
       <p className="mt-1 text-lg font-bold">Présentez votre entreprise sur AfriTok</p>
-      <p className="mt-4 rounded-2xl bg-amber-50 p-4 text-sm font-bold">Toutes les personnes qui utilisent cette application verront votre publicité.</p>
 
-      <h2 className="mt-6 text-xl font-black uppercase">PAYEZ POUR FAIRE LA PUBLICITÉ DE VOTRE ENTREPRISE, DE VOS PRODUITS OU DE VOTRE BOUTIQUE</h2>
-      <p className="mt-2 text-sm text-gray-600">Choisissez votre format, votre durée et votre tarif. Remplissez votre publicité, puis payez. L'envoi et la diffusion ne sont validés qu'après confirmation réelle du paiement.</p>
+      <p className="mt-4 rounded-2xl bg-amber-50 p-4 text-sm font-bold">
+        Toutes les personnes qui utilisent cette application verront votre publicité.
+      </p>
+
+      <h2 className="mt-6 text-xl font-black uppercase">
+        PAYEZ POUR FAIRE LA PUBLICITÉ DE VOTRE ENTREPRISE, DE VOS PRODUITS OU DE VOTRE BOUTIQUE
+      </h2>
+
+      <p className="mt-2 text-sm text-gray-600">
+        Choisissez votre format, votre durée et votre tarif. Remplissez votre publicité, puis payez.
+        L'envoi et la diffusion ne sont validés qu'après confirmation réelle du paiement.
+      </p>
 
       <div className="mt-6">
         <p className="mb-2 font-black">1. Choisissez ce que vous voulez publier</p>
         <div className="grid grid-cols-3 gap-2">
-          {(["text", "image", "video"] as Format[]).map((item) => (
-            <button key={item} type="button" onClick={() => { setFormat(item); setFile(null); setPaymentConfirmed(false); setPaymentReference(""); }} className={`rounded-xl border-2 p-3 font-bold ${format === item ? "border-amber-500 bg-amber-50" : "border-gray-200"}`}>
-              {item === "text" ? "Texte" : item === "image" ? "Photo" : "Vidéo"}
-            </button>
-          ))}
+          {(["text", "image", "video"] as Format[]).map((item) => {
+            const selected = format === item;
+            const label = item === "text" ? "Texte" : item === "image" ? "Photo" : "Vidéo";
+
+            return (
+              <button
+                key={item}
+                type="button"
+                onClick={() => {
+                  setFormat(item);
+                  setFile(null);
+                  setPaymentConfirmed(false);
+                  setPaymentReference("");
+                }}
+                className={
+                  selected
+                    ? "rounded-xl border-2 border-amber-500 bg-amber-50 p-3 font-bold"
+                    : "rounded-xl border-2 border-gray-200 p-3 font-bold"
+                }
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
       <div className="mt-6">
         <p className="mb-2 font-black">2. Choisissez la durée et le prix</p>
         <div className="grid grid-cols-2 gap-2">
-          {DURATIONS.map((item) => (
-            <button key={item.key} type="button" onClick={() => { setDuration(item); setPaymentConfirmed(false); setPaymentReference(""); }} className={`rounded-xl border-2 p-3 text-left ${duration.key === item.key ? "border-amber-500 bg-amber-50" : "border-gray-200"}`}>
-              <span className="block font-bold">{item.label}</span>
-              <span className="font-black">{item.price.toLocaleString("fr-FR")} XOF</span>
-            </button>
-          ))}
+          {DURATIONS.map((item) => {
+            const selected = duration.key === item.key;
+
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => {
+                  setDuration(item);
+                  setPaymentConfirmed(false);
+                  setPaymentReference("");
+                }}
+                className={
+                  selected
+                    ? "rounded-xl border-2 border-amber-500 bg-amber-50 p-3 text-left"
+                    : "rounded-xl border-2 border-gray-200 p-3 text-left"
+                }
+              >
+                <span className="block font-bold">{item.label}</span>
+                <span className="font-black">
+                  {item.price.toLocaleString("fr-FR")} XOF
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
       <div className="mt-6 space-y-3">
         <p className="font-black">3. Préparez votre publicité</p>
-        <input className="w-full rounded-xl border p-3" placeholder="Nom de l'entreprise" value={advertiserName} onChange={(e) => setAdvertiserName(e.target.value)} />
-        <input className="w-full rounded-xl border p-3" placeholder="Nom de la campagne" value={campaignName} onChange={(e) => setCampaignName(e.target.value)} />
+
+        <input
+          className="w-full rounded-xl border p-3"
+          placeholder="Nom de l'entreprise"
+          value={advertiserName}
+          onChange={(event) => setAdvertiserName(event.target.value)}
+        />
+
+        <input
+          className="w-full rounded-xl border p-3"
+          placeholder="Nom de la campagne"
+          value={campaignName}
+          onChange={(event) => setCampaignName(event.target.value)}
+        />
+
         {format === "text" ? (
-          <textarea className="min-h-32 w-full rounded-xl border p-3" placeholder="Écrivez votre publicité" value={textContent} onChange={(e) => setTextContent(e.target.value)} />
+          <textarea
+            className="min-h-32 w-full rounded-xl border p-3"
+            placeholder="Écrivez votre publicité"
+            value={textContent}
+            onChange={(event) => setTextContent(event.target.value)}
+          />
         ) : (
           <AdMediaPicker type={format} file={file} onChange={setFile} />
         )}
-        <input className="w-full rounded-xl border p-3" placeholder="Lien vers votre entreprise / boutique (facultatif)" value={destinationUrl} onChange={(e) => setDestinationUrl(e.target.value)} />
-        <input className="w-full rounded-xl border p-3" placeholder="Pays ciblé (ex. CI) — facultatif" value={country} onChange={(e) => setCountry(e.target.value)} />
+
+        <input
+          className="w-full rounded-xl border p-3"
+          placeholder="Lien vers votre entreprise / boutique (facultatif)"
+          value={destinationUrl}
+          onChange={(event) => setDestinationUrl(event.target.value)}
+        />
+
+        <input
+          className="w-full rounded-xl border p-3"
+          placeholder="Pays ciblé (ex. CI) — facultatif"
+          value={country}
+          onChange={(event) => setCountry(event.target.value)}
+        />
       </div>
 
       <div className="mt-6 rounded-2xl border p-4">
         <p className="font-black">4. Paiement Mobile Money</p>
-        <select className="mt-3 w-full rounded-xl border p-3" value={operator} onChange={(e) => setOperator(e.target.value as Operator)}>
+
+        <select
+          className="mt-3 w-full rounded-xl border p-3"
+          value={operator}
+          onChange={(event) => setOperator(event.target.value as Operator)}
+        >
           <option value="orange">Orange Money</option>
           <option value="mtn">MTN Mobile Money</option>
           <option value="moov">Moov Money</option>
           <option value="wave">Wave</option>
         </select>
-        <input className="mt-3 w-full rounded-xl border p-3" placeholder="Numéro Mobile Money" value={phone} onChange={(e) => setPhone(e.target.value)} />
-        <p className="mt-3 font-black">Prix à payer : {duration.price.toLocaleString("fr-FR")} XOF</p>
-        <button type="button" disabled={!ready || !phone.trim() || busy || paymentConfirmed} onClick={pay} className="mt-3 w-full rounded-xl bg-black p-4 font-black text-white disabled:opacity-40">
+
+        <input
+          className="mt-3 w-full rounded-xl border p-3"
+          placeholder="Numéro Mobile Money"
+          value={phone}
+          onChange={(event) => setPhone(event.target.value)}
+        />
+
+        <p className="mt-3 font-black">
+          Prix à payer : {duration.price.toLocaleString("fr-FR")} XOF
+        </p>
+
+        <button
+          type="button"
+          disabled={!ready || !phone.trim() || busy || paymentConfirmed}
+          onClick={pay}
+          className="mt-3 w-full rounded-xl bg-black p-4 font-black text-white disabled:opacity-40"
+        >
           {paymentConfirmed ? "Paiement confirmé ✓" : "Payer"}
         </button>
-        <button type="button" disabled={!paymentConfirmed || busy} onClick={send} className={`mt-3 w-full rounded-xl p-4 font-black text-white ${paymentConfirmed ? "bg-blue-600" : "bg-black"} disabled:cursor-not-allowed disabled:opacity-60">
-          {busy ? "Envoi en cours…" : paymentConfirmed ? "Envoyer et commencer la publicité" : "Envoyer"}
+
+        <button
+          type="button"
+          disabled={!paymentConfirmed || busy}
+          onClick={send}
+          className={
+            paymentConfirmed
+              ? "mt-3 w-full rounded-xl bg-blue-600 p-4 font-black text-white disabled:cursor-not-allowed disabled:opacity-60"
+              : "mt-3 w-full rounded-xl bg-black p-4 font-black text-white disabled:cursor-not-allowed disabled:opacity-60"
+          }
+        >
+          {busy
+            ? "Envoi en cours..."
+            : paymentConfirmed
+              ? "Envoyer et commencer la publicité"
+              : "Envoyer"}
         </button>
-        {message && <p className="mt-3 rounded-xl bg-gray-100 p-3 text-sm font-semibold">{message}</p>}
-        {!paymentConfirmed && <p className="mt-2 text-center text-xs font-semibold text-gray-500">Le bouton Envoyer reste noir et inactif jusqu'à la confirmation réelle du paiement.</p>}
+
+        {message && (
+          <p className="mt-3 rounded-xl bg-gray-100 p-3 text-sm font-semibold">
+            {message}
+          </p>
+        )}
+
+        {!paymentConfirmed && (
+          <p className="mt-2 text-center text-xs font-semibold text-gray-500">
+            Le bouton Envoyer reste noir et inactif jusqu'à la confirmation réelle du paiement.
+          </p>
+        )}
       </div>
 
       <div className="mt-6 rounded-2xl bg-gray-50 p-4 text-sm">
