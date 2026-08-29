@@ -1,43 +1,20 @@
-/**
- * Module de gestion des sessions live
- * 
- * Gère :
- * - Création et fermeture de sessions
- * - Participants et invitations
- * - Statut du live
- * - Métadonnées du live
- */
-
 import { getLogger } from './logging';
 
 const logger = getLogger();
-
-/**
- * Types de live
- */
 export type LiveType = 'video' | 'audio' | 'screen-share';
-
-/**
- * États du live
- */
 export type LiveState = 'pending' | 'starting' | 'live' | 'ending' | 'ended';
+export type LiveRole = 'host' | 'admin' | 'guest' | 'viewer';
 
-/**
- * Interface pour un participant
- */
 export interface LiveParticipant {
   userId: number;
   username: string;
   joinedAt: Date;
-  role: 'host' | 'guest' | 'viewer';
+  role: LiveRole;
   isMuted: boolean;
   isVideoOff: boolean;
   peerId?: string;
 }
 
-/**
- * Interface pour une session live
- */
 export interface LiveSession {
   sessionId: string;
   hostId: number;
@@ -54,311 +31,98 @@ export interface LiveSession {
   isPublic: boolean;
   thumbnail?: string;
   recordingUrl?: string;
-  rewardId?: string; // ID de la récompense associée
-  giftRevenue: number; // Revenus des cadeaux en cents
+  rewardId?: string;
+  giftRevenue: number;
 }
 
-/**
- * Classe pour gérer les sessions live
- */
 export class LiveSessionsManager {
   private sessions: Map<string, LiveSession> = new Map();
-  private userSessions: Map<number, string> = new Map(); // userId -> sessionId
+  private userSessions: Map<number, string> = new Map();
 
-  /**
-   * Créer une nouvelle session live
-   */
-  createSession(
-    hostId: number,
-    hostUsername: string,
-    title: string,
-    description: string,
-    type: LiveType = 'video',
-    isPublic: boolean = true,
-    maxParticipants: number = 50
-  ): LiveSession {
+  createSession(hostId: number, hostUsername: string, title: string, description: string, type: LiveType = 'video', isPublic = true, maxParticipants = 50): LiveSession {
     const sessionId = 'live_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-
-    const session: LiveSession = {
-      sessionId,
-      hostId,
-      hostUsername,
-      title,
-      description,
-      type,
-      state: 'pending',
-      participants: new Map(),
-      maxParticipants,
-      viewerCount: 0,
-      startedAt: new Date(),
-      isPublic,
-      giftRevenue: 0,
-    };
-
-    // Ajouter l'hôte comme participant
-    session.participants.set(hostId, {
-      userId: hostId,
-      username: hostUsername,
-      joinedAt: new Date(),
-      role: 'host',
-      isMuted: false,
-      isVideoOff: false,
-    });
-
+    const capacity = Math.max(1, Math.min(100, Math.floor(maxParticipants)));
+    const session: LiveSession = { sessionId, hostId, hostUsername, title, description, type, state: 'pending', participants: new Map(), maxParticipants: capacity, viewerCount: 0, startedAt: new Date(), isPublic, giftRevenue: 0 };
+    session.participants.set(hostId, { userId: hostId, username: hostUsername, joinedAt: new Date(), role: 'host', isMuted: false, isVideoOff: false });
     this.sessions.set(sessionId, session);
     this.userSessions.set(hostId, sessionId);
-
-    logger.info('Live session created', {
-      sessionId,
-      hostId,
-      title,
-      type,
-    });
-
+    logger.info('Live session created', { sessionId, hostId, title, type, maxParticipants: capacity });
     return session;
   }
 
-  /**
-   * Obtenir une session
-   */
-  getSession(sessionId: string): LiveSession | undefined {
-    return this.sessions.get(sessionId);
-  }
+  getSession(sessionId: string): LiveSession | undefined { return this.sessions.get(sessionId); }
+  getUserSession(userId: number): LiveSession | undefined { const id = this.userSessions.get(userId); return id ? this.sessions.get(id) : undefined; }
 
-  /**
-   * Obtenir la session d'un utilisateur
-   */
-  getUserSession(userId: number): LiveSession | undefined {
-    const sessionId = this.userSessions.get(userId);
-    return sessionId ? this.sessions.get(sessionId) : undefined;
-  }
-
-  /**
-   * Ajouter un participant
-   */
-  addParticipant(
-    sessionId: string,
-    userId: number,
-    username: string,
-    role: 'guest' | 'viewer' = 'viewer'
-  ): boolean {
+  addParticipant(sessionId: string, userId: number, username: string, role: 'guest' | 'viewer' = 'viewer'): boolean {
     const session = this.sessions.get(sessionId);
-    if (!session) {
-      logger.warn('Session not found', { sessionId });
-      return false;
-    }
-
-    // Vérifier la limite de participants (hôte + guests)
-    const guestCount = Array.from(session.participants.values()).filter((p) => p.role === 'guest').length;
-    if (role === 'guest' && guestCount >= session.maxParticipants - 1) {
-      logger.warn('Max participants reached', { sessionId });
-      return false;
-    }
-
-    // Ajouter le participant
-    session.participants.set(userId, {
-      userId,
-      username,
-      joinedAt: new Date(),
-      role,
-      isMuted: false,
-      isVideoOff: false,
-    });
-
-    if (role === 'viewer') {
-      session.viewerCount++;
-    }
-
-    logger.info('Participant added', { sessionId, userId, role });
-    return true;
-  }
-
-  /**
-   * Retirer un participant
-   */
-  removeParticipant(sessionId: string, userId: number): boolean {
-    const session = this.sessions.get(sessionId);
-    if (!session) {
-      logger.warn('Session not found', { sessionId });
-      return false;
-    }
-
-    const participant = session.participants.get(userId);
-    if (!participant) {
-      logger.warn('Participant not found', { sessionId, userId });
-      return false;
-    }
-
-    if (participant.role === 'viewer') {
-      session.viewerCount--;
-    }
-
-    session.participants.delete(userId);
-
-    logger.info('Participant removed', { sessionId, userId });
-
-    // Si l'hôte part, fermer la session
-    if (participant.role === 'host') {
-      this.closeSession(sessionId);
+    if (!session || session.state === 'ended') return false;
+    const existing = session.participants.get(userId);
+    if (existing) {
+      if (role === 'guest' && existing.role === 'viewer') { existing.role = 'guest'; session.viewerCount = Math.max(0, session.viewerCount - 1); return true; }
       return true;
     }
-
+    const guestCount = Array.from(session.participants.values()).filter((p) => p.role === 'guest' || p.role === 'admin').length;
+    if (role === 'guest' && guestCount >= session.maxParticipants) return false;
+    session.participants.set(userId, { userId, username, joinedAt: new Date(), role, isMuted: false, isVideoOff: false });
+    if (role === 'viewer') session.viewerCount++;
     return true;
   }
 
-  /**
-   * Mettre à jour l'état du live
-   */
-  setSessionState(sessionId: string, state: LiveState): void {
-    const session = this.sessions.get(sessionId);
-    if (!session) {
-      logger.warn('Session not found', { sessionId });
-      return;
-    }
-
-    session.state = state;
-
-    if (state === 'ended') {
-      session.endedAt = new Date();
-    }
-
-    logger.info('Session state updated', { sessionId, state });
-  }
-
-  /**
-   * Mettre à jour le statut audio/vidéo d'un participant
-   */
-  updateParticipantStatus(
-    sessionId: string,
-    userId: number,
-    isMuted?: boolean,
-    isVideoOff?: boolean
-  ): boolean {
-    const session = this.sessions.get(sessionId);
-    if (!session) {
-      logger.warn('Session not found', { sessionId });
-      return false;
-    }
-
-    const participant = session.participants.get(userId);
-    if (!participant) {
-      logger.warn('Participant not found', { sessionId, userId });
-      return false;
-    }
-
-    if (isMuted !== undefined) {
-      participant.isMuted = isMuted;
-    }
-
-    if (isVideoOff !== undefined) {
-      participant.isVideoOff = isVideoOff;
-    }
-
-    logger.debug('Participant status updated', { sessionId, userId, isMuted, isVideoOff });
+  removeParticipant(sessionId: string, userId: number): boolean {
+    const session = this.sessions.get(sessionId); if (!session) return false;
+    const participant = session.participants.get(userId); if (!participant) return false;
+    if (participant.role === 'viewer') session.viewerCount = Math.max(0, session.viewerCount - 1);
+    session.participants.delete(userId); this.userSessions.delete(userId);
+    if (participant.role === 'host') this.closeSession(sessionId);
     return true;
   }
 
-  /**
-   * Fermer une session
-   */
+  setSessionState(sessionId: string, state: LiveState): void { const session = this.sessions.get(sessionId); if (!session) return; session.state = state; if (state === 'ended') session.endedAt = new Date(); }
+
+  updateParticipantStatus(sessionId: string, userId: number, isMuted?: boolean, isVideoOff?: boolean): boolean {
+    const session = this.sessions.get(sessionId); if (!session) return false;
+    const participant = session.participants.get(userId); if (!participant) return false;
+    if (isMuted !== undefined) participant.isMuted = isMuted;
+    if (isVideoOff !== undefined) participant.isVideoOff = isVideoOff;
+    return true;
+  }
+
+  setParticipantRole(sessionId: string, userId: number, role: 'admin' | 'guest' | 'viewer'): boolean {
+    const session = this.sessions.get(sessionId); if (!session) return false;
+    const participant = session.participants.get(userId); if (!participant || participant.role === 'host') return false;
+    const wasViewer = participant.role === 'viewer';
+    const willViewer = role === 'viewer';
+    if (wasViewer && !willViewer) session.viewerCount = Math.max(0, session.viewerCount - 1);
+    if (!wasViewer && willViewer) session.viewerCount++;
+    participant.role = role;
+    return true;
+  }
+
+  setGuestLiveState(sessionId: string, userId: number, isMuted: boolean, isVideoOff: boolean): boolean {
+    const session = this.sessions.get(sessionId); if (!session) return false;
+    const participant = session.participants.get(userId); if (!participant || !['guest', 'admin'].includes(participant.role)) return false;
+    participant.isMuted = isMuted; participant.isVideoOff = isVideoOff; return true;
+  }
+
   closeSession(sessionId: string): void {
-    const session = this.sessions.get(sessionId);
-    if (!session) {
-      logger.warn('Session not found', { sessionId });
-      return;
-    }
-
-    session.state = 'ended';
-    session.endedAt = new Date();
-
-    // Retirer tous les utilisateurs
-    session.participants.forEach((_, userId) => {
-      this.userSessions.delete(userId);
-    });
-
-    // Supprimer la session après un délai (pour les logs)
-    setTimeout(() => {
-      this.sessions.delete(sessionId);
-    }, 60000); // 1 minute
-
-    logger.info('Session closed', {
-      sessionId,
-      duration: session.endedAt.getTime() - session.startedAt.getTime(),
-      participantCount: session.participants.size,
-    });
+    const session = this.sessions.get(sessionId); if (!session) return;
+    session.state = 'ended'; session.endedAt = new Date();
+    session.participants.forEach((_, userId) => this.userSessions.delete(userId));
+    setTimeout(() => this.sessions.delete(sessionId), 60000);
+    logger.info('Live session closed', { sessionId, participantCount: session.participants.size });
   }
 
-  /**
-   * Obtenir toutes les sessions actives
-   */
-  getActiveSessions(): LiveSession[] {
-    return Array.from(this.sessions.values()).filter((s) => s.state !== 'ended');
-  }
+  getActiveSessions(): LiveSession[] { return Array.from(this.sessions.values()).filter((s) => s.state !== 'ended'); }
+  getPublicSessions(): LiveSession[] { return this.getActiveSessions().filter((s) => s.isPublic && s.state === 'live'); }
+  addGiftRevenue(sessionId: string, amount: number): boolean { const s = this.sessions.get(sessionId); if (!s) return false; s.giftRevenue += amount; return true; }
+  getGiftRevenue(sessionId: string): number { return this.sessions.get(sessionId)?.giftRevenue || 0; }
 
-  /**
-   * Obtenir les sessions publiques
-   */
-  getPublicSessions(): LiveSession[] {
-    return this.getActiveSessions().filter((s) => s.isPublic && s.state === 'live');
-  }
-
-  /**
-   * Ajouter un revenu de cadeau a une session
-   */
-  addGiftRevenue(sessionId: string, amount: number): boolean {
-    const session = this.sessions.get(sessionId);
-    if (!session) {
-      logger.warn('Session not found', { sessionId });
-      return false;
-    }
-
-    session.giftRevenue += amount;
-    logger.debug('Gift revenue added', { sessionId, amount, total: session.giftRevenue });
-    return true;
-  }
-
-  /**
-   * Obtenir le revenu des cadeaux d'une session
-   */
-  getGiftRevenue(sessionId: string): number {
-    const session = this.sessions.get(sessionId);
-    return session ? session.giftRevenue : 0;
-  }
-
-  /**
-   * Obtenir les statistiques d'une session
-   */
   getSessionStats(sessionId: string) {
-    const session = this.sessions.get(sessionId);
-    if (!session) {
-      return null;
-    }
-
-    const guests = Array.from(session.participants.values()).filter((p) => p.role === 'guest');
-    const viewers = Array.from(session.participants.values()).filter((p) => p.role === 'viewer');
-
-    return {
-      sessionId,
-      title: session.title,
-      hostUsername: session.hostUsername,
-      type: session.type,
-      state: session.state,
-      duration: session.endedAt ? session.endedAt.getTime() - session.startedAt.getTime() : 0,
-      participantCount: session.participants.size,
-      guestCount: guests.length,
-      viewerCount: session.viewerCount,
-      maxParticipants: session.maxParticipants,
-      giftRevenue: session.giftRevenue,
-    };
+    const s = this.sessions.get(sessionId); if (!s) return null;
+    const guests = Array.from(s.participants.values()).filter((p) => p.role === 'guest');
+    return { sessionId, title: s.title, hostUsername: s.hostUsername, type: s.type, state: s.state, duration: s.endedAt ? s.endedAt.getTime() - s.startedAt.getTime() : 0, participantCount: s.participants.size, guestCount: guests.length, viewerCount: s.viewerCount, maxParticipants: s.maxParticipants, giftRevenue: s.giftRevenue };
   }
 }
 
-// Singleton
 let instance: LiveSessionsManager | null = null;
-
-export function getLiveSessionsManager(): LiveSessionsManager {
-  if (!instance) {
-    instance = new LiveSessionsManager();
-  }
-  return instance;
-}
+export function getLiveSessionsManager(): LiveSessionsManager { if (!instance) instance = new LiveSessionsManager(); return instance; }
