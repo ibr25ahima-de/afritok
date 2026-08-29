@@ -1,116 +1,126 @@
-/**
- * Routeurs tRPC pour le live streaming
- */
-
 import { z } from 'zod';
 import { protectedProcedure, router } from './_core/trpc';
 import { getLiveSessionsManager } from './live-sessions';
 import { getLiveInvitationsManager } from './live-invitations';
-import { getWebRTCSignalingManager } from './webrtc-signaling';
 import { getLogger } from './logging';
 
 const logger = getLogger();
 const liveSessionsManager = getLiveSessionsManager();
 const liveInvitationsManager = getLiveInvitationsManager();
-const webrtcSignalingManager = getWebRTCSignalingManager();
+
+function getSessionOrThrow(sessionId: string) {
+  const session = liveSessionsManager.getSession(sessionId);
+  if (!session) throw new Error('Session not found');
+  return session;
+}
+function requireHost(sessionId: string, userId: number) {
+  const session = getSessionOrThrow(sessionId);
+  if (session.hostId !== userId) throw new Error('Only the host can perform this action');
+  return session;
+}
+function requireHostOrAdmin(sessionId: string, userId: number) {
+  const session = getSessionOrThrow(sessionId);
+  const p = session.participants.get(userId);
+  if (session.hostId !== userId && p?.role !== 'admin') throw new Error('Host or live admin required');
+  return session;
+}
 
 export const liveRouter = router({
-  createSession: protectedProcedure.input(z.object({ title: z.string().min(1).max(200), description: z.string().max(500).optional(), type: z.enum(['video', 'audio', 'screen-share']).default('video'), isPublic: z.boolean().default(true), maxParticipants: z.number().int().min(2).max(100).default(50) })).mutation(({ ctx, input }) => {
+  createSession: protectedProcedure.input(z.object({ title: z.string().min(1).max(200), description: z.string().max(500).optional(), type: z.enum(['video', 'audio', 'screen-share']).default('video'), isPublic: z.boolean().default(true), maxParticipants: z.number().int().min(1).max(100).default(5) })).mutation(({ ctx, input }) => {
     const session = liveSessionsManager.createSession(ctx.user.id, ctx.user.name || 'Anonymous', input.title, input.description || '', input.type, input.isPublic, input.maxParticipants);
-    return { sessionId: session.sessionId, title: session.title, type: session.type, state: session.state };
+    return { sessionId: session.sessionId, title: session.title, type: session.type, state: session.state, maxParticipants: session.maxParticipants };
   }),
 
   getSession: protectedProcedure.input(z.object({ sessionId: z.string() })).query(({ input }) => {
-    const session = liveSessionsManager.getSession(input.sessionId);
-    if (!session) return null;
-    return {
-      sessionId: session.sessionId,
-      hostId: session.hostId,
-      hostUsername: session.hostUsername,
-      title: session.title,
-      description: session.description,
-      type: session.type,
-      state: session.state,
-      participantCount: session.participants.size,
-      viewerCount: session.viewerCount,
-      maxParticipants: session.maxParticipants,
-      isPublic: session.isPublic,
-      startedAt: session.startedAt,
-    };
+    const s = liveSessionsManager.getSession(input.sessionId); if (!s) return null;
+    return { sessionId: s.sessionId, hostId: s.hostId, hostUsername: s.hostUsername, title: s.title, description: s.description, type: s.type, state: s.state, participantCount: s.participants.size, viewerCount: s.viewerCount, maxParticipants: s.maxParticipants, isPublic: s.isPublic, startedAt: s.startedAt };
   }),
 
-  getCurrentSession: protectedProcedure.query(({ ctx }) => {
-    const session = liveSessionsManager.getUserSession(ctx.user.id);
-    if (!session) return null;
-    return { sessionId: session.sessionId, title: session.title, type: session.type, state: session.state, participantCount: session.participants.size, viewerCount: session.viewerCount };
-  }),
+  getCurrentSession: protectedProcedure.query(({ ctx }) => { const s = liveSessionsManager.getUserSession(ctx.user.id); return s ? { sessionId: s.sessionId, title: s.title, type: s.type, state: s.state, participantCount: s.participants.size, viewerCount: s.viewerCount, maxParticipants: s.maxParticipants } : null; }),
 
-  startSession: protectedProcedure.input(z.object({ sessionId: z.string() })).mutation(({ ctx, input }) => {
-    const session = liveSessionsManager.getSession(input.sessionId);
-    if (!session) throw new Error('Session not found');
-    if (session.hostId !== ctx.user.id) throw new Error('Only the host can start the session');
-    liveSessionsManager.setSessionState(input.sessionId, 'live');
-    return { success: true };
-  }),
-
-  endSession: protectedProcedure.input(z.object({ sessionId: z.string() })).mutation(({ ctx, input }) => {
-    const session = liveSessionsManager.getSession(input.sessionId);
-    if (!session) throw new Error('Session not found');
-    if (session.hostId !== ctx.user.id) throw new Error('Only the host can end the session');
-    liveSessionsManager.closeSession(input.sessionId);
-    return { success: true };
-  }),
+  startSession: protectedProcedure.input(z.object({ sessionId: z.string() })).mutation(({ ctx, input }) => { requireHost(input.sessionId, ctx.user.id); liveSessionsManager.setSessionState(input.sessionId, 'live'); return { success: true }; }),
+  endSession: protectedProcedure.input(z.object({ sessionId: z.string() })).mutation(({ ctx, input }) => { requireHost(input.sessionId, ctx.user.id); liveSessionsManager.closeSession(input.sessionId); return { success: true }; }),
 
   joinSession: protectedProcedure.input(z.object({ sessionId: z.string(), role: z.enum(['guest', 'viewer']).default('viewer') })).mutation(({ ctx, input }) => {
-    const success = liveSessionsManager.addParticipant(input.sessionId, ctx.user.id, ctx.user.name || 'Anonymous', input.role);
-    if (!success) throw new Error('Cannot join session');
+    const s = getSessionOrThrow(input.sessionId);
+    // A viewer cannot self-promote to guest. Guests are promoted by the host/admin below.
+    if (input.role === 'guest') throw new Error('The host must invite/promote you to the stage');
+    if (!liveSessionsManager.addParticipant(input.sessionId, ctx.user.id, ctx.user.name || 'Anonymous', 'viewer')) throw new Error('Cannot join session');
     return { success: true };
   }),
 
-  leaveSession: protectedProcedure.input(z.object({ sessionId: z.string() })).mutation(({ ctx, input }) => {
-    liveSessionsManager.removeParticipant(input.sessionId, ctx.user.id);
+  requestToJoinStage: protectedProcedure.input(z.object({ sessionId: z.string() })).mutation(({ ctx, input }) => {
+    const s = getSessionOrThrow(input.sessionId);
+    if (s.hostId === ctx.user.id) return { success: true, alreadyHost: true };
+    if (!s.participants.has(ctx.user.id)) liveSessionsManager.addParticipant(input.sessionId, ctx.user.id, ctx.user.name || 'Anonymous', 'viewer');
     return { success: true };
   }),
 
+  leaveSession: protectedProcedure.input(z.object({ sessionId: z.string() })).mutation(({ ctx, input }) => { liveSessionsManager.removeParticipant(input.sessionId, ctx.user.id); return { success: true }; }),
   getParticipants: protectedProcedure.input(z.object({ sessionId: z.string() })).query(({ input }) => {
-    const session = liveSessionsManager.getSession(input.sessionId);
-    if (!session) return [];
-    return Array.from(session.participants.values()).map((p) => ({ userId: p.userId, username: p.username, role: p.role, isMuted: p.isMuted, isVideoOff: p.isVideoOff, joinedAt: p.joinedAt }));
+    const s = liveSessionsManager.getSession(input.sessionId); if (!s) return [];
+    return Array.from(s.participants.values()).map((p) => ({ userId: p.userId, username: p.username, role: p.role, isMuted: p.isMuted, isVideoOff: p.isVideoOff, joinedAt: p.joinedAt }));
+  }),
+
+  promoteToStage: protectedProcedure.input(z.object({ sessionId: z.string(), userId: z.number() })).mutation(({ ctx, input }) => {
+    const s = requireHost(input.sessionId, ctx.user.id);
+    const p = s.participants.get(input.userId);
+    if (!p) throw new Error('User must be in the Live before being invited to the stage');
+    if (p.role === 'host') throw new Error('Host cannot be changed');
+    const stageCount = Array.from(s.participants.values()).filter((x) => x.role === 'guest' || x.role === 'admin').length;
+    if (stageCount >= s.maxParticipants) throw new Error(`Stage is full (${s.maxParticipants} places)`);
+    liveSessionsManager.setParticipantRole(input.sessionId, input.userId, 'guest');
+    return { success: true, role: 'guest' };
+  }),
+
+  removeFromStage: protectedProcedure.input(z.object({ sessionId: z.string(), userId: z.number() })).mutation(({ ctx, input }) => {
+    requireHost(input.sessionId, ctx.user.id); const p = getSessionOrThrow(input.sessionId).participants.get(input.userId); if (!p || p.role === 'host') throw new Error('Invalid participant');
+    liveSessionsManager.setParticipantRole(input.sessionId, input.userId, 'viewer'); return { success: true, role: 'viewer' };
+  }),
+
+  muteParticipant: protectedProcedure.input(z.object({ sessionId: z.string(), userId: z.number(), muted: z.boolean() })).mutation(({ ctx, input }) => {
+    requireHostOrAdmin(input.sessionId, ctx.user.id); const p = getSessionOrThrow(input.sessionId).participants.get(input.userId); if (!p || p.role === 'host') throw new Error('Invalid participant');
+    liveSessionsManager.updateParticipantStatus(input.sessionId, input.userId, input.muted, undefined); return { success: true, muted: input.muted };
+  }),
+
+  removeParticipant: protectedProcedure.input(z.object({ sessionId: z.string(), userId: z.number() })).mutation(({ ctx, input }) => {
+    requireHostOrAdmin(input.sessionId, ctx.user.id); const s = getSessionOrThrow(input.sessionId); const p = s.participants.get(input.userId); if (!p || p.role === 'host') throw new Error('Cannot remove host');
+    liveSessionsManager.removeParticipant(input.sessionId, input.userId); return { success: true };
+  }),
+
+  addLiveAdmin: protectedProcedure.input(z.object({ sessionId: z.string(), userId: z.number() })).mutation(({ ctx, input }) => {
+    requireHost(input.sessionId, ctx.user.id); const s = getSessionOrThrow(input.sessionId); const p = s.participants.get(input.userId); if (!p || p.role === 'host') throw new Error('User must be in the Live');
+    liveSessionsManager.setParticipantRole(input.sessionId, input.userId, 'admin'); return { success: true, role: 'admin' };
+  }),
+
+  removeLiveAdmin: protectedProcedure.input(z.object({ sessionId: z.string(), userId: z.number() })).mutation(({ ctx, input }) => {
+    requireHost(input.sessionId, ctx.user.id); const s = getSessionOrThrow(input.sessionId); const p = s.participants.get(input.userId); if (!p || p.role !== 'admin') throw new Error('Not a Live admin');
+    liveSessionsManager.setParticipantRole(input.sessionId, input.userId, 'viewer'); return { success: true, role: 'viewer' };
+  }),
+
+  setStageCapacity: protectedProcedure.input(z.object({ sessionId: z.string(), maxParticipants: z.number().int().min(1).max(100) })).mutation(({ ctx, input }) => {
+    const s = requireHost(input.sessionId, ctx.user.id); const current = Array.from(s.participants.values()).filter((p) => p.role === 'guest' || p.role === 'admin').length;
+    if (input.maxParticipants < current) throw new Error(`Impossible de descendre sous ${current} personnes déjà sur scène`);
+    s.maxParticipants = input.maxParticipants; return { success: true, maxParticipants: s.maxParticipants };
   }),
 
   updateParticipantStatus: protectedProcedure.input(z.object({ sessionId: z.string(), isMuted: z.boolean().optional(), isVideoOff: z.boolean().optional() })).mutation(({ ctx, input }) => {
-    const success = liveSessionsManager.updateParticipantStatus(input.sessionId, ctx.user.id, input.isMuted, input.isVideoOff);
-    if (!success) throw new Error('Cannot update participant status');
-    return { success: true };
+    const success = liveSessionsManager.updateParticipantStatus(input.sessionId, ctx.user.id, input.isMuted, input.isVideoOff); if (!success) throw new Error('Cannot update participant status'); return { success: true };
   }),
 
   sendInvitation: protectedProcedure.input(z.object({ sessionId: z.string(), toUserId: z.number(), toUsername: z.string(), message: z.string().optional() })).mutation(({ ctx, input }) => {
-    const session = liveSessionsManager.getSession(input.sessionId);
-    if (!session) throw new Error('Session not found');
-    const invitation = liveInvitationsManager.sendInvitation(input.sessionId, ctx.user.id, ctx.user.name || 'Anonymous', input.toUserId, input.toUsername, input.message);
-    return { invitationId: invitation.invitationId, state: invitation.state };
+    const s = requireHostOrAdmin(input.sessionId, ctx.user.id); const invitation = liveInvitationsManager.sendInvitation(input.sessionId, ctx.user.id, ctx.user.name || 'Anonymous', input.toUserId, input.toUsername, input.message); return { invitationId: invitation.invitationId, state: invitation.state, hostId: s.hostId };
   }),
-
   getPendingInvitations: protectedProcedure.query(({ ctx }) => liveInvitationsManager.getPendingInvitations(ctx.user.id).map((inv) => ({ invitationId: inv.invitationId, sessionId: inv.sessionId, fromUsername: inv.fromUsername, message: inv.message, expiresAt: inv.expiresAt }))),
-  acceptInvitation: protectedProcedure.input(z.object({ invitationId: z.string() })).mutation(({ input }) => { const success = liveInvitationsManager.acceptInvitation(input.invitationId); if (!success) throw new Error('Cannot accept invitation'); const invitation = liveInvitationsManager.getInvitation(input.invitationId); return { success: true, sessionId: invitation?.sessionId }; }),
-  rejectInvitation: protectedProcedure.input(z.object({ invitationId: z.string() })).mutation(({ input }) => { const success = liveInvitationsManager.rejectInvitation(input.invitationId); if (!success) throw new Error('Cannot reject invitation'); return { success: true }; }),
+  acceptInvitation: protectedProcedure.input(z.object({ invitationId: z.string() })).mutation(({ input }) => { const ok = liveInvitationsManager.acceptInvitation(input.invitationId); if (!ok) throw new Error('Cannot accept invitation'); const inv = liveInvitationsManager.getInvitation(input.invitationId); return { success: true, sessionId: inv?.sessionId }; }),
+  rejectInvitation: protectedProcedure.input(z.object({ invitationId: z.string() })).mutation(({ input }) => { const ok = liveInvitationsManager.rejectInvitation(input.invitationId); if (!ok) throw new Error('Cannot reject invitation'); return { success: true }; }),
 
   getPublicSessions: protectedProcedure.query(() => liveSessionsManager.getPublicSessions().map((s) => ({ sessionId: s.sessionId, hostId: s.hostId, hostUsername: s.hostUsername, title: s.title, type: s.type, participantCount: s.participants.size, viewerCount: s.viewerCount, maxParticipants: s.maxParticipants }))),
   getSessionStats: protectedProcedure.input(z.object({ sessionId: z.string() })).query(({ input }) => liveSessionsManager.getSessionStats(input.sessionId)),
 
   sendGiftInLive: protectedProcedure.input(z.object({ sessionId: z.string(), recipientId: z.number(), giftId: z.string(), quantity: z.number().int().min(1).default(1) })).mutation(({ ctx, input }) => {
-    const session = liveSessionsManager.getSession(input.sessionId);
-    if (!session) throw new Error('Session not found');
-    if (!session.participants.has(input.recipientId)) throw new Error('Recipient not in session');
-    logger.info('Gift sent in live', { senderId: ctx.user.id, recipientId: input.recipientId, sessionId: input.sessionId, giftId: input.giftId, quantity: input.quantity });
-    return { success: true };
+    const s = getSessionOrThrow(input.sessionId); if (!s.participants.has(input.recipientId)) throw new Error('Recipient not in session'); logger.info('Gift sent in live', { senderId: ctx.user.id, recipientId: input.recipientId, sessionId: input.sessionId, giftId: input.giftId, quantity: input.quantity }); return { success: true };
   }),
-
-  getLiveGifts: protectedProcedure.input(z.object({ sessionId: z.string() })).query(({ input }) => {
-    const session = liveSessionsManager.getSession(input.sessionId);
-    if (!session) return [];
-    return { sessionId: input.sessionId, giftRevenue: session.giftRevenue, hostId: session.hostId };
-  }),
-
+  getLiveGifts: protectedProcedure.input(z.object({ sessionId: z.string() })).query(({ input }) => { const s = liveSessionsManager.getSession(input.sessionId); return s ? { sessionId: input.sessionId, giftRevenue: s.giftRevenue, hostId: s.hostId } : []; }),
   addGiftRevenue: protectedProcedure.input(z.object({ sessionId: z.string(), amount: z.number().int().min(1) })).mutation(({ input }) => ({ success: liveSessionsManager.addGiftRevenue(input.sessionId, input.amount) })),
 });
