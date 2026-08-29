@@ -1,12 +1,12 @@
 import { useLocation } from "wouter";
-import AdvertisingCreateForm from "@/components/advertising/AdvertisingCreateForm";
+import AdvertisingCreateFormSecure from "@/components/advertising/AdvertisingCreateFormSecure";
 
 export default function Advertising() {
   const [, navigate] = useLocation();
 
   return (
     <div className="min-h-screen bg-black px-3 py-6 text-white">
-      <div className="mx-auto mb-4 flex w-full max-w-lg items-center">
+      <div className="mx-auto mb-4 w-full max-w-lg">
         <button
           type="button"
           onClick={() => navigate("/feed")}
@@ -15,7 +15,7 @@ export default function Advertising() {
           ← Retour
         </button>
       </div>
-      <AdvertisingCreateForm />
+      <AdvertisingCreateFormSecure />
     </div>
   );
 }
