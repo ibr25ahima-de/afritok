@@ -1,6 +1,7 @@
 import { db } from "../db";
 import { payments } from "../../drizzle/schema-payments";
 import { eq } from "drizzle-orm";
+import { settleConfirmedPayment } from "./payment-settlement-service";
 
 export async function createPaymentTransaction({
   userId,
@@ -69,10 +70,11 @@ export async function createPaymentTransaction({
   return result[0];
 }
 
-
 /**
- * Confirme un paiement après confirmation
- * réelle du prestataire.
+ * Confirme un paiement après confirmation réelle du prestataire.
+ *
+ * La confirmation déclenche aussi le règlement interne vers le
+ * portefeuille d'argent réel AfriTok. Le règlement est idempotent.
  */
 export async function confirmPayment({
   referenceId,
@@ -83,66 +85,12 @@ export async function confirmPayment({
   providerReference: string;
   confirmedAmount: number;
 }) {
-  if (!referenceId) {
-    throw new Error("Référence interne manquante.");
-  }
-
-  if (!providerReference) {
-    throw new Error("Référence du prestataire manquante.");
-  }
-
-  if (
-    !Number.isFinite(confirmedAmount) ||
-    confirmedAmount <= 0
-  ) {
-    throw new Error("Montant confirmé invalide.");
-  }
-
-  const existing = await db
-    .select()
-    .from(payments)
-    .where(eq(payments.referenceId, referenceId))
-    .limit(1);
-
-  if (existing.length === 0) {
-    throw new Error(
-      "Transaction de paiement introuvable."
-    );
-  }
-
-  const payment = existing[0];
-
-  if (payment.status === "success") {
-    return payment;
-  }
-
-  const result = await db
-    .update(payments)
-    .set({
-      confirmedAmount:
-        confirmedAmount.toFixed(2),
-
-      providerReference,
-
-      status: "success",
-
-      confirmedAt:
-        new Date().toISOString(),
-
-      updatedAt:
-        new Date().toISOString(),
-    })
-    .where(
-      eq(
-        payments.referenceId,
-        referenceId
-      )
-    )
-    .returning();
-
-  return result[0];
+  return settleConfirmedPayment({
+    referenceId,
+    providerReference,
+    confirmedAmount,
+  });
 }
-
 
 /**
  * Marque un paiement comme échoué.
@@ -162,12 +110,7 @@ export async function failPayment({
       status: "failed",
       updatedAt: new Date().toISOString(),
     })
-    .where(
-      eq(
-        payments.referenceId,
-        referenceId
-      )
-    )
+    .where(eq(payments.referenceId, referenceId))
     .returning();
 
   if (result.length === 0) {
