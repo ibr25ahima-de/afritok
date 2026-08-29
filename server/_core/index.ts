@@ -6,6 +6,7 @@ import multer from "multer";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import jwt from "jsonwebtoken";
+import { Server as SocketIOServer } from "socket.io";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
@@ -18,6 +19,7 @@ import { getUserById, getUserEarnings, getPlatformStats } from "../db";
 import { exec } from "child_process";
 import paymentWebhookRouter from "../payments/payment-webhook-router";
 import paymentTestRouter from "../payments/payment-test-router";
+import { registerLiveSocket } from "../live-socket";
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
 
 async function logPlatformMoney() {
@@ -38,6 +40,8 @@ async function startServer() {
   const app = express();
   app.set("trust proxy", 1);
   const server = createServer(app);
+  const io = new SocketIOServer(server, { cors: { origin: true, credentials: true } });
+  registerLiveSocket(io);
   app.use(cors({ origin: true, credentials: true }));
   app.use(cookieParser());
   app.post('/api/webhooks/stripe', express.raw({type: 'application/json'}), handleStripeWebhook);
@@ -54,10 +58,7 @@ async function startServer() {
       const fileKey = `avatars/${Date.now()}-${req.file.originalname}`;
       const { url } = await storagePut(fileKey, req.file.buffer, req.file.mimetype);
       return res.json({ avatarUrl: url });
-    } catch (error) {
-      console.error("Avatar upload error:", error);
-      return res.status(500).json({ error: "Upload failed" });
-    }
+    } catch (error) { console.error("Avatar upload error:", error); return res.status(500).json({ error: "Upload failed" }); }
   });
 
   app.post('/api/upload-video', upload.single('file'), async (req: Request, res: Response) => {
@@ -69,13 +70,9 @@ async function startServer() {
       if (req.file.size > 100 * 1024 * 1024) return res.status(400).json({ error: "File too large" });
       const videoUrl = await uploadVideoToSupabase(req.file.buffer, req.file.originalname || "video.mp4", parseInt(userId));
       return res.json({ videoUrl });
-    } catch (error) {
-      console.error("[Upload] Error:", error);
-      return res.status(500).json({ error: "Upload failed" });
-    }
+    } catch (error) { console.error("[Upload] Error:", error); return res.status(500).json({ error: "Upload failed" }); }
   });
 
-  // Upload dédié aux publicités : authentification par cookie + stockage permanent.
   app.post('/api/upload-ad-media', upload.single('file'), async (req: Request, res: Response) => {
     try {
       if (!req.file) return res.status(400).json({ error: "Aucun fichier fourni." });
@@ -86,17 +83,9 @@ async function startServer() {
       if (!decoded.userId) return res.status(401).json({ error: "Session invalide." });
       const dbUser = await getUserById(decoded.userId);
       if (!dbUser) return res.status(401).json({ error: "Utilisateur introuvable." });
-      const result = await uploadAdvertisingMedia({
-        buffer: req.file.buffer,
-        originalName: req.file.originalname || "advertisement",
-        mimeType: req.file.mimetype,
-        userId: dbUser.id,
-      });
+      const result = await uploadAdvertisingMedia({ buffer: req.file.buffer, originalName: req.file.originalname || "advertisement", mimeType: req.file.mimetype, userId: dbUser.id });
       return res.json(result);
-    } catch (error) {
-      console.error("[Advertising upload] Error:", error);
-      return res.status(400).json({ error: error instanceof Error ? error.message : "Upload publicitaire impossible." });
-    }
+    } catch (error) { console.error("[Advertising upload] Error:", error); return res.status(400).json({ error: error instanceof Error ? error.message : "Upload publicitaire impossible." }); }
   });
 
   app.use((req, res, next) => { console.log("COOKIES:", req.headers.cookie); next(); });
