@@ -21,6 +21,7 @@ import { walletRouter } from "./wallet/wallet-router";
 import { paymentRouter } from "./payments/payment-router";
 import { platformFinanceRouter } from "./platform-finance-router";
 import { advertisingRouter } from "./routers-advertising";
+import { subscriptionRouter } from "./subscriptions/subscription-router";
 import { recordWatchEarning } from "./micro-earnings";
 import { getUserVideos, getVideoById, getFeedVideos, getFollowerCount, getFollowingCount, isFollowing, getUserEarnings, getUserWithdrawals, getDisplaySettings, updateDisplaySettings, db, createOTP, getValidOTP, deleteOTP, incrementOTPAttempts, getUserByPhone, upsertUser, createEarning, updateUserProfile, updateUserAvatar } from "./db";
 import { storagePut } from "./storage";
@@ -38,6 +39,7 @@ export const appRouter = router({
   payment: paymentRouter,
   platformFinance: platformFinanceRouter,
   advertising: advertisingRouter,
+  subscription: subscriptionRouter,
   live: liveRouter,
   liveChat: liveChatRouter,
   directMessages: directMessagesRouter,
@@ -167,10 +169,7 @@ export const appRouter = router({
     updateProfile: protectedProcedure.input(z.object({ name: z.string(), bio: z.string().optional(), country: z.string().optional() })).mutation(async ({ ctx, input }) => updateUserProfile(ctx.user.id, input)),
     uploadAvatar: protectedProcedure.input(z.object({ avatarUrl: z.string() })).mutation(async ({ ctx, input }) => updateUserAvatar(ctx.user.id, input.avatarUrl)),
     getDisplaySettings: protectedProcedure.query(async ({ ctx }) => getDisplaySettings(ctx.user.id)),
-    updateDisplaySettings: protectedProcedure.input(z.object({
-      language: z.string(), darkMode: z.string(), dataSaver: z.boolean(), autoPlay: z.string(), textSize: z.string(), animations: z.boolean(),
-      profilePublic: z.boolean().optional(), allowMessages: z.boolean().optional(), allowComments: z.boolean().optional(), showFollowers: z.boolean().optional(), showFollowing: z.boolean().optional(),
-    })).mutation(async ({ ctx, input }) => updateDisplaySettings(ctx.user.id, input)),
+    updateDisplaySettings: protectedProcedure.input(z.object({ language: z.string(), darkMode: z.string(), dataSaver: z.boolean(), autoPlay: z.string(), textSize: z.string(), animations: z.boolean(), profilePublic: z.boolean().optional(), allowMessages: z.boolean().optional(), allowComments: z.boolean().optional(), showFollowers: z.boolean().optional(), showFollowing: z.boolean().optional() })).mutation(async ({ ctx, input }) => updateDisplaySettings(ctx.user.id, input)),
   }),
 });
 
