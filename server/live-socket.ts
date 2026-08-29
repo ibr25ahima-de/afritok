@@ -26,6 +26,12 @@ export function registerLiveSocket(io: Server) {
       io.to(to).emit("live:signal", { from: socket.id, signal });
     });
 
+    socket.on("live:chat", ({ sessionId, message }) => {
+      const sender = socketUsers.get(socket.id);
+      if (!sender || sender.sessionId !== sessionId || !message?.trim()) return;
+      io.to(`live:${sessionId}`).emit("live:chat", { id: `${Date.now()}_${socket.id}`, userId: sender.userId, username: sender.username, message: message.trim().slice(0, 300) });
+    });
+
     socket.on("live:gift", ({ sessionId, gift }) => {
       const sender = socketUsers.get(socket.id);
       if (!sender || sender.sessionId !== sessionId || !gift) return;
