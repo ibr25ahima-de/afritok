@@ -6,22 +6,15 @@ import { getPremiumPlan } from "./subscription-plans";
 export async function ensurePremiumSubscriptionTable() {
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS afritok_premium_subscriptions (
-      id SERIAL PRIMARY KEY,
-      user_id INTEGER NOT NULL,
-      plan_id VARCHAR(32) NOT NULL,
-      payment_reference VARCHAR(255) NOT NULL UNIQUE,
-      status VARCHAR(32) NOT NULL DEFAULT 'pending',
-      starts_at TIMESTAMP NULL,
-      expires_at TIMESTAMP NULL,
-      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL, plan_id VARCHAR(32) NOT NULL,
+      payment_reference VARCHAR(255) NOT NULL UNIQUE, status VARCHAR(32) NOT NULL DEFAULT 'pending',
+      starts_at TIMESTAMP NULL, expires_at TIMESTAMP NULL, created_at TIMESTAMP NOT NULL DEFAULT NOW(), updated_at TIMESTAMP NOT NULL DEFAULT NOW()
     )
   `);
 }
 
 export async function createPremiumSubscriptionPayment({ userId, planId, operator, phone }: { userId: number; planId: string; operator: string; phone: string }) {
-  const plan = getPremiumPlan(planId);
-  if (!plan) throw new Error("Formule Premium invalide.");
+  const plan = getPremiumPlan(planId); if (!plan) throw new Error("Formule Premium invalide.");
   if (!phone.trim()) throw new Error("Le numéro Mobile Money est obligatoire.");
   await ensurePremiumSubscriptionTable();
   const referenceId = `afritok_premium_${userId}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -42,13 +35,21 @@ export async function syncPremiumSubscriptionAfterConfirmedPayment(referenceId: 
   const payment = await db.select().from(payments).where(eq(payments.referenceId, referenceId)).limit(1);
   if (!payment[0] || payment[0].status !== "success") return null;
   const rows = await db.execute(sql`SELECT * FROM afritok_premium_subscriptions WHERE payment_reference = ${referenceId} LIMIT 1`);
-  const subscription = (rows as any)?.rows?.[0];
-  if (!subscription) return null;
-  if (subscription.status === "active") return subscription;
-  const plan = getPremiumPlan(subscription.plan_id);
-  if (!plan) throw new Error("Formule Premium introuvable.");
-  const now = new Date();
-  const expires = new Date(now.getTime() + plan.durationDays * 86400000);
+  const subscription = (rows as any)?.rows?.[0]; if (!subscription) return null;
+  if (subscription.status === "active" && subscription.expires_at && new Date(subscription.expires_at) > new Date()) return subscription;
+  const plan = getPremiumPlan(subscription.plan_id); if (!plan) throw new Error("Formule Premium introuvable.");
+  const now = new Date(); const expires = new Date(now.getTime() + plan.durationDays * 86400000);
   await db.execute(sql`UPDATE afritok_premium_subscriptions SET status = 'active', starts_at = ${now.toISOString()}, expires_at = ${expires.toISOString()}, updated_at = NOW() WHERE payment_reference = ${referenceId}`);
   return { ...subscription, status: "active", starts_at: now.toISOString(), expires_at: expires.toISOString() };
+}
+
+export async function getActivePremiumSubscription(userId: number) {
+  await ensurePremiumSubscriptionTable();
+  const rows = await db.execute(sql`SELECT * FROM afritok_premium_subscriptions WHERE user_id = ${userId} AND status = 'active' AND expires_at > NOW() ORDER BY expires_at DESC LIMIT 1`);
+  return (rows as any)?.rows?.[0] ?? null;
+}
+
+export async function expirePremiumSubscriptions() {
+  await ensurePremiumSubscriptionTable();
+  await db.execute(sql`UPDATE afritok_premium_subscriptions SET status = 'expired', updated_at = NOW() WHERE status = 'active' AND expires_at <= NOW()`);
 }
