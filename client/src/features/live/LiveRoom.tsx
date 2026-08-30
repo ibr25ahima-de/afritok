@@ -11,116 +11,56 @@ type ChatMessage = { id: string; userId: number; username: string; message: stri
 const ICE_SERVERS: RTCConfiguration = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 
 export function LiveRoom() {
-  const [, navigate] = useLocation();
-  const [, params] = useRoute("/live/:sessionId");
-  const sessionId = params?.sessionId || "";
+  const [, navigate] = useLocation(); const [, params] = useRoute("/live/:sessionId"); const sessionId = params?.sessionId || "";
   const { data: me } = trpc.auth.me.useQuery();
   const { data: session } = trpc.live.getSession.useQuery({ sessionId }, { enabled: !!sessionId, refetchInterval: 5000 });
-  const { data: gifts } = trpc.coins.getActiveGifts.useQuery();
-  const balanceQuery = trpc.coins.getBalance.useQuery(undefined, { enabled: !!me });
+  const { data: gifts } = trpc.coins.getActiveGifts.useQuery(); const balanceQuery = trpc.coins.getBalance.useQuery(undefined, { enabled: !!me });
   const requestQuery = trpc.live.getMyStageRequest.useQuery({ sessionId }, { enabled: !!sessionId, refetchInterval: 3000 });
   const pendingQuery = trpc.live.getPendingStageRequests.useQuery({ sessionId }, { enabled: !!sessionId && !!me && !!session && session.hostId === me.id, refetchInterval: 2000 });
-  const joinSession = trpc.live.joinSession.useMutation();
-  const leaveSession = trpc.live.leaveSession.useMutation();
-  const endSession = trpc.live.endSession.useMutation();
-  const requestStage = trpc.live.requestToJoinStage.useMutation();
-  const acceptRequest = trpc.live.approveStageRequest.useMutation();
-  const rejectRequest = trpc.live.rejectStageRequest.useMutation();
-  const muteParticipant = trpc.live.muteParticipant.useMutation();
-  const removeParticipant = trpc.live.removeFromStage.useMutation();
-  const sendGift = trpc.coins.sendGift.useMutation();
-
-  const socketRef = useRef<Socket | null>(null);
-  const localVideoRef = useRef<HTMLVideoElement>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
-  const [participants, setParticipants] = useState<Participant[]>([]);
-  const [requests, setRequests] = useState<Request[]>([]);
-  const [remoteReady, setRemoteReady] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isVideoOff, setIsVideoOff] = useState(false);
-  const [viewerCount, setViewerCount] = useState(0);
-  const [chat, setChat] = useState<ChatMessage[]>([]);
-  const [chatText, setChatText] = useState("");
-  const [showGifts, setShowGifts] = useState(false);
-  const [balance, setBalance] = useState(0);
+  const joinSession = trpc.live.joinSession.useMutation(); const leaveSession = trpc.live.leaveSession.useMutation(); const endSession = trpc.live.endSession.useMutation();
+  const requestStage = trpc.live.requestToJoinStage.useMutation(); const acceptRequest = trpc.live.approveStageRequest.useMutation(); const rejectRequest = trpc.live.rejectStageRequest.useMutation();
+  const muteParticipant = trpc.live.muteParticipant.useMutation(); const removeParticipant = trpc.live.removeFromStage.useMutation(); const sendGift = trpc.coins.sendGift.useMutation();
+  const socketRef = useRef<Socket | null>(null); const localVideoRef = useRef<HTMLVideoElement>(null); const remoteVideoRef = useRef<HTMLVideoElement>(null); const streamRef = useRef<MediaStream | null>(null); const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
+  const [participants, setParticipants] = useState<Participant[]>([]); const [requests, setRequests] = useState<Request[]>([]); const [remoteReady, setRemoteReady] = useState(false); const [isMuted, setIsMuted] = useState(false); const [isVideoOff, setIsVideoOff] = useState(false); const [viewerCount, setViewerCount] = useState(0); const [chat, setChat] = useState<ChatMessage[]>([]); const [chatText, setChatText] = useState(""); const [showGifts, setShowGifts] = useState(false); const [balance, setBalance] = useState(0);
   const isHost = !!me && !!session && me.id === session.hostId;
+  useEffect(() => setBalance(Number(balanceQuery.data?.balance || 0)), [balanceQuery.data]); useEffect(() => { if (pendingQuery.data) setRequests(pendingQuery.data as Request[]); }, [pendingQuery.data]);
 
-  useEffect(() => setBalance(Number(balanceQuery.data?.balance || 0)), [balanceQuery.data]);
-  useEffect(() => { if (pendingQuery.data) setRequests(pendingQuery.data as Request[]); }, [pendingQuery.data]);
+  const createOffer = async (socketId: string) => { if (!streamRef.current || !socketRef.current) return; peersRef.current.get(socketId)?.close(); const pc = new RTCPeerConnection(ICE_SERVERS); peersRef.current.set(socketId, pc); streamRef.current.getTracks().forEach((track) => pc.addTrack(track, streamRef.current!)); pc.onicecandidate = (e) => { if (e.candidate) socketRef.current?.emit("live:signal", { to: socketId, signal: { type: "ice", candidate: e.candidate } }); }; const offer = await pc.createOffer(); await pc.setLocalDescription(offer); socketRef.current.emit("live:signal", { to: socketId, signal: { type: "offer", sdp: offer.sdp } }); };
+  const startStageMedia = async () => { if (streamRef.current || !navigator.mediaDevices?.getUserMedia) return; const media = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true }); streamRef.current = media; if (localVideoRef.current) localVideoRef.current.srcObject = media; setIsMuted(false); setIsVideoOff(false); if (!isHost) socketRef.current?.emit("live:stage-media-ready", { sessionId }); };
 
   useEffect(() => {
-    if (!sessionId || !me || !session) return;
-    let cancelled = false;
-    const setup = async () => {
-      try {
-        if (!isHost) await joinSession.mutateAsync({ sessionId, role: "viewer" });
-        const socket = io(window.location.origin, { transports: ["websocket", "polling"] });
-        socketRef.current = socket;
-        socket.on("connect", () => socket.emit("live:join", { sessionId, userId: me.id, username: me.name || "Utilisateur", role: isHost ? "host" : "viewer" }));
-        socket.on("live:participants", ({ participants: list }) => setParticipants(list || []));
-        socket.on("live:stage-requests", ({ requests: list }) => setRequests(list || []));
-        socket.on("live:stage-request", (item: Request) => { if (isHost) setRequests((items) => items.some((x) => x.requestId === item.requestId) ? items : [...items, item]); });
-        socket.on("live:stage-request-state", ({ requestId, state, userId }) => {
-          if (isHost && state !== "pending") setRequests((items) => items.filter((x) => x.requestId !== requestId));
-          if (userId === me.id && state === "accepted") void startStageMedia();
-        });
-        socket.on("live:stage-error", ({ message }) => window.alert(message));
-        socket.on("live:viewer-count", ({ delta }) => setViewerCount((v) => Math.max(0, v + Number(delta || 0))));
-        socket.on("live:chat", (message: ChatMessage) => setChat((items) => [...items.slice(-49), message]));
-        socket.on("live:signal", async ({ from, signal }) => {
-          if (signal.type !== "offer") return;
-          let pc = peersRef.current.get(from);
-          if (pc) pc.close();
-          pc = new RTCPeerConnection(ICE_SERVERS); peersRef.current.set(from, pc);
-          pc.ontrack = (event) => { if (remoteVideoRef.current && event.streams[0]) { remoteVideoRef.current.srcObject = event.streams[0]; setRemoteReady(true); } };
-          pc.onicecandidate = (event) => { if (event.candidate) socket.emit("live:signal", { to: from, signal: { type: "ice", candidate: event.candidate } }); };
-          await pc.setRemoteDescription({ type: "offer", sdp: signal.sdp });
-          const answer = await pc.createAnswer(); await pc.setLocalDescription(answer);
-          socket.emit("live:signal", { to: from, signal: { type: "answer", sdp: answer.sdp } });
-        });
-        socket.on("live:user-left", ({ socketId }) => { peersRef.current.get(socketId)?.close(); peersRef.current.delete(socketId); });
-        if (isHost) {
-          socket.on("live:stage-media-ready", ({ socketId }) => void createOffer(socketId));
-        }
-        if (isHost) await startStageMedia();
-        if (!isHost && requestQuery.data?.state === "accepted") await startStageMedia();
-        if (cancelled) return;
-      } catch (e: any) { console.error(e); }
-    };
-    void setup();
+    if (!sessionId || !me || !session) return; let cancelled = false;
+    const setup = async () => { try {
+      if (!isHost) await joinSession.mutateAsync({ sessionId, role: "viewer" });
+      const socket = io(window.location.origin, { transports: ["websocket", "polling"] }); socketRef.current = socket;
+      socket.on("connect", () => socket.emit("live:join", { sessionId, userId: me.id, username: me.name || "Utilisateur", role: isHost ? "host" : "viewer" }));
+      socket.on("live:participants", ({ participants: list }) => setParticipants(list || [])); socket.on("live:stage-requests", ({ requests: list }) => setRequests(list || []));
+      socket.on("live:stage-request", (item: Request) => { if (isHost) setRequests((items) => items.some((x) => x.requestId === item.requestId) ? items : [...items, item]); });
+      socket.on("live:stage-request-state", ({ requestId, state, userId }) => { if (isHost && state !== "pending") setRequests((items) => items.filter((x) => x.requestId !== requestId)); if (userId === me.id && state === "accepted") void startStageMedia(); });
+      socket.on("live:stage-error", ({ message }) => window.alert(message)); socket.on("live:viewer-count", ({ delta }) => setViewerCount((v) => Math.max(0, v + Number(delta || 0))));
+      socket.on("live:viewer-joined", ({ socketId }) => { if (isHost) void createOffer(socketId); });
+      socket.on("live:stage-media-ready", ({ socketId }) => { if (isHost) void createOffer(socketId); });
+      socket.on("live:chat", (message: ChatMessage) => setChat((items) => [...items.slice(-49), message]));
+      socket.on("live:signal", async ({ from, signal }) => {
+        let pc = peersRef.current.get(from);
+        if (signal.type === "offer") { if (pc) pc.close(); pc = new RTCPeerConnection(ICE_SERVERS); peersRef.current.set(from, pc); pc.ontrack = (event) => { if (remoteVideoRef.current && event.streams[0]) { remoteVideoRef.current.srcObject = event.streams[0]; setRemoteReady(true); } }; pc.onicecandidate = (e) => { if (e.candidate) socket.emit("live:signal", { to: from, signal: { type: "ice", candidate: e.candidate } }); }; await pc.setRemoteDescription({ type: "offer", sdp: signal.sdp }); const answer = await pc.createAnswer(); await pc.setLocalDescription(answer); socket.emit("live:signal", { to: from, signal: { type: "answer", sdp: answer.sdp } }); }
+        else if (signal.type === "answer" && pc) await pc.setRemoteDescription({ type: "answer", sdp: signal.sdp });
+        else if (signal.type === "ice" && pc && signal.candidate) { try { await pc.addIceCandidate(signal.candidate); } catch {} }
+      });
+      socket.on("live:user-left", ({ socketId }) => { peersRef.current.get(socketId)?.close(); peersRef.current.delete(socketId); });
+      if (isHost) await startStageMedia(); if (!isHost && requestQuery.data?.state === "accepted") await startStageMedia(); if (cancelled) return;
+    } catch (e) { console.error(e); } }; void setup();
     return () => { cancelled = true; socketRef.current?.disconnect(); peersRef.current.forEach((pc) => pc.close()); peersRef.current.clear(); streamRef.current?.getTracks().forEach((t) => t.stop()); };
   }, [sessionId, me?.id, session?.sessionId, isHost]);
 
-  const createOffer = async (socketId: string) => {
-    if (!streamRef.current || !socketRef.current) return;
-    peersRef.current.get(socketId)?.close();
-    const pc = new RTCPeerConnection(ICE_SERVERS); peersRef.current.set(socketId, pc);
-    streamRef.current.getTracks().forEach((track) => pc.addTrack(track, streamRef.current!));
-    pc.onicecandidate = (event) => { if (event.candidate) socketRef.current?.emit("live:signal", { to: socketId, signal: { type: "ice", candidate: event.candidate } }); };
-    const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
-    socketRef.current.emit("live:signal", { to: socketId, signal: { type: "offer", sdp: offer.sdp } });
-  };
-
-  const startStageMedia = async () => {
-    if (streamRef.current || !navigator.mediaDevices?.getUserMedia) return;
-    const media = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true });
-    streamRef.current = media;
-    if (localVideoRef.current) localVideoRef.current.srcObject = media;
-    setIsMuted(false); setIsVideoOff(false);
-    if (!isHost) socketRef.current?.emit("live:stage-media-ready", { sessionId });
-  };
-
   const sendChat = () => { if (!chatText.trim()) return; socketRef.current?.emit("live:chat", { sessionId, message: chatText }); setChatText(""); };
-  const toggleMute = () => { const track = streamRef.current?.getAudioTracks()[0]; if (!track) return; track.enabled = !track.enabled; const muted = !track.enabled; setIsMuted(muted); socketRef.current?.emit("live:status", { sessionId, isMuted: muted, isVideoOff }); };
-  const toggleVideo = () => { const track = streamRef.current?.getVideoTracks()[0]; if (!track) return; track.enabled = !track.enabled; const off = !track.enabled; setIsVideoOff(off); socketRef.current?.emit("live:status", { sessionId, isMuted, isVideoOff: off }); };
+  const toggleMute = () => { const t = streamRef.current?.getAudioTracks()[0]; if (!t) return; t.enabled = !t.enabled; const muted = !t.enabled; setIsMuted(muted); socketRef.current?.emit("live:status", { sessionId, isMuted: muted, isVideoOff }); };
+  const toggleVideo = () => { const t = streamRef.current?.getVideoTracks()[0]; if (!t) return; t.enabled = !t.enabled; const off = !t.enabled; setIsVideoOff(off); socketRef.current?.emit("live:status", { sessionId, isMuted, isVideoOff: off }); };
   const askToJoin = () => { socketRef.current?.emit("live:stage-request", { sessionId }); void requestStage.mutateAsync({ sessionId }).catch(() => undefined); };
   const accept = (requestId: string) => { socketRef.current?.emit("live:stage-decision", { sessionId, requestId, decision: "accept" }); void acceptRequest.mutateAsync({ requestId }).catch(() => undefined); };
   const reject = (requestId: string) => { socketRef.current?.emit("live:stage-decision", { sessionId, requestId, decision: "reject" }); void rejectRequest.mutateAsync({ requestId }).catch(() => undefined); };
   const leave = async () => { try { if (isHost) await endSession.mutateAsync({ sessionId }); else await leaveSession.mutateAsync({ sessionId }); } catch {} navigate("/live"); };
   const chooseGift = async (gift: any) => { if (!me || !session || !balance || !gift) return; try { const r = await sendGift.mutateAsync({ recipientId: Number(session.hostId), giftId: String(gift.id), quantity: 1, context: "live", contextId: sessionId, idempotencyKey: crypto.randomUUID() }); setBalance(Number(r.balance)); socketRef.current?.emit("live:gift", { sessionId, gift: { icon: r.gift.icon, name: r.gift.name } }); setShowGifts(false); } catch {} };
-
   if (!session) return <div className="min-h-screen bg-black text-white flex items-center justify-center">Chargement du Live...</div>;
   return <div className="h-[100dvh] bg-black text-white overflow-hidden relative">
     <div className="absolute inset-0 bg-gray-950 flex items-center justify-center p-2"><video ref={isHost ? localVideoRef : remoteVideoRef} autoPlay muted={isHost} playsInline className="w-full h-full object-cover rounded-2xl" />{((isHost && isVideoOff) || (!isHost && !remoteReady)) && <div className="absolute text-gray-400 text-center"><CameraOff size={44} className="mx-auto mb-2" />{isHost ? "Caméra désactivée" : "Connexion au Live..."}</div>}</div>
