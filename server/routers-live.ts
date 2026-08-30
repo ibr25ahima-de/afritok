@@ -2,11 +2,13 @@ import { z } from 'zod';
 import { protectedProcedure, router } from './_core/trpc';
 import { getLiveSessionsManager } from './live-sessions';
 import { getLiveInvitationsManager } from './live-invitations';
+import { getLiveStageRequestManager } from './live/stage-requests';
 import { getLogger } from './logging';
 
 const logger = getLogger();
 const liveSessionsManager = getLiveSessionsManager();
 const liveInvitationsManager = getLiveInvitationsManager();
+const stageRequestManager = getLiveStageRequestManager();
 
 function getSessionOrThrow(sessionId: string) {
   const session = liveSessionsManager.getSession(sessionId);
@@ -33,7 +35,7 @@ export const liveRouter = router({
 
   getSession: protectedProcedure.input(z.object({ sessionId: z.string() })).query(({ input }) => {
     const s = liveSessionsManager.getSession(input.sessionId); if (!s) return null;
-    return { sessionId: s.sessionId, hostId: s.hostId, hostUsername: s.hostUsername, title: s.title, description: s.description, type: s.type, state: s.state, participantCount: s.participants.size, viewerCount: s.viewerCount, maxParticipants: s.maxParticipants, isPublic: s.isPublic, startedAt: s.startedAt };
+    return { sessionId: s.sessionId, hostId: s.hostId, hostUsername: s.hostUsername, title: s.title, description: s.description, type: s.type, state: s.state, participantCount: s.participants.size, viewerCount: s.viewerCount, maxParticipants: s.maxParticipants, isPublic: s.isPublic, startedAt: s.startedAt, pendingStageRequests: stageRequestManager.listPending(s.sessionId).length };
   }),
 
   getCurrentSession: protectedProcedure.query(({ ctx }) => { const s = liveSessionsManager.getUserSession(ctx.user.id); return s ? { sessionId: s.sessionId, title: s.title, type: s.type, state: s.state, participantCount: s.participants.size, viewerCount: s.viewerCount, maxParticipants: s.maxParticipants } : null; }),
@@ -42,8 +44,7 @@ export const liveRouter = router({
   endSession: protectedProcedure.input(z.object({ sessionId: z.string() })).mutation(({ ctx, input }) => { requireHost(input.sessionId, ctx.user.id); liveSessionsManager.closeSession(input.sessionId); return { success: true }; }),
 
   joinSession: protectedProcedure.input(z.object({ sessionId: z.string(), role: z.enum(['guest', 'viewer']).default('viewer') })).mutation(({ ctx, input }) => {
-    const s = getSessionOrThrow(input.sessionId);
-    // A viewer cannot self-promote to guest. Guests are promoted by the host/admin below.
+    getSessionOrThrow(input.sessionId);
     if (input.role === 'guest') throw new Error('The host must invite/promote you to the stage');
     if (!liveSessionsManager.addParticipant(input.sessionId, ctx.user.id, ctx.user.name || 'Anonymous', 'viewer')) throw new Error('Cannot join session');
     return { success: true };
@@ -52,11 +53,50 @@ export const liveRouter = router({
   requestToJoinStage: protectedProcedure.input(z.object({ sessionId: z.string() })).mutation(({ ctx, input }) => {
     const s = getSessionOrThrow(input.sessionId);
     if (s.hostId === ctx.user.id) return { success: true, alreadyHost: true };
+    const request = stageRequestManager.request(input.sessionId, ctx.user.id, ctx.user.name || 'Anonymous');
     if (!s.participants.has(ctx.user.id)) liveSessionsManager.addParticipant(input.sessionId, ctx.user.id, ctx.user.name || 'Anonymous', 'viewer');
-    return { success: true };
+    return { success: true, requestId: request.requestId, state: request.state };
   }),
 
-  leaveSession: protectedProcedure.input(z.object({ sessionId: z.string() })).mutation(({ ctx, input }) => { liveSessionsManager.removeParticipant(input.sessionId, ctx.user.id); return { success: true }; }),
+  getPendingStageRequests: protectedProcedure.input(z.object({ sessionId: z.string() })).query(({ ctx, input }) => {
+    requireHostOrAdmin(input.sessionId, ctx.user.id);
+    return stageRequestManager.listPending(input.sessionId).map((r) => ({ requestId: r.requestId, userId: r.userId, username: r.username, createdAt: r.createdAt }));
+  }),
+
+  cancelStageRequest: protectedProcedure.input(z.object({ requestId: z.string() })).mutation(({ ctx, input }) => {
+    const request = stageRequestManager.get(input.requestId);
+    if (!request || request.userId !== ctx.user.id) throw new Error('Stage request not found');
+    const updated = stageRequestManager.setState(input.requestId, 'cancelled');
+    return { success: !!updated };
+  }),
+
+  approveStageRequest: protectedProcedure.input(z.object({ requestId: z.string() })).mutation(({ ctx, input }) => {
+    const request = stageRequestManager.get(input.requestId);
+    if (!request) throw new Error('Stage request not found');
+    const s = requireHostOrAdmin(request.sessionId, ctx.user.id);
+    const stageCount = Array.from(s.participants.values()).filter((p) => p.role === 'guest' || p.role === 'admin').length;
+    if (stageCount >= s.maxParticipants) throw new Error(`Stage is full (${s.maxParticipants} places)`);
+    const participant = s.participants.get(request.userId);
+    if (!participant) liveSessionsManager.addParticipant(request.sessionId, request.userId, request.username, 'viewer');
+    if (!liveSessionsManager.setParticipantRole(request.sessionId, request.userId, 'guest')) throw new Error('Cannot add participant to stage');
+    const updated = stageRequestManager.setState(input.requestId, 'accepted');
+    return { success: !!updated, userId: request.userId, role: 'guest' as const };
+  }),
+
+  rejectStageRequest: protectedProcedure.input(z.object({ requestId: z.string() })).mutation(({ ctx, input }) => {
+    const request = stageRequestManager.get(input.requestId);
+    if (!request) throw new Error('Stage request not found');
+    requireHostOrAdmin(request.sessionId, ctx.user.id);
+    const updated = stageRequestManager.setState(input.requestId, 'rejected');
+    return { success: !!updated };
+  }),
+
+  getMyStageRequest: protectedProcedure.input(z.object({ sessionId: z.string() })).query(({ ctx, input }) => {
+    const request = stageRequestManager.listPending(input.sessionId).find((r) => r.userId === ctx.user.id);
+    return request ? { requestId: request.requestId, state: request.state, createdAt: request.createdAt } : null;
+  }),
+
+  leaveSession: protectedProcedure.input(z.object({ sessionId: z.string() })).mutation(({ ctx, input }) => { stageRequestManager.cancelUserRequests(input.sessionId, ctx.user.id); liveSessionsManager.removeParticipant(input.sessionId, ctx.user.id); return { success: true }; }),
   getParticipants: protectedProcedure.input(z.object({ sessionId: z.string() })).query(({ input }) => {
     const s = liveSessionsManager.getSession(input.sessionId); if (!s) return [];
     return Array.from(s.participants.values()).map((p) => ({ userId: p.userId, username: p.username, role: p.role, isMuted: p.isMuted, isVideoOff: p.isVideoOff, joinedAt: p.joinedAt }));
