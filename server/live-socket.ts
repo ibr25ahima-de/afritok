@@ -1,9 +1,16 @@
 import type { Server, Socket } from "socket.io";
 import { getLiveSessionsManager } from "./live-sessions";
+import { getLiveStageRequestManager } from "./live/stage-requests";
 
 interface LiveSocketUser { sessionId: string; userId: number; username: string; role: "host" | "admin" | "viewer" | "guest"; }
 const socketUsers = new Map<string, LiveSocketUser>();
 const manager = getLiveSessionsManager();
+const stageRequests = getLiveStageRequestManager();
+
+function participantPayload(sessionId: string) {
+  const session = manager.getSession(sessionId);
+  return session ? Array.from(session.participants.values()).map((p) => ({ userId: p.userId, username: p.username, role: p.role, isMuted: p.isMuted, isVideoOff: p.isVideoOff })) : [];
+}
 
 export function registerLiveSocket(io: Server) {
   io.on("connection", (socket: Socket) => {
@@ -18,7 +25,38 @@ export function registerLiveSocket(io: Server) {
         io.to(`live:${user.sessionId}`).emit("live:viewer-count", { delta: 1, userId: user.userId, username: user.username });
         io.to(`live:${user.sessionId}`).emit("live:viewer-joined", { socketId: socket.id, userId: user.userId, username: user.username });
       }
-      io.to(`live:${user.sessionId}`).emit("live:participants", { participants: Array.from(session.participants.values()).map((p) => ({ userId: p.userId, username: p.username, role: p.role, isMuted: p.isMuted, isVideoOff: p.isVideoOff })) });
+      io.to(`live:${user.sessionId}`).emit("live:participants", { participants: participantPayload(user.sessionId) });
+      if (session.hostId === user.userId || participant?.role === "admin") socket.emit("live:stage-requests", { requests: stageRequests.listPending(user.sessionId) });
+      const ownRequest = stageRequests.listPending(user.sessionId).find((r) => r.userId === user.userId);
+      if (ownRequest) socket.emit("live:stage-request-state", { requestId: ownRequest.requestId, state: ownRequest.state });
+    });
+
+    socket.on("live:stage-request", ({ sessionId }) => {
+      const sender = socketUsers.get(socket.id); if (!sender || sender.sessionId !== sessionId) return;
+      const session = manager.getSession(sessionId); if (!session || session.hostId === sender.userId) return;
+      if (!session.participants.has(sender.userId)) manager.addParticipant(sessionId, sender.userId, sender.username, "viewer");
+      const request = stageRequests.request(sessionId, sender.userId, sender.username);
+      io.to(`live:${sessionId}`).emit("live:stage-request", { requestId: request.requestId, userId: request.userId, username: request.username, createdAt: request.createdAt });
+      io.to(`live:${sessionId}`).emit("live:stage-request-state", { requestId: request.requestId, state: request.state, userId: request.userId });
+    });
+
+    socket.on("live:stage-decision", ({ sessionId, requestId, decision }) => {
+      const sender = socketUsers.get(socket.id); if (!sender || sender.sessionId !== sessionId || !["accept", "reject"].includes(decision)) return;
+      const session = manager.getSession(sessionId); if (!session) return;
+      const senderParticipant = session.participants.get(sender.userId);
+      if (session.hostId !== sender.userId && senderParticipant?.role !== "admin") return;
+      const request = stageRequests.get(requestId); if (!request || request.sessionId !== sessionId) return;
+      if (decision === "accept") {
+        const stageCount = Array.from(session.participants.values()).filter((p) => p.role === "guest" || p.role === "admin").length;
+        if (stageCount >= session.maxParticipants) { socket.emit("live:stage-error", { message: `La scène est pleine (${session.maxParticipants} places).` }); return; }
+        if (!session.participants.has(request.userId)) manager.addParticipant(sessionId, request.userId, request.username, "viewer");
+        if (!manager.setParticipantRole(sessionId, request.userId, "guest")) return;
+      }
+      const updated = stageRequests.setState(requestId, decision === "accept" ? "accepted" : "rejected");
+      if (!updated) return;
+      io.to(`live:${sessionId}`).emit("live:stage-request-state", { requestId, state: updated.state, userId: updated.userId });
+      io.to(`live:${sessionId}`).emit("live:participants", { participants: participantPayload(sessionId) });
+      io.to(`live:${sessionId}`).emit("live:stage-updated", { userId: updated.userId, role: decision === "accept" ? "guest" : "viewer" });
     });
 
     socket.on("live:signal", ({ to, signal }) => { if (!to || !signal || !socketUsers.has(socket.id)) return; io.to(to).emit("live:signal", { from: socket.id, signal }); });
@@ -26,7 +64,6 @@ export function registerLiveSocket(io: Server) {
     socket.on("live:gift", ({ sessionId, gift }) => { const sender = socketUsers.get(socket.id); if (!sender || sender.sessionId !== sessionId || !gift) return; io.to(`live:${sessionId}`).emit("live:gift", { ...gift, senderId: sender.userId, senderUsername: sender.username }); });
     socket.on("live:status", ({ sessionId, isMuted, isVideoOff }) => { const sender = socketUsers.get(socket.id); if (!sender || sender.sessionId !== sessionId) return; manager.updateParticipantStatus(sessionId, sender.userId, isMuted, isVideoOff); io.to(`live:${sessionId}`).emit("live:status", { userId: sender.userId, isMuted, isVideoOff }); });
 
-    // The host/admin command channel is deliberately server-authorized as well as UI-authorized.
     socket.on("live:moderate", ({ sessionId, action, targetUserId, muted, role }) => {
       const sender = socketUsers.get(socket.id); if (!sender || sender.sessionId !== sessionId) return;
       const session = manager.getSession(sessionId); if (!session) return;
@@ -40,7 +77,7 @@ export function registerLiveSocket(io: Server) {
       else if (action === "remove") ok = manager.removeParticipant(sessionId, targetUserId);
       if (!ok) return;
       io.to(`live:${sessionId}`).emit("live:moderation", { action, targetUserId, muted: Boolean(muted), role: session.participants.get(targetUserId)?.role || "viewer" });
-      io.to(`live:${sessionId}`).emit("live:participants", { participants: Array.from(session.participants.values()).map((p) => ({ userId: p.userId, username: p.username, role: p.role, isMuted: p.isMuted, isVideoOff: p.isVideoOff })) });
+      io.to(`live:${sessionId}`).emit("live:participants", { participants: participantPayload(sessionId) });
     });
 
     socket.on("disconnect", () => {
