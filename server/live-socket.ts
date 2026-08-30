@@ -6,29 +6,19 @@ interface LiveSocketUser { sessionId: string; userId: number; username: string; 
 const socketUsers = new Map<string, LiveSocketUser>();
 const manager = getLiveSessionsManager();
 const stageRequests = getLiveStageRequestManager();
-
-function participantPayload(sessionId: string) {
-  const session = manager.getSession(sessionId);
-  return session ? Array.from(session.participants.values()).map((p) => ({ userId: p.userId, username: p.username, role: p.role, isMuted: p.isMuted, isVideoOff: p.isVideoOff })) : [];
-}
+function participantPayload(sessionId: string) { const session = manager.getSession(sessionId); return session ? Array.from(session.participants.values()).map((p) => ({ userId: p.userId, username: p.username, role: p.role, isMuted: p.isMuted, isVideoOff: p.isVideoOff })) : []; }
 
 export function registerLiveSocket(io: Server) {
   io.on("connection", (socket: Socket) => {
     socket.on("live:join", (user: LiveSocketUser) => {
       if (!user?.sessionId || !Number.isInteger(user.userId) || !user.username) return;
       const session = manager.getSession(user.sessionId); if (!session) return;
-      const participant = session.participants.get(user.userId);
-      const effectiveRole = participant?.role || user.role;
-      socket.join(`live:${user.sessionId}`);
-      socketUsers.set(socket.id, { ...user, role: effectiveRole });
-      if (effectiveRole === "viewer") {
-        io.to(`live:${user.sessionId}`).emit("live:viewer-count", { delta: 1, userId: user.userId, username: user.username });
-        io.to(`live:${user.sessionId}`).emit("live:viewer-joined", { socketId: socket.id, userId: user.userId, username: user.username });
-      }
+      const participant = session.participants.get(user.userId); const effectiveRole = participant?.role || user.role;
+      socket.join(`live:${user.sessionId}`); socketUsers.set(socket.id, { ...user, role: effectiveRole });
+      if (effectiveRole === "viewer") { io.to(`live:${user.sessionId}`).emit("live:viewer-count", { delta: 1, userId: user.userId, username: user.username }); io.to(`live:${user.sessionId}`).emit("live:viewer-joined", { socketId: socket.id, userId: user.userId, username: user.username }); }
       io.to(`live:${user.sessionId}`).emit("live:participants", { participants: participantPayload(user.sessionId) });
       if (session.hostId === user.userId || participant?.role === "admin") socket.emit("live:stage-requests", { requests: stageRequests.listPending(user.sessionId) });
-      const ownRequest = stageRequests.listPending(user.sessionId).find((r) => r.userId === user.userId);
-      if (ownRequest) socket.emit("live:stage-request-state", { requestId: ownRequest.requestId, state: ownRequest.state });
+      const ownRequest = stageRequests.listPending(user.sessionId).find((r) => r.userId === user.userId); if (ownRequest) socket.emit("live:stage-request-state", { requestId: ownRequest.requestId, state: ownRequest.state, userId: ownRequest.userId });
     });
 
     socket.on("live:stage-request", ({ sessionId }) => {
@@ -37,13 +27,11 @@ export function registerLiveSocket(io: Server) {
       if (!session.participants.has(sender.userId)) manager.addParticipant(sessionId, sender.userId, sender.username, "viewer");
       const request = stageRequests.request(sessionId, sender.userId, sender.username);
       io.to(`live:${sessionId}`).emit("live:stage-request", { requestId: request.requestId, userId: request.userId, username: request.username, createdAt: request.createdAt });
-      io.to(`live:${sessionId}`).emit("live:stage-request-state", { requestId: request.requestId, state: request.state, userId: request.userId });
     });
 
     socket.on("live:stage-decision", ({ sessionId, requestId, decision }) => {
       const sender = socketUsers.get(socket.id); if (!sender || sender.sessionId !== sessionId || !["accept", "reject"].includes(decision)) return;
-      const session = manager.getSession(sessionId); if (!session) return;
-      const senderParticipant = session.participants.get(sender.userId);
+      const session = manager.getSession(sessionId); if (!session) return; const senderParticipant = session.participants.get(sender.userId);
       if (session.hostId !== sender.userId && senderParticipant?.role !== "admin") return;
       const request = stageRequests.get(requestId); if (!request || request.sessionId !== sessionId) return;
       if (decision === "accept") {
@@ -52,11 +40,19 @@ export function registerLiveSocket(io: Server) {
         if (!session.participants.has(request.userId)) manager.addParticipant(sessionId, request.userId, request.username, "viewer");
         if (!manager.setParticipantRole(sessionId, request.userId, "guest")) return;
       }
-      const updated = stageRequests.setState(requestId, decision === "accept" ? "accepted" : "rejected");
-      if (!updated) return;
+      const updated = stageRequests.setState(requestId, decision === "accept" ? "accepted" : "rejected"); if (!updated) return;
       io.to(`live:${sessionId}`).emit("live:stage-request-state", { requestId, state: updated.state, userId: updated.userId });
       io.to(`live:${sessionId}`).emit("live:participants", { participants: participantPayload(sessionId) });
-      io.to(`live:${sessionId}`).emit("live:stage-updated", { userId: updated.userId, role: decision === "accept" ? "guest" : "viewer" });
+      const targetSocket = Array.from(socketUsers.entries()).find(([, u]) => u.sessionId === sessionId && u.userId === updated.userId)?.[0];
+      if (decision === "accept" && targetSocket) io.to(targetSocket).emit("live:stage-updated", { userId: updated.userId, role: "guest" });
+    });
+
+    socket.on("live:stage-media-ready", ({ sessionId }) => {
+      const sender = socketUsers.get(socket.id); if (!sender || sender.sessionId !== sessionId) return;
+      const session = manager.getSession(sessionId); const participant = session?.participants.get(sender.userId);
+      if (!session || !participant || (participant.role !== "guest" && participant.role !== "admin")) return;
+      const hostSocket = Array.from(socketUsers.entries()).find(([, u]) => u.sessionId === sessionId && u.userId === session.hostId)?.[0];
+      if (hostSocket) io.to(hostSocket).emit("live:stage-media-ready", { socketId: socket.id, userId: sender.userId });
     });
 
     socket.on("live:signal", ({ to, signal }) => { if (!to || !signal || !socketUsers.has(socket.id)) return; io.to(to).emit("live:signal", { from: socket.id, signal }); });
@@ -65,26 +61,12 @@ export function registerLiveSocket(io: Server) {
     socket.on("live:status", ({ sessionId, isMuted, isVideoOff }) => { const sender = socketUsers.get(socket.id); if (!sender || sender.sessionId !== sessionId) return; manager.updateParticipantStatus(sessionId, sender.userId, isMuted, isVideoOff); io.to(`live:${sessionId}`).emit("live:status", { userId: sender.userId, isMuted, isVideoOff }); });
 
     socket.on("live:moderate", ({ sessionId, action, targetUserId, muted, role }) => {
-      const sender = socketUsers.get(socket.id); if (!sender || sender.sessionId !== sessionId) return;
-      const session = manager.getSession(sessionId); if (!session) return;
-      const senderParticipant = session.participants.get(sender.userId);
-      const canModerate = session.hostId === sender.userId || senderParticipant?.role === "admin";
-      if (!canModerate || targetUserId === session.hostId) return;
-      let ok = false;
-      if (action === "mute") ok = manager.updateParticipantStatus(sessionId, targetUserId, Boolean(muted), undefined);
-      else if (action === "stage") ok = manager.setParticipantRole(sessionId, targetUserId, role === "viewer" ? "viewer" : "guest");
-      else if (action === "admin" && session.hostId === sender.userId) ok = manager.setParticipantRole(sessionId, targetUserId, "admin");
-      else if (action === "remove") ok = manager.removeParticipant(sessionId, targetUserId);
-      if (!ok) return;
-      io.to(`live:${sessionId}`).emit("live:moderation", { action, targetUserId, muted: Boolean(muted), role: session.participants.get(targetUserId)?.role || "viewer" });
-      io.to(`live:${sessionId}`).emit("live:participants", { participants: participantPayload(sessionId) });
+      const sender = socketUsers.get(socket.id); if (!sender || sender.sessionId !== sessionId) return; const session = manager.getSession(sessionId); if (!session) return;
+      const senderParticipant = session.participants.get(sender.userId); const canModerate = session.hostId === sender.userId || senderParticipant?.role === "admin"; if (!canModerate || targetUserId === session.hostId) return;
+      let ok = false; if (action === "mute") ok = manager.updateParticipantStatus(sessionId, targetUserId, Boolean(muted), undefined); else if (action === "stage") ok = manager.setParticipantRole(sessionId, targetUserId, role === "viewer" ? "viewer" : "guest"); else if (action === "admin" && session.hostId === sender.userId) ok = manager.setParticipantRole(sessionId, targetUserId, "admin"); else if (action === "remove") ok = manager.removeParticipant(sessionId, targetUserId);
+      if (!ok) return; io.to(`live:${sessionId}`).emit("live:moderation", { action, targetUserId, muted: Boolean(muted), role: session.participants.get(targetUserId)?.role || "viewer" }); io.to(`live:${sessionId}`).emit("live:participants", { participants: participantPayload(sessionId) });
     });
 
-    socket.on("disconnect", () => {
-      const user = socketUsers.get(socket.id); if (!user) return;
-      if (user.role === "viewer") io.to(`live:${user.sessionId}`).emit("live:viewer-count", { delta: -1, userId: user.userId, username: user.username });
-      io.to(`live:${user.sessionId}`).emit("live:user-left", { socketId: socket.id, userId: user.userId });
-      socketUsers.delete(socket.id);
-    });
+    socket.on("disconnect", () => { const user = socketUsers.get(socket.id); if (!user) return; if (user.role === "viewer") io.to(`live:${user.sessionId}`).emit("live:viewer-count", { delta: -1, userId: user.userId, username: user.username }); io.to(`live:${user.sessionId}`).emit("live:user-left", { socketId: socket.id, userId: user.userId }); socketUsers.delete(socket.id); });
   });
 }
