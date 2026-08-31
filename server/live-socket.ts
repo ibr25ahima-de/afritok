@@ -50,9 +50,10 @@ export function registerLiveSocket(io: Server) {
 
     socket.on("live:stage-media-ready", ({ sessionId }) => {
       const sender = socketUsers.get(socket.id); if (!sender || sender.sessionId !== sessionId) return; const session = manager.getSession(sessionId); const participant = session?.participants.get(sender.userId);
-      if (!session || !participant || (participant.role !== "guest" && participant.role !== "admin")) return; const hostSocket = Array.from(socketUsers.entries()).find(([, u]) => u.sessionId === sessionId && u.userId === session.hostId)?.[0]; if (hostSocket) io.to(hostSocket).emit("live:stage-media-ready", { socketId: socket.id, userId: sender.userId });
+      if (!session || !participant || (participant.role !== "guest" && participant.role !== "admin" && participant.role !== "host")) return;
+      io.to(`live:${sessionId}`).emit("live:stage-media-ready", { socketId: socket.id, userId: sender.userId });
     });
-    socket.on("live:signal", ({ to, signal }) => { if (!to || !signal || !socketUsers.has(socket.id)) return; io.to(to).emit("live:signal", { from: socket.id, signal }); });
+    socket.on("live:signal", ({ to, signal }) => { if (!to || !signal || !socketUsers.has(socket.id)) return; const sender = socketUsers.get(socket.id)!; io.to(to).emit("live:signal", { from: socket.id, userId: sender.userId, signal }); });
     socket.on("live:chat", ({ sessionId, message }) => { const sender = socketUsers.get(socket.id); if (!sender || sender.sessionId !== sessionId || !message?.trim()) return; io.to(`live:${sessionId}`).emit("live:chat", { id: `${Date.now()}_${socket.id}`, userId: sender.userId, username: sender.username, message: message.trim().slice(0, 300) }); });
     socket.on("live:gift", ({ sessionId, gift }) => { const sender = socketUsers.get(socket.id); if (!sender || sender.sessionId !== sessionId || !gift) return; io.to(`live:${sessionId}`).emit("live:gift", { ...gift, senderId: sender.userId, senderUsername: sender.username }); });
     socket.on("live:status", ({ sessionId, isMuted, isVideoOff }) => { const sender = socketUsers.get(socket.id); if (!sender || sender.sessionId !== sessionId) return; manager.updateParticipantStatus(sessionId, sender.userId, isMuted, isVideoOff); io.to(`live:${sessionId}`).emit("live:status", { userId: sender.userId, isMuted, isVideoOff }); });
