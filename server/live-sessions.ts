@@ -15,6 +15,7 @@ export interface LiveParticipant {
   isMuted: boolean;
   isVideoOff: boolean;
   peerId?: string;
+  stageSlot?: number;
 }
 
 export interface LiveSession {
@@ -42,11 +43,17 @@ export class LiveSessionsManager {
   private sessions: Map<string, LiveSession> = new Map();
   private userSessions: Map<number, string> = new Map();
 
+  private nextFreeStageSlot(session: LiveSession): number | undefined {
+    const occupied = new Set(Array.from(session.participants.values()).filter((p) => isStageRole(p.role) && p.stageSlot !== undefined).map((p) => p.stageSlot));
+    for (let slot = 0; slot < session.maxParticipants; slot++) if (!occupied.has(slot)) return slot;
+    return undefined;
+  }
+
   createSession(hostId: number, hostUsername: string, title: string, description: string, type: LiveType = 'video', isPublic = true, maxParticipants = 50, layout: LiveLayout = 'spotlight'): LiveSession {
     const sessionId = 'live_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     const capacity = normalizeStageCapacity(maxParticipants);
     const session: LiveSession = { sessionId, hostId, hostUsername, title, description, type, layout, state: 'pending', participants: new Map(), maxParticipants: capacity, viewerCount: 0, startedAt: new Date(), isPublic, giftRevenue: 0 };
-    session.participants.set(hostId, { userId: hostId, username: hostUsername, joinedAt: new Date(), role: 'host', isMuted: false, isVideoOff: false });
+    session.participants.set(hostId, { userId: hostId, username: hostUsername, joinedAt: new Date(), role: 'host', isMuted: false, isVideoOff: false, stageSlot: 0 });
     this.sessions.set(sessionId, session);
     this.userSessions.set(hostId, sessionId);
     logger.info('Live session created', { sessionId, hostId, title, type, layout, maxParticipants: capacity });
@@ -55,11 +62,49 @@ export class LiveSessionsManager {
 
   getSession(sessionId: string): LiveSession | undefined { return this.sessions.get(sessionId); }
   getUserSession(userId: number): LiveSession | undefined { const id = this.userSessions.get(userId); return id ? this.sessions.get(id) : undefined; }
-  addParticipant(sessionId: string, userId: number, username: string, role: 'guest' | 'viewer' = 'viewer'): boolean { const session = this.sessions.get(sessionId); if (!session || session.state === 'ended') return false; const existing = session.participants.get(userId); if (existing) { if (role === 'guest' && existing.role === 'viewer') { const stageCount = Array.from(session.participants.values()).filter((p) => isStageRole(p.role)).length; if (stageCount >= session.maxParticipants) return false; existing.role = 'guest'; session.viewerCount = Math.max(0, session.viewerCount - 1); return true; } return true; } const stageCount = Array.from(session.participants.values()).filter((p) => isStageRole(p.role)).length; if (role === 'guest' && stageCount >= session.maxParticipants) return false; session.participants.set(userId, { userId, username, joinedAt: new Date(), role, isMuted: false, isVideoOff: false }); if (role === 'viewer') session.viewerCount++; return true; }
-  removeParticipant(sessionId: string, userId: number): boolean { const session = this.sessions.get(sessionId); if (!session) return false; const participant = session.participants.get(userId); if (!participant) return false; if (participant.role === 'viewer') session.viewerCount = Math.max(0, session.viewerCount - 1); session.participants.delete(userId); this.userSessions.delete(userId); if (participant.role === 'host') this.closeSession(sessionId); return true; }
+
+  addParticipant(sessionId: string, userId: number, username: string, role: 'guest' | 'viewer' = 'viewer'): boolean {
+    const session = this.sessions.get(sessionId); if (!session || session.state === 'ended') return false;
+    const existing = session.participants.get(userId);
+    if (existing) {
+      if (role === 'guest' && existing.role === 'viewer') {
+        const slot = this.nextFreeStageSlot(session); if (slot === undefined) return false;
+        existing.role = 'guest'; existing.stageSlot = slot; session.viewerCount = Math.max(0, session.viewerCount - 1); return true;
+      }
+      return true;
+    }
+    const stageSlot = role === 'guest' ? this.nextFreeStageSlot(session) : undefined;
+    if (role === 'guest' && stageSlot === undefined) return false;
+    session.participants.set(userId, { userId, username, joinedAt: new Date(), role, isMuted: false, isVideoOff: false, stageSlot });
+    if (role === 'viewer') session.viewerCount++;
+    return true;
+  }
+
+  removeParticipant(sessionId: string, userId: number): boolean {
+    const session = this.sessions.get(sessionId); if (!session) return false;
+    const participant = session.participants.get(userId); if (!participant) return false;
+    if (participant.role === 'viewer') session.viewerCount = Math.max(0, session.viewerCount - 1);
+    session.participants.delete(userId); this.userSessions.delete(userId);
+    if (participant.role === 'host') this.closeSession(sessionId);
+    return true;
+  }
+
   setSessionState(sessionId: string, state: LiveState): void { const session = this.sessions.get(sessionId); if (!session) return; session.state = state; if (state === 'ended') session.endedAt = new Date(); }
   updateParticipantStatus(sessionId: string, userId: number, isMuted?: boolean, isVideoOff?: boolean): boolean { const session = this.sessions.get(sessionId); if (!session) return false; const participant = session.participants.get(userId); if (!participant) return false; if (isMuted !== undefined) participant.isMuted = isMuted; if (isVideoOff !== undefined) participant.isVideoOff = isVideoOff; return true; }
-  setParticipantRole(sessionId: string, userId: number, role: 'admin' | 'guest' | 'viewer'): boolean { const session = this.sessions.get(sessionId); if (!session) return false; const participant = session.participants.get(userId); if (!participant || participant.role === 'host') return false; const wasViewer = participant.role === 'viewer'; const willViewer = role === 'viewer'; if (wasViewer && !willViewer) { const stageCount = Array.from(session.participants.values()).filter((p) => isStageRole(p.role)).length; if (stageCount >= session.maxParticipants) return false; session.viewerCount = Math.max(0, session.viewerCount - 1); } if (!wasViewer && willViewer) session.viewerCount++; participant.role = role; return true; }
+
+  setParticipantRole(sessionId: string, userId: number, role: 'admin' | 'guest' | 'viewer'): boolean {
+    const session = this.sessions.get(sessionId); if (!session) return false;
+    const participant = session.participants.get(userId); if (!participant || participant.role === 'host') return false;
+    const wasViewer = participant.role === 'viewer'; const willViewer = role === 'viewer';
+    if (!willViewer && (wasViewer || participant.stageSlot === undefined)) {
+      const slot = participant.stageSlot ?? this.nextFreeStageSlot(session); if (slot === undefined) return false; participant.stageSlot = slot;
+    }
+    if (wasViewer && !willViewer) session.viewerCount = Math.max(0, session.viewerCount - 1);
+    if (!wasViewer && willViewer) { session.viewerCount++; participant.stageSlot = undefined; }
+    participant.role = role;
+    return true;
+  }
+
   setGuestLiveState(sessionId: string, userId: number, isMuted: boolean, isVideoOff: boolean): boolean { const session = this.sessions.get(sessionId); if (!session) return false; const participant = session.participants.get(userId); if (!participant || !isStageRole(participant.role)) return false; participant.isMuted = isMuted; participant.isVideoOff = isVideoOff; return true; }
   closeSession(sessionId: string): void { const session = this.sessions.get(sessionId); if (!session) return; session.state = 'ended'; session.endedAt = new Date(); session.participants.forEach((_, userId) => this.userSessions.delete(userId)); setTimeout(() => this.sessions.delete(sessionId), 60000); logger.info('Live session closed', { sessionId, participantCount: session.participants.size }); }
   getActiveSessions(): LiveSession[] { return Array.from(this.sessions.values()).filter((s) => s.state !== 'ended'); }
