@@ -23,8 +23,7 @@ export function LiveRoom() {
   const requestStage = trpc.live.requestToJoinStage.useMutation(); const acceptRequest = trpc.live.approveStageRequest.useMutation(); const rejectRequest = trpc.live.rejectStageRequest.useMutation();
   const muteParticipant = trpc.live.muteParticipant.useMutation(); const removeParticipant = trpc.live.removeFromStage.useMutation(); const sendGift = trpc.coins.sendGift.useMutation();
   const socketRef = useRef<Socket | null>(null); const localVideoRef = useRef<HTMLVideoElement>(null); const remoteVideoRef = useRef<HTMLVideoElement>(null); const streamRef = useRef<MediaStream | null>(null); const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
-  const [participants, setParticipants] = useState<Participant[]>([]); const [requests, setRequests] = useState<Request[]>([]); const [remoteReady, setRemoteReady] = useState(false); const [isMuted, setIsMuted] = useState(false); const [isVideoOff, setIsVideoOff] = useState(false); const [viewerCount, setViewerCount] = useState(0); const [chat, setChat] = useState<ChatMessage[]>([]); const [chatText, setChatText] = useState(""); const [showGifts, setShowGifts] = useState(false); const [balance, setBalance] = useState(0);
-  const [layout, setLayout] = useState<LiveLayoutId>("spotlight");
+  const [participants, setParticipants] = useState<Participant[]>([]); const [requests, setRequests] = useState<Request[]>([]); const [remoteReady, setRemoteReady] = useState(false); const [isMuted, setIsMuted] = useState(false); const [isVideoOff, setIsVideoOff] = useState(false); const [viewerCount, setViewerCount] = useState(0); const [chat, setChat] = useState<ChatMessage[]>([]); const [chatText, setChatText] = useState(""); const [showGifts, setShowGifts] = useState(false); const [balance, setBalance] = useState(0); const [layout, setLayout] = useState<LiveLayoutId>("spotlight");
   const isHost = !!me && !!session && me.id === session.hostId;
   useEffect(() => { const saved = sessionId ? sessionStorage.getItem(`afritok:live-layout:${sessionId}`) : null; if (saved && isLiveLayoutId(saved)) setLayout(saved); }, [sessionId]);
   useEffect(() => setBalance(Number(balanceQuery.data?.balance || 0)), [balanceQuery.data]); useEffect(() => { if (pendingQuery.data) setRequests(pendingQuery.data as Request[]); }, [pendingQuery.data]);
@@ -37,20 +36,15 @@ export function LiveRoom() {
     const setup = async () => { try {
       if (!isHost) await joinSession.mutateAsync({ sessionId, role: "viewer" });
       const socket = io(window.location.origin, { transports: ["websocket", "polling"] }); socketRef.current = socket;
-      socket.on("connect", () => socket.emit("live:join", { sessionId, userId: me.id, username: me.name || "Utilisateur", role: isHost ? "host" : "viewer" }));
+      socket.on("connect", () => { socket.emit("live:join", { sessionId, userId: me.id, username: me.name || "Utilisateur", role: isHost ? "host" : "viewer" }); if (isHost) socket.emit("live:layout", { sessionId, layout }); });
+      socket.on("live:layout", ({ layout: nextLayout }) => { if (typeof nextLayout === "string" && isLiveLayoutId(nextLayout)) setLayout(nextLayout); });
       socket.on("live:participants", ({ participants: list }) => setParticipants(list || [])); socket.on("live:stage-requests", ({ requests: list }) => setRequests(list || []));
       socket.on("live:stage-request", (item: Request) => { if (isHost) setRequests((items) => items.some((x) => x.requestId === item.requestId) ? items : [...items, item]); });
       socket.on("live:stage-request-state", ({ requestId, state, userId }) => { if (isHost && state !== "pending") setRequests((items) => items.filter((x) => x.requestId !== requestId)); if (userId === me.id && state === "accepted") void startStageMedia(); });
       socket.on("live:stage-error", ({ message }) => window.alert(message)); socket.on("live:viewer-count", ({ delta }) => setViewerCount((v) => Math.max(0, v + Number(delta || 0))));
-      socket.on("live:viewer-joined", ({ socketId }) => { if (isHost) void createOffer(socketId); });
-      socket.on("live:stage-media-ready", ({ socketId }) => { if (isHost) void createOffer(socketId); });
+      socket.on("live:viewer-joined", ({ socketId }) => { if (isHost) void createOffer(socketId); }); socket.on("live:stage-media-ready", ({ socketId }) => { if (isHost) void createOffer(socketId); });
       socket.on("live:chat", (message: ChatMessage) => setChat((items) => [...items.slice(-49), message]));
-      socket.on("live:signal", async ({ from, signal }) => {
-        let pc = peersRef.current.get(from);
-        if (signal.type === "offer") { if (pc) pc.close(); pc = new RTCPeerConnection(ICE_SERVERS); peersRef.current.set(from, pc); pc.ontrack = (event) => { if (remoteVideoRef.current && event.streams[0]) { remoteVideoRef.current.srcObject = event.streams[0]; setRemoteReady(true); } }; pc.onicecandidate = (e) => { if (e.candidate) socket.emit("live:signal", { to: from, signal: { type: "ice", candidate: e.candidate } }); }; await pc.setRemoteDescription({ type: "offer", sdp: signal.sdp }); const answer = await pc.createAnswer(); await pc.setLocalDescription(answer); socket.emit("live:signal", { to: from, signal: { type: "answer", sdp: answer.sdp } }); }
-        else if (signal.type === "answer" && pc) await pc.setRemoteDescription({ type: "answer", sdp: signal.sdp });
-        else if (signal.type === "ice" && pc && signal.candidate) { try { await pc.addIceCandidate(signal.candidate); } catch {} }
-      });
+      socket.on("live:signal", async ({ from, signal }) => { let pc = peersRef.current.get(from); if (signal.type === "offer") { if (pc) pc.close(); pc = new RTCPeerConnection(ICE_SERVERS); peersRef.current.set(from, pc); pc.ontrack = (event) => { if (remoteVideoRef.current && event.streams[0]) { remoteVideoRef.current.srcObject = event.streams[0]; setRemoteReady(true); } }; pc.onicecandidate = (e) => { if (e.candidate) socket.emit("live:signal", { to: from, signal: { type: "ice", candidate: e.candidate } }); }; await pc.setRemoteDescription({ type: "offer", sdp: signal.sdp }); const answer = await pc.createAnswer(); await pc.setLocalDescription(answer); socket.emit("live:signal", { to: from, signal: { type: "answer", sdp: answer.sdp } }); } else if (signal.type === "answer" && pc) await pc.setRemoteDescription({ type: "answer", sdp: signal.sdp }); else if (signal.type === "ice" && pc && signal.candidate) { try { await pc.addIceCandidate(signal.candidate); } catch {} } });
       socket.on("live:user-left", ({ socketId }) => { peersRef.current.get(socketId)?.close(); peersRef.current.delete(socketId); });
       if (isHost) await startStageMedia(); if (!isHost && requestQuery.data?.state === "accepted") await startStageMedia(); if (cancelled) return;
     } catch (e) { console.error(e); } }; void setup();
