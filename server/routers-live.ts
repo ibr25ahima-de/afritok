@@ -10,6 +10,9 @@ const liveSessionsManager = getLiveSessionsManager();
 const liveInvitationsManager = getLiveInvitationsManager();
 const stageRequestManager = getLiveStageRequestManager();
 
+const LIVE_LAYOUT_IDS = ['spotlight', 'split', 'grid', 'focus', 'host-center'] as const;
+type LiveLayoutId = (typeof LIVE_LAYOUT_IDS)[number];
+
 function getSessionOrThrow(sessionId: string) {
   const session = liveSessionsManager.getSession(sessionId);
   if (!session) throw new Error('Session not found');
@@ -28,17 +31,17 @@ function requireHostOrAdmin(sessionId: string, userId: number) {
 }
 
 export const liveRouter = router({
-  createSession: protectedProcedure.input(z.object({ title: z.string().min(1).max(200), description: z.string().max(500).optional(), type: z.enum(['video', 'audio', 'screen-share']).default('video'), isPublic: z.boolean().default(true), maxParticipants: z.number().int().min(1).max(100).default(5) })).mutation(({ ctx, input }) => {
-    const session = liveSessionsManager.createSession(ctx.user.id, ctx.user.name || 'Anonymous', input.title, input.description || '', input.type, input.isPublic, input.maxParticipants);
-    return { sessionId: session.sessionId, title: session.title, type: session.type, state: session.state, maxParticipants: session.maxParticipants };
+  createSession: protectedProcedure.input(z.object({ title: z.string().min(1).max(200), description: z.string().max(500).optional(), type: z.enum(['video', 'audio', 'screen-share']).default('video'), isPublic: z.boolean().default(true), maxParticipants: z.number().int().min(1).max(100).default(5), layout: z.enum(LIVE_LAYOUT_IDS).default('host-center') })).mutation(({ ctx, input }) => {
+    const session = liveSessionsManager.createSession(ctx.user.id, ctx.user.name || 'Anonymous', input.title, input.description || '', input.type, input.isPublic, input.maxParticipants, input.layout as LiveLayoutId);
+    return { sessionId: session.sessionId, title: session.title, type: session.type, state: session.state, maxParticipants: session.maxParticipants, layout: session.layout };
   }),
 
   getSession: protectedProcedure.input(z.object({ sessionId: z.string() })).query(({ input }) => {
     const s = liveSessionsManager.getSession(input.sessionId); if (!s) return null;
-    return { sessionId: s.sessionId, hostId: s.hostId, hostUsername: s.hostUsername, title: s.title, description: s.description, type: s.type, state: s.state, participantCount: s.participants.size, viewerCount: s.viewerCount, maxParticipants: s.maxParticipants, isPublic: s.isPublic, startedAt: s.startedAt, pendingStageRequests: stageRequestManager.listPending(s.sessionId).length };
+    return { sessionId: s.sessionId, hostId: s.hostId, hostUsername: s.hostUsername, title: s.title, description: s.description, type: s.type, layout: s.layout, centerParticipantId: s.centerParticipantId, state: s.state, participantCount: s.participants.size, viewerCount: s.viewerCount, maxParticipants: s.maxParticipants, isPublic: s.isPublic, startedAt: s.startedAt, pendingStageRequests: stageRequestManager.listPending(s.sessionId).length };
   }),
 
-  getCurrentSession: protectedProcedure.query(({ ctx }) => { const s = liveSessionsManager.getUserSession(ctx.user.id); return s ? { sessionId: s.sessionId, title: s.title, type: s.type, state: s.state, participantCount: s.participants.size, viewerCount: s.viewerCount, maxParticipants: s.maxParticipants } : null; }),
+  getCurrentSession: protectedProcedure.query(({ ctx }) => { const s = liveSessionsManager.getUserSession(ctx.user.id); return s ? { sessionId: s.sessionId, title: s.title, type: s.type, layout: s.layout, state: s.state, participantCount: s.participants.size, viewerCount: s.viewerCount, maxParticipants: s.maxParticipants } : null; }),
 
   startSession: protectedProcedure.input(z.object({ sessionId: z.string() })).mutation(({ ctx, input }) => { requireHost(input.sessionId, ctx.user.id); liveSessionsManager.setSessionState(input.sessionId, 'live'); return { success: true }; }),
   endSession: protectedProcedure.input(z.object({ sessionId: z.string() })).mutation(({ ctx, input }) => { requireHost(input.sessionId, ctx.user.id); liveSessionsManager.closeSession(input.sessionId); return { success: true }; }),
@@ -99,7 +102,7 @@ export const liveRouter = router({
   leaveSession: protectedProcedure.input(z.object({ sessionId: z.string() })).mutation(({ ctx, input }) => { stageRequestManager.cancelUserRequests(input.sessionId, ctx.user.id); liveSessionsManager.removeParticipant(input.sessionId, ctx.user.id); return { success: true }; }),
   getParticipants: protectedProcedure.input(z.object({ sessionId: z.string() })).query(({ input }) => {
     const s = liveSessionsManager.getSession(input.sessionId); if (!s) return [];
-    return Array.from(s.participants.values()).map((p) => ({ userId: p.userId, username: p.username, role: p.role, isMuted: p.isMuted, isVideoOff: p.isVideoOff, joinedAt: p.joinedAt }));
+    return Array.from(s.participants.values()).map((p) => ({ userId: p.userId, username: p.username, role: p.role, isMuted: p.isMuted, isVideoOff: p.isVideoOff, joinedAt: p.joinedAt, stageSlot: p.stageSlot }));
   }),
 
   promoteToStage: protectedProcedure.input(z.object({ sessionId: z.string(), userId: z.number() })).mutation(({ ctx, input }) => {
@@ -133,10 +136,7 @@ export const liveRouter = router({
     liveSessionsManager.setParticipantRole(input.sessionId, input.userId, 'admin'); return { success: true, role: 'admin' };
   }),
 
-  removeLiveAdmin: protectedProcedure.input(z.object({ sessionId: z.string(), userId: z.number() })).mutation(({ ctx, input }) => {
-    requireHost(input.sessionId, ctx.user.id); const s = getSessionOrThrow(input.sessionId); const p = s.participants.get(input.userId); if (!p || p.role !== 'admin') throw new Error('Not a Live admin');
-    liveSessionsManager.setParticipantRole(input.sessionId, input.userId, 'viewer'); return { success: true, role: 'viewer' };
-  }),
+  removeLiveAdmin: protectedProcedure.input(z.object({ sessionId: z.string(), userId: number() })).mutation(({ ctx, input }) => { requireHost(input.sessionId, ctx.user.id); const s = getSessionOrThrow(input.sessionId); const p = s.participants.get(input.userId); if (!p || p.role !== 'admin') throw new Error('Not a Live admin'); liveSessionsManager.setParticipantRole(input.sessionId, input.userId, 'viewer'); return { success: true, role: 'viewer' }; }),
 
   setStageCapacity: protectedProcedure.input(z.object({ sessionId: z.string(), maxParticipants: z.number().int().min(1).max(100) })).mutation(({ ctx, input }) => {
     const s = requireHost(input.sessionId, ctx.user.id); const current = Array.from(s.participants.values()).filter((p) => p.role === 'guest' || p.role === 'admin').length;
