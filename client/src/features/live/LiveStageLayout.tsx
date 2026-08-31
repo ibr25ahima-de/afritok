@@ -6,34 +6,57 @@ type Participant = { userId: number; username: string; role: string; isMuted: bo
 type Props = {
   layout: LiveLayoutId;
   participants: Participant[];
+  maxParticipants: number;
   renderVideo: (participant: Participant) => ReactNode;
 };
 
-export function LiveStageLayout({ layout, participants, renderVideo }: Props) {
-  const stage = participants.filter((p) => p.role === "host" || p.role === "guest" || p.role === "admin").slice(0, 100);
-  if (!stage.length) return <div className="absolute inset-0 flex items-center justify-center bg-gray-950 text-white/50">La scène est vide</div>;
+const EMPTY_SLOT_COUNT = 100;
 
-  const slot = (p: Participant) => (
-    <div key={p.userId} className="relative min-h-24 overflow-hidden rounded-2xl border border-white/10 bg-gray-900/90">
+export function LiveStageLayout({ layout, participants, maxParticipants, renderVideo }: Props) {
+  const capacity = Math.max(1, Math.min(EMPTY_SLOT_COUNT, Number(maxParticipants) || 1));
+  const stage = participants.filter((p) => p.role === "host" || p.role === "guest" || p.role === "admin").slice(0, capacity);
+  const slots = Array.from({ length: capacity }, (_, index) => stage[index] || null);
+
+  const emptySlot = (index: number, compact = false) => (
+    <div key={`empty-${index}`} className={`relative overflow-hidden rounded-2xl border border-white/10 bg-gray-900/75 flex items-center justify-center text-center text-white/45 ${compact ? "min-h-20" : "min-h-24"}`}>
+      <div><div className="text-3xl font-light leading-none">+</div><div className="mt-1 text-xs font-semibold">Inviter</div></div>
+    </div>
+  );
+
+  const slot = (p: Participant | null, index: number, compact = false) => p ? (
+    <div key={p.userId} className={`relative overflow-hidden rounded-2xl border border-white/10 bg-gray-900/90 ${compact ? "min-h-20" : "min-h-24"}`}>
       {renderVideo(p)}
       <div className="absolute bottom-2 left-2 right-2 rounded-lg bg-black/55 px-2 py-1 text-xs font-semibold truncate">
         {p.username}{p.role === "host" ? " · Hôte" : p.role === "admin" ? " · Admin" : ""}{p.isMuted ? " · Muet" : ""}
       </div>
     </div>
-  );
+  ) : emptySlot(index, compact);
 
   if (layout === "split") {
-    return <div className="absolute inset-0 p-2 grid grid-cols-2 gap-2">{slot(stage[0])}{stage[1] ? slot(stage[1]) : <div className="rounded-2xl bg-gray-900/80 flex items-center justify-center text-white/40">Invité 2</div>}</div>;
+    const visible = slots.slice(0, Math.min(capacity, 2));
+    return <div className="absolute inset-0 p-2 grid grid-cols-2 gap-2">{visible.map((p, i) => slot(p, i))}</div>;
   }
 
   if (layout === "grid") {
-    return <div className="absolute inset-0 p-2 grid grid-cols-2 md:grid-cols-3 gap-2 auto-rows-fr overflow-auto">{stage.map(slot)}</div>;
+    return <div className="absolute inset-0 p-2 grid grid-cols-2 md:grid-cols-3 gap-2 auto-rows-fr overflow-y-auto">{slots.map((p, i) => slot(p, i))}</div>;
   }
 
   if (layout === "focus") {
-    const extras = stage.slice(1);
-    return <div className="absolute inset-0 p-2 grid grid-cols-3 gap-2"><div className="col-span-2 row-span-2 relative overflow-hidden rounded-2xl">{renderVideo(stage[0])}</div><div className="flex flex-col gap-2 overflow-auto">{extras.slice(0, 9).map(slot)}{!extras.length && <div className="flex-1 rounded-2xl bg-gray-900/80 flex items-center justify-center text-white/40">Invités</div>}</div></div>;
+    const main = slots[0];
+    const side = slots.slice(1);
+    return <div className="absolute inset-0 p-2 grid grid-cols-3 gap-2 overflow-hidden">
+      <div className="col-span-2 row-span-2 relative overflow-hidden rounded-2xl">{main ? renderVideo(main) : emptySlot(0)}</div>
+      <div className="flex flex-col gap-2 overflow-y-auto">{side.map((p, i) => slot(p, i + 1, true))}</div>
+    </div>;
   }
 
-  return <div className="absolute inset-0 p-2">{renderVideo(stage[0])}<div className="absolute bottom-24 right-3 w-28 max-h-[55vh] overflow-auto space-y-2">{stage.slice(1, 9).map(slot)}</div></div>;
+  return <div className="absolute inset-0 p-2">
+    {mainVideo(slots[0], renderVideo, emptySlot)}
+    <div className="absolute bottom-24 right-3 w-28 max-h-[55vh] overflow-y-auto space-y-2">{slots.slice(1).map((p, i) => slot(p, i + 1, true))}</div>
+  </div>;
+}
+
+function mainVideo(participant: Participant | null, renderVideo: Props["renderVideo"], emptySlot: (index: number, compact?: boolean) => ReactNode) {
+  if (participant) return <div className="relative w-full h-full overflow-hidden rounded-2xl">{renderVideo(participant)}</div>;
+  return <div className="w-full h-full">{emptySlot(0)}</div>;
 }
