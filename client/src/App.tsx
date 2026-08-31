@@ -42,6 +42,7 @@ import AdvertisingButton from "./components/AdvertisingButton";
 import PremiumButton from "./components/PremiumButton";
 import GlobalAdSlot from "./components/advertising/GlobalAdSlot";
 import ProfileMessageLauncher from "./components/ProfileMessageLauncher";
+import { ActiveLiveStrip } from "./features/live/ActiveLiveStrip";
 import { useAuth } from "./_core/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 import { useLocation } from "wouter";
@@ -50,5 +51,6 @@ function Router() { const { loading } = useAuth(); if (loading) return <div clas
 function GlobalAdvertisingButton() { const [location] = useLocation(); if (location === "/advertising" || location.startsWith("/admin")) return null; return <div className="fixed bottom-24 right-4 z-[90]"><AdvertisingButton /></div>; }
 function GlobalPremiumButton() { const [location] = useLocation(); if (!location.startsWith("/profile") || location.startsWith("/admin")) return null; return <div className="fixed bottom-24 left-4 z-[90]"><PremiumButton /></div>; }
 function GlobalAdvertisingDisplay() { const [location] = useLocation(); if (location === "/advertising" || location.startsWith("/admin")) return null; return <GlobalAdSlot />; }
-function App() { return <ErrorBoundary><ThemeProvider defaultTheme="dark"><NotificationProvider><TooltipProvider><Toaster /><Router /><ProfileMessageLauncher /><LiveHostControls /><GlobalAdvertisingButton /><GlobalPremiumButton /><GlobalAdvertisingDisplay /></TooltipProvider></NotificationProvider></ThemeProvider></ErrorBoundary>; }
+function GlobalLiveStrip() { const [location] = useLocation(); if (location !== "/feed") return null; return <ActiveLiveStrip />; }
+function App() { return <ErrorBoundary><ThemeProvider defaultTheme="dark"><NotificationProvider><TooltipProvider><Toaster /><Router /><GlobalLiveStrip /><ProfileMessageLauncher /><LiveHostControls /><GlobalAdvertisingButton /><GlobalPremiumButton /><GlobalAdvertisingDisplay /></TooltipProvider></NotificationProvider></ThemeProvider></ErrorBoundary>; }
 export default App;
