@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { Camera, CameraOff, Gift, Grip, Mic, MicOff } from "lucide-react";
 
 type Props = {
@@ -26,12 +26,12 @@ export function LiveFloatingControls({ isHostOrGuest, isVideoOff, isMuted, onTog
   }, []);
 
   const clamp = (x: number, y: number) => ({ x: Math.max(4, Math.min(88, x)), y: Math.max(10, Math.min(82, y)) });
-  const startDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
+  const startDrag = (event: PointerEvent<HTMLButtonElement>) => {
     dragging.current = true;
     pointerOffset.current = { x: event.clientX - position.x / 100 * window.innerWidth, y: event.clientY - position.y / 100 * window.innerHeight };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
-  const moveDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
+  const moveDrag = (event: PointerEvent<HTMLButtonElement>) => {
     if (!dragging.current) return;
     const next = clamp((event.clientX - pointerOffset.current.x) / window.innerWidth * 100, (event.clientY - pointerOffset.current.y) / window.innerHeight * 100);
     setPosition(next);
@@ -44,7 +44,7 @@ export function LiveFloatingControls({ isHostOrGuest, isVideoOff, isMuted, onTog
 
   return (
     <div className="absolute z-40 flex flex-col gap-2" style={{ left: `${position.x}%`, top: `${position.y}%` }}>
-      <button type="button" onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={endDrag} aria-label="Déplacer les commandes du Live" className="mx-auto w-9 h-7 rounded-full bg-black/70 border border-white/15 flex items-center justify-center touch-none cursor-move">
+      <button type="button" onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} aria-label="Déplacer les commandes du Live" className="mx-auto w-9 h-7 rounded-full bg-black/70 border border-white/15 flex items-center justify-center touch-none cursor-move">
         <Grip size={16} />
       </button>
       <div className="flex flex-col gap-2 rounded-2xl bg-black/45 backdrop-blur-sm p-1.5">
