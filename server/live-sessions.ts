@@ -5,7 +5,7 @@ const logger = getLogger();
 export type LiveType = 'video' | 'audio' | 'screen-share';
 export type LiveState = 'pending' | 'starting' | 'live' | 'ending' | 'ended';
 export type LiveRole = 'host' | 'admin' | 'guest' | 'viewer';
-export type LiveLayout = 'spotlight' | 'split' | 'grid' | 'focus';
+export type LiveLayout = 'spotlight' | 'split' | 'grid' | 'focus' | 'host-center';
 
 export interface LiveParticipant {
   userId: number;
@@ -26,6 +26,7 @@ export interface LiveSession {
   description: string;
   type: LiveType;
   layout: LiveLayout;
+  centerParticipantId?: number;
   state: LiveState;
   participants: Map<number, LiveParticipant>;
   maxParticipants: number;
@@ -44,15 +45,15 @@ export class LiveSessionsManager {
   private userSessions: Map<number, string> = new Map();
 
   private nextFreeStageSlot(session: LiveSession): number | undefined {
-    const occupied = new Set(Array.from(session.participants.values()).filter((p) => isStageRole(p.role) && p.stageSlot !== undefined).map((p) => p.stageSlot));
-    for (let slot = 0; slot < session.maxParticipants; slot++) if (!occupied.has(slot)) return slot;
+    const occupied = new Set(Array.from(session.participants.values()).filter((p) => isStageRole(p.role) || p.role === 'host').map((p) => p.stageSlot).filter((slot): slot is number => slot !== undefined));
+    for (let slot = 1; slot <= session.maxParticipants; slot++) if (!occupied.has(slot)) return slot;
     return undefined;
   }
 
   createSession(hostId: number, hostUsername: string, title: string, description: string, type: LiveType = 'video', isPublic = true, maxParticipants = 50, layout: LiveLayout = 'spotlight'): LiveSession {
     const sessionId = 'live_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     const capacity = normalizeStageCapacity(maxParticipants);
-    const session: LiveSession = { sessionId, hostId, hostUsername, title, description, type, layout, state: 'pending', participants: new Map(), maxParticipants: capacity, viewerCount: 0, startedAt: new Date(), isPublic, giftRevenue: 0 };
+    const session: LiveSession = { sessionId, hostId, hostUsername, title, description, type, layout, centerParticipantId: hostId, state: 'pending', participants: new Map(), maxParticipants: capacity, viewerCount: 0, startedAt: new Date(), isPublic, giftRevenue: 0 };
     session.participants.set(hostId, { userId: hostId, username: hostUsername, joinedAt: new Date(), role: 'host', isMuted: false, isVideoOff: false, stageSlot: 0 });
     this.sessions.set(sessionId, session);
     this.userSessions.set(hostId, sessionId);
@@ -85,6 +86,7 @@ export class LiveSessionsManager {
     const participant = session.participants.get(userId); if (!participant) return false;
     if (participant.role === 'viewer') session.viewerCount = Math.max(0, session.viewerCount - 1);
     session.participants.delete(userId); this.userSessions.delete(userId);
+    if (session.centerParticipantId === userId) session.centerParticipantId = session.hostId;
     if (participant.role === 'host') this.closeSession(sessionId);
     return true;
   }
@@ -100,8 +102,15 @@ export class LiveSessionsManager {
       const slot = participant.stageSlot ?? this.nextFreeStageSlot(session); if (slot === undefined) return false; participant.stageSlot = slot;
     }
     if (wasViewer && !willViewer) session.viewerCount = Math.max(0, session.viewerCount - 1);
-    if (!wasViewer && willViewer) { session.viewerCount++; participant.stageSlot = undefined; }
+    if (!wasViewer && willViewer) { session.viewerCount++; participant.stageSlot = undefined; if (session.centerParticipantId === userId) session.centerParticipantId = session.hostId; }
     participant.role = role;
+    return true;
+  }
+
+  setCenterParticipant(sessionId: string, userId: number): boolean {
+    const session = this.sessions.get(sessionId); if (!session) return false;
+    const participant = session.participants.get(userId); if (!participant || !isStageRole(participant.role) && participant.role !== 'host') return false;
+    session.centerParticipantId = userId;
     return true;
   }
 
