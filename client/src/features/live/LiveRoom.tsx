@@ -29,9 +29,10 @@ export function LiveRoom() {
   const joinSession = trpc.live.joinSession.useMutation(); const leaveSession = trpc.live.leaveSession.useMutation(); const endSession = trpc.live.endSession.useMutation();
   const requestStage = trpc.live.requestToJoinStage.useMutation(); const acceptRequest = trpc.live.approveStageRequest.useMutation(); const rejectRequest = trpc.live.rejectStageRequest.useMutation();
   const muteParticipant = trpc.live.muteParticipant.useMutation(); const removeParticipant = trpc.live.removeFromStage.useMutation(); const sendGift = trpc.coins.sendGift.useMutation();
-  const socketRef = useRef<Socket | null>(null); const localVideoRef = useRef<HTMLVideoElement>(null); const streamRef = useRef<MediaStream | null>(null); const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map()); const peerUsersRef = useRef<Map<string, number>>(new Map()); const remoteStreamsRef = useRef<Map<number, MediaStream>>(new Map());
-  const [participants, setParticipants] = useState<Participant[]>([]); const [requests, setRequests] = useState<Request[]>([]); const [isMuted, setIsMuted] = useState(false); const [isVideoOff, setIsVideoOff] = useState(false); const [viewerCount, setViewerCount] = useState(0); const [chat, setChat] = useState<ChatMessage[]>([]); const [chatText, setChatText] = useState(""); const [showGifts, setShowGifts] = useState(false); const [balance, setBalance] = useState(0); const [layout, setLayout] = useState<LiveLayoutId>("spotlight"); const [, setMediaRevision] = useState(0);
+  const socketRef = useRef<Socket | null>(null); const streamRef = useRef<MediaStream | null>(null); const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map()); const peerUsersRef = useRef<Map<string, number>>(new Map()); const remoteStreamsRef = useRef<Map<number, MediaStream>>(new Map());
+  const [participants, setParticipants] = useState<Participant[]>([]); const participantsRef = useRef<Participant[]>([]); const [requests, setRequests] = useState<Request[]>([]); const [isMuted, setIsMuted] = useState(false); const [isVideoOff, setIsVideoOff] = useState(false); const [viewerCount, setViewerCount] = useState(0); const [chat, setChat] = useState<ChatMessage[]>([]); const [chatText, setChatText] = useState(""); const [showGifts, setShowGifts] = useState(false); const [balance, setBalance] = useState(0); const [layout, setLayout] = useState<LiveLayoutId>("spotlight"); const [, setMediaRevision] = useState(0);
   const isHost = !!me && !!session && me.id === session.hostId;
+  useEffect(() => { participantsRef.current = participants; }, [participants]);
   useEffect(() => { const saved = sessionId ? sessionStorage.getItem(`afritok:live-layout:${sessionId}`) : null; if (saved && isLiveLayoutId(saved)) setLayout(saved); }, [sessionId]);
   useEffect(() => setBalance(Number(balanceQuery.data?.balance || 0)), [balanceQuery.data]); useEffect(() => { if (pendingQuery.data) setRequests(pendingQuery.data as Request[]); }, [pendingQuery.data]);
 
@@ -46,7 +47,7 @@ export function LiveRoom() {
   const startStageMedia = async () => {
     if (streamRef.current || !navigator.mediaDevices?.getUserMedia) return;
     const media = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true }); streamRef.current = media;
-    if (localVideoRef.current) localVideoRef.current.srcObject = media; setIsMuted(false); setIsVideoOff(false); setMediaRevision((v) => v + 1);
+    setIsMuted(false); setIsVideoOff(false); setMediaRevision((v) => v + 1);
     if (!isHost) socketRef.current?.emit("live:stage-media-ready", { sessionId });
   };
 
@@ -57,17 +58,17 @@ export function LiveRoom() {
       const socket = io(window.location.origin, { transports: ["websocket", "polling"] }); socketRef.current = socket;
       socket.on("connect", () => { socket.emit("live:join", { sessionId, userId: me.id, username: me.name || "Utilisateur", role: isHost ? "host" : "viewer" }); if (isHost) socket.emit("live:layout", { sessionId, layout }); });
       socket.on("live:layout", ({ layout: nextLayout }) => { if (typeof nextLayout === "string" && isLiveLayoutId(nextLayout)) setLayout(nextLayout); });
-      socket.on("live:participants", ({ participants: list }) => setParticipants(list || [])); socket.on("live:stage-requests", ({ requests: list }) => setRequests(list || []));
+      socket.on("live:participants", ({ participants: list }) => { const next = list || []; participantsRef.current = next; setParticipants(next); });
+      socket.on("live:stage-requests", ({ requests: list }) => setRequests(list || []));
       socket.on("live:stage-request", (item: Request) => { if (isHost) setRequests((items) => items.some((x) => x.requestId === item.requestId) ? items : [...items, item]); });
       socket.on("live:stage-request-state", ({ requestId, state, userId }) => { if (isHost && state !== "pending") setRequests((items) => items.filter((x) => x.requestId !== requestId)); if (userId === me.id && state === "accepted") void startStageMedia(); });
       socket.on("live:stage-error", ({ message }) => window.alert(message)); socket.on("live:viewer-count", ({ delta }) => setViewerCount((v) => Math.max(0, v + Number(delta || 0))));
-      socket.on("live:viewer-joined", ({ socketId }) => { const self = participants.find((p) => p.userId === me.id); if (isHost || self?.role === "guest" || self?.role === "admin") void createOffer(socketId); });
+      socket.on("live:viewer-joined", ({ socketId }) => { const self = participantsRef.current.find((p) => p.userId === me.id); if (isHost || self?.role === "guest" || self?.role === "admin") void createOffer(socketId); });
       socket.on("live:stage-viewer-targets", ({ socketIds }) => { if (Array.isArray(socketIds)) socketIds.forEach((id) => void createOffer(id)); });
-      socket.on("live:stage-media-ready", ({ socketId, userId }) => { if (isHost) void createOffer(socketId); if (socketId === socket.id && !isHost) return; if (Number.isInteger(userId)) peerUsersRef.current.set(socketId, Number(userId)); });
+      socket.on("live:stage-media-ready", ({ socketId, userId }) => { if (isHost) void createOffer(socketId); if (socketId !== socket.id && Number.isInteger(userId)) peerUsersRef.current.set(socketId, Number(userId)); });
       socket.on("live:chat", (message: ChatMessage) => setChat((items) => [...items.slice(-49), message]));
       socket.on("live:signal", async ({ from, userId, signal }) => {
-        if (Number.isInteger(userId)) peerUsersRef.current.set(from, Number(userId));
-        let pc = peersRef.current.get(from);
+        if (Number.isInteger(userId)) peerUsersRef.current.set(from, Number(userId)); let pc = peersRef.current.get(from);
         if (signal.type === "offer") {
           if (pc) pc.close(); pc = new RTCPeerConnection(ICE_SERVERS); peersRef.current.set(from, pc); peerUsersRef.current.set(from, Number(userId));
           pc.ontrack = (event) => { if (event.streams[0] && Number.isInteger(userId)) { remoteStreamsRef.current.set(Number(userId), event.streams[0]); setMediaRevision((v) => v + 1); } };
@@ -92,11 +93,7 @@ export function LiveRoom() {
   const chooseGift = async (gift: any) => { if (!me || !session || !balance || !gift) return; try { const r = await sendGift.mutateAsync({ recipientId: Number(session.hostId), giftId: String(gift.id), quantity: 1, context: "live", contextId: sessionId, idempotencyKey: crypto.randomUUID() }); setBalance(Number(r.balance)); socketRef.current?.emit("live:gift", { sessionId, gift: { icon: r.gift.icon, name: r.gift.name } }); setShowGifts(false); } catch {} };
   if (!session) return <div className="min-h-screen bg-black text-white flex items-center justify-center">Chargement du Live...</div>;
 
-  const renderStageVideo = (participant: Participant) => {
-    const local = participant.userId === me?.id && !!streamRef.current;
-    const stream = local ? streamRef.current || undefined : remoteStreamsRef.current.get(participant.userId);
-    return <StreamVideo stream={stream} muted={local} videoOff={participant.isVideoOff} label={`Connexion avec ${participant.username}...`} />;
-  };
+  const renderStageVideo = (participant: Participant) => { const local = participant.userId === me?.id && !!streamRef.current; const stream = local ? streamRef.current || undefined : remoteStreamsRef.current.get(participant.userId); return <StreamVideo stream={stream} muted={local} videoOff={participant.isVideoOff} label={`Connexion avec ${participant.username}...`} />; };
 
   return <div className="h-[100dvh] bg-black text-white overflow-hidden relative">
     <LiveStageLayout layout={layout} participants={participants} renderVideo={renderStageVideo} />
