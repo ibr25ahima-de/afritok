@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { LiveCreatePanel } from "@/features/live/LiveCreatePanel";
-import { LIVE_STAGE_CAPACITIES, type LiveStageCapacity } from "@/../server/live/stage-rules";
+import { LIVE_STAGE_CAPACITIES, type LiveStageCapacity } from "@/features/live/live-stage-rules";
+import { LIVE_LAYOUTS, type LiveLayoutId } from "@/features/live/live-layouts";
 import { trpc } from "@/lib/trpc";
 
 export default function LiveCreate() {
@@ -9,6 +10,7 @@ export default function LiveCreate() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [capacity, setCapacity] = useState<LiveStageCapacity>(5);
+  const [layout, setLayout] = useState<LiveLayoutId>(LIVE_LAYOUTS[4].id);
   const [error, setError] = useState("");
   const [isStarting, setIsStarting] = useState(false);
 
@@ -29,6 +31,7 @@ export default function LiveCreate() {
         type: "video",
         isPublic: true,
         maxParticipants: capacity,
+        layout,
       });
       await startSession.mutateAsync({ sessionId: created.sessionId });
       navigate(`/live/${created.sessionId}`);
@@ -44,11 +47,13 @@ export default function LiveCreate() {
       title={title}
       description={description}
       capacity={capacity}
+      layout={layout}
       isStarting={isStarting}
       error={error}
       onTitleChange={setTitle}
       onDescriptionChange={setDescription}
       onCapacityChange={setCapacity}
+      onLayoutChange={setLayout}
       onStart={start}
     />
   );
