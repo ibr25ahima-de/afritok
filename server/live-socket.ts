@@ -6,7 +6,7 @@ interface LiveSocketUser { sessionId: string; userId: number; username: string; 
 const socketUsers = new Map<string, LiveSocketUser>();
 const manager = getLiveSessionsManager();
 const stageRequests = getLiveStageRequestManager();
-const LIVE_LAYOUTS = new Set(["spotlight", "split", "grid", "focus"]);
+const LIVE_LAYOUTS = new Set(["spotlight", "split", "grid", "focus", "host-center"]);
 function participantPayload(sessionId: string) { const session = manager.getSession(sessionId); return session ? Array.from(session.participants.values()).map((p) => ({ userId: p.userId, username: p.username, role: p.role, isMuted: p.isMuted, isVideoOff: p.isVideoOff, stageSlot: p.stageSlot })) : []; }
 
 export function registerLiveSocket(io: Server) {
@@ -18,11 +18,11 @@ export function registerLiveSocket(io: Server) {
       socket.join(`live:${user.sessionId}`); socketUsers.set(socket.id, { ...user, role: effectiveRole });
       if (effectiveRole === "viewer") { io.to(`live:${user.sessionId}`).emit("live:viewer-count", { delta: 1, userId: user.userId, username: user.username }); io.to(`live:${user.sessionId}`).emit("live:viewer-joined", { socketId: socket.id, userId: user.userId, username: user.username }); }
       io.to(`live:${user.sessionId}`).emit("live:participants", { participants: participantPayload(user.sessionId) });
-      socket.emit("live:layout", { layout: session.layout });
+      socket.emit("live:layout", { layout: session.layout, centerParticipantId: session.centerParticipantId || session.hostId });
       if (session.hostId === user.userId || participant?.role === "admin") socket.emit("live:stage-requests", { requests: stageRequests.listPending(user.sessionId) });
       const ownRequest = stageRequests.listPending(user.sessionId).find((r) => r.userId === user.userId); if (ownRequest) socket.emit("live:stage-request-state", { requestId: ownRequest.requestId, state: ownRequest.state, userId: ownRequest.userId });
     });
-    socket.on("live:layout", ({ sessionId, layout }) => { const sender = socketUsers.get(socket.id); if (!sender || sender.sessionId !== sessionId || !LIVE_LAYOUTS.has(layout)) return; const session = manager.getSession(sessionId); if (!session || session.hostId !== sender.userId) return; session.layout = layout; io.to(`live:${sessionId}`).emit("live:layout", { layout }); });
+    socket.on("live:layout", ({ sessionId, layout, centerParticipantId }) => { const sender = socketUsers.get(socket.id); if (!sender || sender.sessionId !== sessionId || !LIVE_LAYOUTS.has(layout)) return; const session = manager.getSession(sessionId); if (!session || session.hostId !== sender.userId) return; session.layout = layout; if (centerParticipantId !== undefined) { const centerId = Number(centerParticipantId); if (Number.isInteger(centerId)) manager.setCenterParticipant(sessionId, centerId); } io.to(`live:${sessionId}`).emit("live:layout", { layout: session.layout, centerParticipantId: session.centerParticipantId || session.hostId }); });
     socket.on("live:stage-request", ({ sessionId }) => { const sender = socketUsers.get(socket.id); if (!sender || sender.sessionId !== sessionId) return; const session = manager.getSession(sessionId); if (!session || session.hostId === sender.userId) return; if (!session.participants.has(sender.userId)) manager.addParticipant(sessionId, sender.userId, sender.username, "viewer"); const request = stageRequests.request(sessionId, sender.userId, sender.username); io.to(`live:${sessionId}`).emit("live:stage-request", { requestId: request.requestId, userId: request.userId, username: request.username, createdAt: request.createdAt }); });
     socket.on("live:stage-decision", ({ sessionId, requestId, decision }) => {
       const sender = socketUsers.get(socket.id); if (!sender || sender.sessionId !== sessionId || !["accept", "reject"].includes(decision)) return; const session = manager.getSession(sessionId); if (!session) return; const senderParticipant = session.participants.get(sender.userId); if (session.hostId !== sender.userId && senderParticipant?.role !== "admin") return; const request = stageRequests.get(requestId); if (!request || request.sessionId !== sessionId) return;
