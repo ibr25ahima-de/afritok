@@ -11,6 +11,7 @@ export async function getVideoById(videoId: number) {
 }
 
 export async function getFeedVideos(limit: number, offset: number) {
+  await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "scheduledAt" timestamp`);
   return await db
     .select({
       id: videos.id,
@@ -25,7 +26,6 @@ export async function getFeedVideos(limit: number, offset: number) {
       shares: videos.shares,
       favorites: videos.favorites,
       createdAt: videos.createdAt,
-
       user: {
         id: users.id,
         name: users.name,
@@ -34,7 +34,7 @@ export async function getFeedVideos(limit: number, offset: number) {
     })
     .from(videos)
     .leftJoin(users, eq(videos.userId, users.id))
-    .where(sql`${videos.videoUrl} IS NOT NULL`)
+    .where(sql`${videos.videoUrl} IS NOT NULL AND ("videos"."scheduledAt" IS NULL OR "videos"."scheduledAt" <= NOW())`)
     .orderBy(desc(videos.createdAt))
     .limit(limit)
     .offset(offset);
