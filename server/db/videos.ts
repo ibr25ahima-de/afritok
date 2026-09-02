@@ -12,13 +12,14 @@ export async function getVideoById(videoId: number) {
 
 export async function getFeedVideos(limit: number, offset: number) {
   await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "scheduledAt" timestamp`);
+  await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "hdVideoUrl" text`);
   return await db
     .select({
       id: videos.id,
       userId: videos.userId,
       title: videos.title,
       description: videos.description,
-      videoUrl: videos.videoUrl,
+      videoUrl: sql<string>`COALESCE("videos"."hdVideoUrl", "videos"."videoUrl")`,
       thumbnailUrl: videos.thumbnailUrl,
       views: videos.views,
       likes: videos.likes,
