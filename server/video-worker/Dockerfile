@@ -6,9 +6,7 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY package.json ./
-# The repository package currently contains an obsolete unpublished JSX-loc range.
-# Normalize it only inside the worker image; do not change the application dependency graph.
+COPY package.json pnpm-workspace.yaml ./
 RUN sed -i 's/"@builder.io\/vite-plugin-jsx-loc": "\^0\.0\.1"/"@builder.io\/vite-plugin-jsx-loc": "^0.1.1"/' package.json
 RUN corepack enable && pnpm install --no-frozen-lockfile
 
