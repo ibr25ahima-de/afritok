@@ -3,6 +3,7 @@ import { db } from "../db";
 import { videos } from "../../drizzle/schema";
 import { eq, sql } from "drizzle-orm";
 import { getActivePremiumSubscription } from "./subscription-service";
+import { queuePremiumHdVideo } from "../video-worker/premium-hd-trigger";
 
 export type PremiumVideoOptions = {
   quality?: "standard" | "hd";
@@ -28,7 +29,12 @@ export async function applyPremiumVideoOptions(userId: number, videoId: number, 
   await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "premiumQuality" text`);
   await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "scheduledAt" timestamp`);
   await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "commentsMode" text`);
+  await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "hdVideoUrl" text`);
   await db.execute(sql`UPDATE "videos" SET "premiumQuality" = ${options.quality ?? "standard"}, "scheduledAt" = ${scheduledAt?.toISOString() ?? null}, "commentsMode" = ${options.commentsMode ?? "all"} WHERE "id" = ${videoId}`);
+
+  if (options.quality === "hd") {
+    queuePremiumHdVideo({ videoId, userId, videoUrl: video.videoUrl });
+  }
 
   return { success: true, scheduledAt: scheduledAt?.toISOString() ?? null };
 }
