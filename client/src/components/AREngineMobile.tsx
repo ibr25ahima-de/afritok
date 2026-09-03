@@ -143,22 +143,23 @@ export const AREngineMobile: React.FC<{
       mapped.current = mapLandmarks(landmarks, video, w, h, transform);
       const currentLandmarks = mapped.current;
 
-      // The AR effect is the primary path. A beauty-filter failure must never
-      // prevent the selected creative effect from being rendered.
-      if (effect) {
-        try {
-          renderFaceEffect(ctx, currentLandmarks, w, h, effect);
-        } catch (error) {
-          console.error("[AREngineMobile] render selected effect", error);
-        }
-      }
-
-      // Beauty is independent and cannot block the AR layer above.
+      // Beauty processing is optional and isolated. It can never prevent the
+      // selected AR effect from being drawn.
       if (effect?.beautyConfig) {
         try {
           applyBeautyPipeline(ctx, currentLandmarks, w, h, effect.beautyConfig);
         } catch (error) {
           console.error("[AREngineMobile] beauty pipeline", error);
+        }
+      }
+
+      // Draw the selected AR layer LAST so glasses, hearts, ears, crown, etc.
+      // remain visible above any beauty/sculpting operation.
+      if (effect) {
+        try {
+          renderFaceEffect(ctx, currentLandmarks, w, h, effect);
+        } catch (error) {
+          console.error("[AREngineMobile] selected AR effect", error);
         }
       }
     }
