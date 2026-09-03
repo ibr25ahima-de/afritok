@@ -3,6 +3,7 @@ import { FaceLandmarker, FilesetResolver, NormalizedLandmark } from "@mediapipe/
 import type { AREffect } from "./EffectsPanel";
 import { smoothLandmarks } from "./faceUtils";
 import { applyBeautyPipeline } from "@/features/beauty/BeautyPipeline";
+import { renderFaceEffect } from "@/features/beauty/FaceEffects";
 
 const WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm";
 const MODEL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
@@ -94,8 +95,9 @@ export const AREngineMobile: React.FC<{
     if (landmarks?.length) {
       try {
         applyBeautyPipeline(ctx, landmarks, w, h, activeEffect?.beautyConfig);
+        renderFaceEffect(ctx, landmarks, w, h, activeEffect);
       } catch (error) {
-        console.error("[AREngineMobile] beauty", error);
+        console.error("[AREngineMobile] face effect", error);
       }
     }
     raf.current = requestAnimationFrame(render);
