@@ -19,13 +19,19 @@ export const AREngineMobile: React.FC<{
   videoRef: React.RefObject<HTMLVideoElement | null>;
   activeEffect: AREffect | null;
   isRecording?: boolean;
-}> = ({ videoRef, activeEffect }) => {
+  canvasRef?: React.RefObject<HTMLCanvasElement | null>;
+}> = ({ videoRef, activeEffect, canvasRef: externalCanvasRef }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const detector = useRef<FaceLandmarker | null>(null);
   const last = useRef(-1);
   const prev = useRef<NormalizedLandmark[] | null>(null);
   const raf = useRef<number | null>(null);
   const lastDetect = useRef(0);
+
+  const setCanvas = useCallback((node: HTMLCanvasElement | null) => {
+    canvasRef.current = node;
+    if (externalCanvasRef) externalCanvasRef.current = node;
+  }, [externalCanvasRef]);
 
   const detect = useCallback((v: HTMLVideoElement, t: number) => {
     if (!detector.current || t - lastDetect.current < 50 || v.currentTime === last.current) return prev.current;
@@ -108,7 +114,7 @@ export const AREngineMobile: React.FC<{
     return () => { if (raf.current) cancelAnimationFrame(raf.current); };
   }, [render]);
 
-  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none z-20" style={{ objectFit: "cover" }} />;
+  return <canvas ref={setCanvas} className="absolute inset-0 w-full h-full pointer-events-none z-20" style={{ objectFit: "cover" }} />;
 };
 
 export default AREngineMobile;
