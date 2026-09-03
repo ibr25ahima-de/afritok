@@ -11,9 +11,14 @@ const DETECTION_INTERVAL_MS = 40;
 const LANDMARK_SMOOTHING = 0.72;
 const LOST_FACE_TIMEOUT_MS = 350;
 
-type ARStatus = "loading" | "ready" | "face" | "no-face" | "error";
-
+type ARStatus = "loading" | "package" | "wasm" | "model" | "ready" | "face" | "no-face" | "error";
 type CoverTransform = { scale: number; dx: number; dy: number };
+type ARError = { stage: ARStatus; message: string; cause?: unknown };
+
+function errorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
 
 function grade(e: AREffect | null) {
   const c = e?.beautyConfig ?? {};
@@ -42,13 +47,7 @@ function drawCover(ctx: CanvasRenderingContext2D, video: HTMLVideoElement, width
   return { scale, dx, dy };
 }
 
-function mapLandmarks(
-  landmarks: NormalizedLandmark[],
-  video: HTMLVideoElement,
-  width: number,
-  height: number,
-  transform: CoverTransform,
-) {
+function mapLandmarks(landmarks: NormalizedLandmark[], video: HTMLVideoElement, width: number, height: number, transform: CoverTransform) {
   const { scale, dx, dy } = transform;
   return landmarks.map((p) => ({
     ...p,
@@ -62,7 +61,7 @@ export const AREngineMobile: React.FC<{
   activeEffect: AREffect | null;
   isRecording?: boolean;
   canvasRef?: React.RefObject<HTMLCanvasElement | null>;
-  onStatusChange?: (status: ARStatus, error?: unknown) => void;
+  onStatusChange?: (status: ARStatus, error?: ARError) => void;
 }> = ({ videoRef, activeEffect, canvasRef: externalCanvasRef, onStatusChange }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const detector = useRef<FaceLandmarker | null>(null);
@@ -76,15 +75,13 @@ export const AREngineMobile: React.FC<{
   const activeEffectRef = useRef<AREffect | null>(activeEffect);
   const statusRef = useRef<ARStatus>("loading");
 
-  const setStatus = useCallback((status: ARStatus, error?: unknown) => {
+  const setStatus = useCallback((status: ARStatus, error?: ARError) => {
     if (statusRef.current === status && status !== "error") return;
     statusRef.current = status;
     onStatusChange?.(status, error);
   }, [onStatusChange]);
 
-  useEffect(() => {
-    activeEffectRef.current = activeEffect;
-  }, [activeEffect]);
+  useEffect(() => { activeEffectRef.current = activeEffect; }, [activeEffect]);
 
   const setCanvas = useCallback((node: HTMLCanvasElement | null) => {
     canvasRef.current = node;
@@ -94,12 +91,8 @@ export const AREngineMobile: React.FC<{
   const detect = useCallback((video: HTMLVideoElement, now: number) => {
     const landmarker = detector.current;
     if (!landmarker) return previousLandmarks.current;
-    if (video.currentTime <= 0 || video.currentTime === lastVideoTime.current) {
-      return previousLandmarks.current;
-    }
-    if (now - lastDetectAt.current < DETECTION_INTERVAL_MS) {
-      return previousLandmarks.current;
-    }
+    if (video.currentTime <= 0 || video.currentTime === lastVideoTime.current) return previousLandmarks.current;
+    if (now - lastDetectAt.current < DETECTION_INTERVAL_MS) return previousLandmarks.current;
 
     lastDetectAt.current = now;
     lastVideoTime.current = video.currentTime;
@@ -109,13 +102,8 @@ export const AREngineMobile: React.FC<{
     try {
       const result = landmarker.detectForVideo(video, timestamp);
       const face = result.faceLandmarks?.[0];
-
       if (face && face.length > 400) {
-        previousLandmarks.current = smoothLandmarks(
-          face,
-          previousLandmarks.current,
-          LANDMARK_SMOOTHING,
-        );
+        previousLandmarks.current = smoothLandmarks(face, previousLandmarks.current, LANDMARK_SMOOTHING);
         lastFaceSeenAt.current = now;
         setStatus("face");
       } else if (now - lastFaceSeenAt.current > LOST_FACE_TIMEOUT_MS) {
@@ -125,9 +113,8 @@ export const AREngineMobile: React.FC<{
       }
     } catch (error) {
       console.error("[AREngineMobile] detectForVideo", error);
-      setStatus("error", error);
+      setStatus("error", { stage: "error", message: errorMessage(error), cause: error });
     }
-
     return previousLandmarks.current;
   }, [setStatus]);
 
@@ -136,8 +123,18 @@ export const AREngineMobile: React.FC<{
     setStatus("loading");
 
     (async () => {
+      let stage: ARStatus = "package";
       try {
+        // If this module imported successfully, the @mediapipe/tasks-vision package is in the bundle.
+        if (!FaceLandmarker || !FilesetResolver) throw new Error("@mediapipe/tasks-vision est absent du bundle");
+        setStatus("package");
+
+        stage = "wasm";
+        setStatus("wasm");
         const vision = await FilesetResolver.forVisionTasks(WASM);
+
+        stage = "model";
+        setStatus("model");
         const landmarker = await FaceLandmarker.createFromOptions(vision, {
           baseOptions: { modelAssetPath: MODEL },
           runningMode: "VIDEO",
@@ -149,16 +146,13 @@ export const AREngineMobile: React.FC<{
           outputFacialTransformationMatrixes: false,
         });
 
-        if (disposed) {
-          landmarker.close();
-          return;
-        }
-
+        if (disposed) { landmarker.close(); return; }
         detector.current = landmarker;
         setStatus("ready");
       } catch (error) {
-        console.error("[AREngineMobile] FaceLandmarker init", error);
-        setStatus("error", error);
+        const diagnostic: ARError = { stage, message: errorMessage(error), cause: error };
+        console.error("[AREngineMobile] MediaPipe init", diagnostic);
+        setStatus("error", diagnostic);
       }
     })();
 
@@ -179,7 +173,6 @@ export const AREngineMobile: React.FC<{
   const render = useCallback(() => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-
     if (!video || !canvas || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth || !video.videoHeight) {
       raf.current = requestAnimationFrame(render);
       return;
@@ -190,12 +183,8 @@ export const AREngineMobile: React.FC<{
       canvas.width = size.width;
       canvas.height = size.height;
     }
-
     const ctx = canvas.getContext("2d", { alpha: false });
-    if (!ctx) {
-      raf.current = requestAnimationFrame(render);
-      return;
-    }
+    if (!ctx) { raf.current = requestAnimationFrame(render); return; }
 
     const width = canvas.width;
     const height = canvas.height;
@@ -213,32 +202,21 @@ export const AREngineMobile: React.FC<{
     if (landmarks?.length) {
       mappedLandmarks.current = mapLandmarks(landmarks, video, width, height, transform);
       const current = mappedLandmarks.current;
-
       if (current && effect?.beautyConfig) {
-        try {
-          applyBeautyPipeline(ctx, current, width, height, effect.beautyConfig);
-        } catch (error) {
-          console.error("[AREngineMobile] beauty pipeline", error);
-        }
+        try { applyBeautyPipeline(ctx, current, width, height, effect.beautyConfig); }
+        catch (error) { console.error("[AREngineMobile] beauty pipeline", error); }
       }
-
       if (current && effect) {
-        try {
-          renderFaceEffect(ctx, current, width, height, effect);
-        } catch (error) {
-          console.error("[AREngineMobile] selected AR effect", error);
-        }
+        try { renderFaceEffect(ctx, current, width, height, effect); }
+        catch (error) { console.error("[AREngineMobile] selected AR effect", error); }
       }
     }
-
     raf.current = requestAnimationFrame(render);
   }, [videoRef, detect]);
 
   useEffect(() => {
     raf.current = requestAnimationFrame(render);
-    return () => {
-      if (raf.current !== null) cancelAnimationFrame(raf.current);
-    };
+    return () => { if (raf.current !== null) cancelAnimationFrame(raf.current); };
   }, [render]);
 
   return <canvas ref={setCanvas} className="absolute inset-0 w-full h-full pointer-events-none z-20" />;
