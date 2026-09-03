@@ -4,7 +4,7 @@ import { CoinsButton } from "@/components/CoinsButton";
 import { WalletButton } from "@/components/WalletButton";
 import { Button } from "@/components/ui/button";
 import { LiveStatusBadge } from "@/features/live/LiveStatusBadge";
-import { ArrowLeft, Edit3, Flame, Heart, Lock, MoreVertical, Play, Settings, Share2, UserPlus, UserCheck, BarChart3 } from "lucide-react";
+import { ArrowLeft, Edit3, Flame, Heart, Lock, MoreVertical, Play, Settings, Share2, UserPlus, UserCheck, BarChart3, Trash2, ChevronUp, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { useLocation, useRoute } from "wouter";
 
@@ -20,9 +20,17 @@ export default function ProfileDashboard() {
   const [monetization, setMonetization] = useState(false);
   const [tab, setTab] = useState<"videos"|"likes"|"favorites">("videos");
   const [selected, setSelected] = useState<number|null>(null);
+  const [touchStartY, setTouchStartY] = useState<number|null>(null);
   const follow = trpc.follower.toggle.useMutation();
   const profileQuery = trpc.user.getProfile.useQuery({userId:userId || 0},{enabled:!!userId});
   const videosQuery = trpc.video.getByUser.useQuery({userId:userId || 0},{enabled:!!userId});
+  const utils = trpc.useUtils();
+  const deleteVideo = trpc.video.delete.useMutation({
+    onSuccess: async () => {
+      await utils.video.getByUser.invalidate({ userId: userId || 0 });
+      setSelected(null);
+    },
+  });
   const countsQuery = trpc.follower.getCount.useQuery({userId:userId || 0},{enabled:!!userId});
   const earningsQuery = trpc.earnings.getMyEarnings.useQuery(undefined,{enabled:isOwn,refetchInterval:10000});
   if (!userId) return <div className="min-h-screen bg-black text-white grid place-items-center">Profil non trouvé</div>;
@@ -32,6 +40,15 @@ export default function ProfileDashboard() {
   const counts:any = countsQuery.data || {};
   const earnings:any = earningsQuery.data || {};
   const likes = videos.reduce((n,v)=>n+(v.likes||0),0);
+  const moveSelected = (direction: 1 | -1) => {
+    if (selected === null || videos.length < 2) return;
+    setSelected((selected + direction + videos.length) % videos.length);
+  };
+  const handleDeleteVideo = async (videoId: number) => {
+    if (!isOwn || !confirm("Supprimer définitivement cette vidéo ?")) return;
+    try { await deleteVideo.mutateAsync({ videoId }); }
+    catch { alert("La suppression a échoué. Réessaie."); }
+  };
 
   return <div className="min-h-screen bg-black text-white pb-20">
     <header className="sticky top-0 z-40 bg-black/90 backdrop-blur border-b border-gray-800 px-4 py-3 flex items-center justify-between">
@@ -56,9 +73,9 @@ export default function ProfileDashboard() {
     </section>
 
     <div className="flex border-b border-gray-800"><button onClick={()=>setTab("videos")} className={`flex-1 py-3 ${tab==="videos"?"border-b-2 border-red-500":"text-gray-400"}`}>Vidéos</button><button onClick={()=>setTab("likes")} className={`flex-1 py-3 ${tab==="likes"?"border-b-2 border-red-500":"text-gray-400"}`}><Heart size={16} className="inline"/> Likes</button><button onClick={()=>setTab("favorites")} className={`flex-1 py-3 ${tab==="favorites"?"border-b-2 border-red-500":"text-gray-400"}`}>Favoris</button></div>
-    <div className="grid grid-cols-3 gap-1 p-1">{videos.map((v,i)=><button key={v.id} onClick={()=>setSelected(i)} className="aspect-square bg-gray-900 overflow-hidden relative"><video src={v.videoUrl} muted playsInline className="w-full h-full object-cover"/><span className="absolute bottom-1 left-1 text-xs flex items-center gap-1"><Heart size={11}/>{v.likes||0}</span></button>)}</div>
+    <div className="grid grid-cols-3 gap-1 p-1">{videos.map((v,i)=><button key={v.id} onClick={()=>setSelected(i)} className="aspect-square bg-gray-900 overflow-hidden relative"><video src={v.videoUrl} muted playsInline className="w-full h-full object-cover"/><span className="absolute bottom-1 left-1 text-xs flex items-center gap-1"><Heart size={11}/>{v.likes||0}</span>{isOwn && <span role="button" tabIndex={0} onClick={(event)=>{event.stopPropagation(); handleDeleteVideo(v.id);}} className="absolute top-1 right-1 rounded-full bg-red-600/90 p-2 text-white"><Trash2 size={14}/></span>}</button>)}</div>
 
     {monetization && <div className="fixed inset-0 z-[100] bg-black/80 flex items-end"><div className="w-full bg-gray-900 rounded-t-3xl p-6"><div className="flex justify-between"><h2 className="text-2xl font-bold">🔥 Monétisation</h2><button onClick={()=>setMonetization(false)}>✕</button></div><p className="text-gray-300 mt-5">Total gagné : <b className="text-green-400">${Number(earnings.total||0).toFixed(2)}</b></p><p className="text-gray-400 mt-4">Gagne de l'argent avec tes vidéos, tes Lives et les cadeaux reçus.</p><Button onClick={()=>navigate("/monetization")} className="w-full mt-6">Ouvrir le portail de monétisation</Button></div></div>}
-    {selected!==null && videos[selected] && <div className="fixed inset-0 z-[100] bg-black flex flex-col"><button onClick={()=>setSelected(null)} className="absolute top-4 left-4 z-10 bg-black/60 rounded-full p-3"><ArrowLeft/></button><video src={videos[selected].videoUrl} autoPlay controls className="w-full h-full object-contain"/></div>}
+    {selected!==null && videos[selected] && <div className="fixed inset-0 z-[100] bg-black flex flex-col" onWheel={(event)=>{if (Math.abs(event.deltaY)>20) moveSelected(event.deltaY>0 ? 1 : -1);}} onTouchStart={(event)=>setTouchStartY(event.touches[0].clientY)} onTouchEnd={(event)=>{if (touchStartY !== null) { const delta = touchStartY - event.changedTouches[0].clientY; if (Math.abs(delta)>40) moveSelected(delta>0 ? 1 : -1); } setTouchStartY(null);}}><button onClick={()=>setSelected(null)} className="absolute top-4 left-4 z-10 bg-black/60 rounded-full p-3"><ArrowLeft/></button>{videos.length>1 && <><button onClick={()=>moveSelected(-1)} aria-label="Vidéo précédente" className="absolute top-1/2 left-4 z-10 -translate-y-1/2 rounded-full bg-black/60 p-3"><ChevronUp/></button><button onClick={()=>moveSelected(1)} aria-label="Vidéo suivante" className="absolute top-1/2 right-4 z-10 -translate-y-1/2 rounded-full bg-black/60 p-3"><ChevronDown/></button></>}<video key={videos[selected].id} src={videos[selected].videoUrl} autoPlay controls className="w-full h-full object-contain"/></div>}
   </div>;
 }
