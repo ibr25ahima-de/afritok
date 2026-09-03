@@ -49,8 +49,9 @@ export default function Feed() {
   );
 
   useEffect(() => {
-    if (!trpcVideos?.length) return;
+    if (!trpcVideos) return;
     setVideos(prev => {
+      if (offset === 0) return trpcVideos as Video[];
       const next = [...prev];
       trpcVideos.forEach(v => { if (!next.some(x => x.id === v.id)) next.push(v as Video); });
       return next;
@@ -63,7 +64,7 @@ export default function Feed() {
       return next;
     });
     setIsFetchingMore(false);
-  }, [trpcVideos]);
+  }, [trpcVideos, offset]);
 
   // Database is the source of truth for the current user's saved interactions.
   useEffect(() => {

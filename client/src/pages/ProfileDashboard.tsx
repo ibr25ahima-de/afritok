@@ -28,6 +28,7 @@ export default function ProfileDashboard() {
   const deleteVideo = trpc.video.delete.useMutation({
     onSuccess: async () => {
       await utils.video.getByUser.invalidate({ userId: userId || 0 });
+      await utils.feed.getFeed.invalidate();
       setSelected(null);
     },
   });

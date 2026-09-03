@@ -18,7 +18,7 @@ export default function MyVideos() {
   const deleteVideo = trpc.video.delete.useMutation({
     onSuccess: async () => {
       await utils.video.getByUser.invalidate({ userId: user?.id || 0 });
-      await utils.video.getFeed.invalidate();
+      await utils.feed.getFeed.invalidate();
     },
   });
 
