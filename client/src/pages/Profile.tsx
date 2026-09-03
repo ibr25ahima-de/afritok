@@ -13,9 +13,9 @@ export default function Profile() {
   const [, navigate] = useLocation();
   const [, params] = useRoute("/profile/:userId");
 
-  // Auth IDs can arrive as either number or string. Always normalize them.
   const currentUserId = Number(currentUser?.id ?? 0);
-  const profileUserId = params?.userId ? Number(params.userId) : currentUserId;
+  const routeUserId = params?.userId ? Number(params.userId) : 0;
+  const profileUserId = routeUserId > 0 ? routeUserId : currentUserId;
   const isOwnProfile = currentUserId > 0 && currentUserId === profileUserId;
 
   const [selectedVideoId, setSelectedVideoId] = useState<number | null>(null);
@@ -32,8 +32,8 @@ export default function Profile() {
   const favoritesQuery = trpc.favorite.getMyVideos.useQuery(undefined, { enabled: isOwnProfile && activeTab === "favorites" });
   const followerCountQuery = trpc.follower.getCount.useQuery({ userId: profileUserId }, { enabled: profileUserId > 0 });
 
-  if (profileUserId <= 0) return <div className="min-h-screen bg-black text-white flex items-center justify-center"><p>Profil non trouvé</p></div>;
-  if (userQuery.isLoading) return <div className="min-h-screen bg-black text-white flex items-center justify-center"><p>Chargement du profil...</p></div>;
+  if (profileUserId <= 0) return <div className="h-[100dvh] bg-black text-white flex items-center justify-center"><p>Profil non trouvé</p></div>;
+  if (userQuery.isLoading) return <div className="h-[100dvh] bg-black text-white flex items-center justify-center"><p>Chargement du profil...</p></div>;
 
   const profile = userQuery.data;
   const ownVideos = (videosQuery.data || []) as Video[];
@@ -45,22 +45,21 @@ export default function Profile() {
   const filteredVideos = activeTab === "likes" && isOwnProfile ? likedVideos : activeTab === "favorites" && isOwnProfile ? favoriteVideos : ownVideos;
   const selectedVideo = selectedVideoId === null ? null : ownVideos.find(v => v.id === selectedVideoId) || null;
 
+  // On the owner's Videos tab, every video opens the options dialog.
+  // Do not depend on a possibly string-typed/missing userId from the API for the UI tap.
   const handleVideoTap = (video: Video) => {
-    // The menu is only available for the owner of the video.
-    if (isOwnProfile && video.userId === currentUserId && activeTab === "videos") {
-      setSelectedVideoId(video.id);
-    }
+    if (isOwnProfile && activeTab === "videos") setSelectedVideoId(video.id);
   };
 
   const closeVideoOptions = () => setSelectedVideoId(null);
 
   const handleDeleteVideo = async () => {
-    if (!selectedVideo || !isOwnProfile || selectedVideo.userId !== currentUserId) return;
+    if (!selectedVideo || !isOwnProfile) return;
     try {
       await deleteVideoMutation.mutateAsync({ videoId: selectedVideo.id });
       closeVideoOptions();
       await videosQuery.refetch();
-      await utils.video.getFeed.invalidate();
+      await utils.video.getByUser.invalidate({ userId: profileUserId });
     } catch (error) {
       console.error("[Profile] delete video failed", error);
       alert(error instanceof Error ? error.message : "La suppression a échoué. Réessaie.");
@@ -68,8 +67,8 @@ export default function Profile() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white">
-      <div className="min-h-screen overflow-y-auto overscroll-y-contain touch-pan-y pb-28">
+    <div className="h-[100dvh] w-full bg-black text-white overflow-hidden overscroll-none">
+      <div className="h-full w-full overflow-y-scroll overscroll-y-contain touch-pan-y [webkit-overflow-scrolling:touch] pb-28">
         <header className="sticky top-0 z-40 bg-black/95 backdrop-blur border-b border-gray-800 px-4 py-3 flex items-center justify-between">
           <button type="button" onClick={() => navigate("/feed")} className="text-white"><ArrowLeft size={24}/></button>
           <h1 className="text-lg font-bold">{profile?.name || "Profil"}</h1>
@@ -110,7 +109,7 @@ export default function Profile() {
         <main className="grid grid-cols-3 gap-1 p-1 pb-10">
           {filteredVideos.map(video => (
             <div key={video.id} className="relative aspect-[9/16] bg-gray-900 overflow-hidden">
-              <button type="button" onClick={() => handleVideoTap(video)} className="absolute inset-0 z-10 w-full h-full cursor-pointer" aria-label="Options de la vidéo">
+              <button type="button" onClick={() => handleVideoTap(video)} className="absolute inset-0 z-10 w-full h-full cursor-pointer touch-manipulation" aria-label="Options de la vidéo">
                 <video src={video.videoUrl} muted playsInline preload="metadata" className="w-full h-full object-cover pointer-events-none"/>
               </button>
               <div className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black/80 to-transparent px-2 pt-5 pb-1 text-left text-xs pointer-events-none"><span className="flex items-center gap-1"><Eye size={13}/>{video.views || 0} vues</span></div>
@@ -118,8 +117,8 @@ export default function Profile() {
           ))}
         </main>
 
-        {selectedVideo && isOwnProfile && selectedVideo.userId === currentUserId && activeTab === "videos" && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 px-5" role="dialog" aria-modal="true" aria-label="Options de la vidéo">
+        {selectedVideo && isOwnProfile && activeTab === "videos" && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 px-5">
             <button type="button" aria-label="Fermer" onClick={closeVideoOptions} className="absolute inset-0 w-full h-full" />
             <div className="relative z-10 w-full max-w-sm rounded-2xl bg-gray-900 border border-gray-700 shadow-2xl overflow-hidden">
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700"><h3 className="text-base font-semibold">Options de la vidéo</h3><button type="button" onClick={closeVideoOptions} className="p-1 text-gray-400 hover:text-white" aria-label="Fermer"><X size={20}/></button></div>
