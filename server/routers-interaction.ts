@@ -3,7 +3,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { db } from "./db";
 import { videos, users, likes, favorites, comments } from "../drizzle/schema";
-import { eq, sql, inArray } from "drizzle-orm";
+import { eq, sql, inArray, and } from "drizzle-orm";
 
 import { getUserLike, getUserFavorite, getVideoComments, getVideoById, likeVideo, unlikeVideo, favoriteVideo, unfavoriteVideo, addComment, deleteComment, shareVideo, isFollowing } from "./db";
 import { recordLikeEarning, recordCommentEarning, recordShareEarning } from "./micro-earnings";
