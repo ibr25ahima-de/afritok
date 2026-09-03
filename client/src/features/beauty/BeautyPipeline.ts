@@ -2,9 +2,9 @@ import type { NormalizedLandmark } from "@mediapipe/tasks-vision";
 import { LM, getFaceGeometry, getPoints } from "@/components/faceUtils";
 import type { BeautyConfig } from "./BeautyConfig";
 import { normalizeBeautyConfig } from "./BeautyConfig";
+import { applyBlemishReduction } from "./SkinRetouch";
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
-
 type Point = { x: number; y: number };
 
 function polygon(ctx: CanvasRenderingContext2D, points: Point[]) {
@@ -25,12 +25,6 @@ function protectedRegions(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[]
   }
 }
 
-/**
- * Skin retouch pass.
- * The important rule is that the blurred image is only a low-frequency
- * correction: the original camera detail remains dominant, so skin becomes
- * cleaner without producing a foggy/blurred face.
- */
 function retouchSkin(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: number, h: number, amount: number) {
   amount = clamp01(amount);
   if (amount <= 0) return;
@@ -45,9 +39,7 @@ function retouchSkin(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: 
   const t = temp.getContext("2d");
   if (!t) return;
 
-  // Moderate blur removes small blemishes and uneven micro-contrast.
-  // It is deliberately weaker than the old full-opacity blur pass.
-  t.filter = `blur(${(2.2 + amount * 3.8).toFixed(1)}px) saturate(${(0.985 + amount * 0.025).toFixed(3)}) brightness(${(1.001 + amount * 0.009).toFixed(3)})`;
+  t.filter = `blur(${(1.4 + amount * 2.2).toFixed(1)}px)`;
   t.drawImage(ctx.canvas, 0, 0, w, h, 0, 0, temp.width, temp.height);
   t.filter = "none";
 
@@ -55,10 +47,7 @@ function retouchSkin(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: 
   polygon(ctx, oval);
   protectedRegions(ctx, l, w, h);
   try { ctx.clip("evenodd"); } catch { ctx.clip(); }
-
-  // Low-frequency blend only. At maximum beauty the correction is still
-  // below 50%, keeping pores, eyelashes and facial edges visibly sharp.
-  ctx.globalAlpha = 0.20 + amount * 0.25;
+  ctx.globalAlpha = 0.10 + amount * 0.18;
   ctx.drawImage(temp, 0, 0, temp.width, temp.height, 0, 0, w, h);
   ctx.restore();
 }
@@ -73,10 +62,7 @@ function tone(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: number,
   polygon(ctx, p);
   protectedRegions(ctx, l, w, h);
   try { ctx.clip("evenodd"); } catch { ctx.clip(); }
-  const g = ctx.createRadialGradient(
-    f.cx, f.cy - f.height * .12, f.width * .05,
-    f.cx, f.cy, f.width * .72
-  );
+  const g = ctx.createRadialGradient(f.cx, f.cy - f.height * .12, f.width * .05, f.cx, f.cy, f.width * .72);
   g.addColorStop(0, `rgba(255,255,255,${0.055 * amount})`);
   g.addColorStop(0.65, `rgba(255,255,255,${0.020 * amount})`);
   g.addColorStop(1, "rgba(255,255,255,0)");
@@ -130,7 +116,9 @@ function sculpt(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: numbe
 export function applyBeautyPipeline(ctx: CanvasRenderingContext2D, landmarks: NormalizedLandmark[], width: number, height: number, config?: BeautyConfig) {
   if (!landmarks?.length) return;
   const c = normalizeBeautyConfig(config);
-  retouchSkin(ctx, landmarks, width, height, Math.max(c.smoothSkin, c.skinTexture));
+  const skinAmount = Math.max(c.smoothSkin, c.skinTexture);
+  applyBlemishReduction(ctx, landmarks, width, height, skinAmount);
+  retouchSkin(ctx, landmarks, width, height, skinAmount);
   tone(ctx, landmarks, width, height, c.brightenSkin);
   sculpt(ctx, landmarks, width, height, c);
 }
