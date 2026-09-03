@@ -25,7 +25,7 @@ import { subscriptionRouter } from "./subscriptions/subscription-router";
 import { applyPremiumVideoOptions } from "./subscriptions/premium-video-publishing";
 import { recordWatchEarning } from "./micro-earnings";
 import { getUserVideos, getVideoById, getFeedVideos, getFollowerCount, getFollowingCount, isFollowing, getUserEarnings, getUserWithdrawals, getDisplaySettings, updateDisplaySettings, db, createOTP, getValidOTP, deleteOTP, getUserByPhone, upsertUser, updateUserProfile, updateUserAvatar } from "./db";
-import { storagePut } from "./storage";
+import { storagePut, storageDeleteVideo } from "./storage";
 import { videos, followers, users, reports, warnings, comments, likes, favorites, shares } from "../drizzle/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 
@@ -48,6 +48,12 @@ export const appRouter = router({
     delete: protectedProcedure.input(z.object({ videoId: z.number() })).mutation(async ({ ctx, input }) => {
       const video = await getVideoById(input.videoId); if (!video) throw new TRPCError({ code: "NOT_FOUND", message: "Vidéo introuvable." });
       if (video.userId !== ctx.user.id && ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "Vous ne pouvez supprimer que vos propres vidéos." });
+      try {
+        await storageDeleteVideo(video.videoUrl);
+      } catch (error) {
+        console.error("[video.delete] Storage deletion failed; database record kept:", error);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Impossible de supprimer le fichier vidéo. La vidéo n'a pas été supprimée." });
+      }
       await db.delete(comments).where(eq(comments.videoId, input.videoId));
       await db.delete(likes).where(eq(likes.videoId, input.videoId));
       await db.delete(favorites).where(eq(favorites.videoId, input.videoId));
