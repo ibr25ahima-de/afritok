@@ -45,7 +45,6 @@ export const AREngineMobile: React.FC<{
 }> = ({ videoRef, activeEffect, canvasRef: externalCanvasRef }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const detector = useRef<FaceLandmarker | null>(null);
-  const last = useRef(-1);
   const prev = useRef<NormalizedLandmark[] | null>(null);
   const mapped = useRef<NormalizedLandmark[] | null>(null);
   const raf = useRef<number | null>(null);
@@ -54,8 +53,10 @@ export const AREngineMobile: React.FC<{
   const setCanvas = useCallback((node: HTMLCanvasElement | null) => { canvasRef.current = node; if (externalCanvasRef) externalCanvasRef.current = node; }, [externalCanvasRef]);
 
   const detect = useCallback((v: HTMLVideoElement, t: number) => {
-    if (!detector.current || t - lastDetect.current < 50 || v.currentTime === last.current) return prev.current;
-    lastDetect.current = t; last.current = v.currentTime;
+    // A live camera stream does not advance `currentTime` reliably (often it stays at 0).
+    // Throttle by wall-clock time instead so face effects are refreshed continuously.
+    if (!detector.current || t - lastDetect.current < 50) return prev.current;
+    lastDetect.current = t;
     try { const result = detector.current.detectForVideo(v, t); const face = result.faceLandmarks?.[0]; if (face) prev.current = smoothLandmarks(face, prev.current, .52); }
     catch (error) { console.error("[AREngineMobile] detect", error); }
     return prev.current;
