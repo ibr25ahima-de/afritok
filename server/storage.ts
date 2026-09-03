@@ -53,6 +53,32 @@ export async function storagePut(
   }
 }
 
+/**
+ * Supprime le fichier vidéo Supabase correspondant à son URL publique.
+ * Les anciennes vidéos hébergées ailleurs sont ignorées afin de ne pas
+ * casser la suppression de leur enregistrement en base.
+ */
+export async function storageDeleteVideo(videoUrl: string): Promise<void> {
+  const marker = "/storage/v1/object/public/videos/";
+  const markerIndex = videoUrl.indexOf(marker);
+
+  if (markerIndex === -1) {
+    console.warn("[Storage] URL vidéo externe/ancienne, fichier non supprimé:", videoUrl);
+    return;
+  }
+
+  const fileKey = decodeURIComponent(videoUrl.slice(markerIndex + marker.length));
+  if (!fileKey) return;
+
+  const { error } = await supabase.storage.from("videos").remove([fileKey]);
+  if (error) {
+    console.error("[Storage] Supabase video delete failed:", error);
+    throw error;
+  }
+
+  console.log("🗑️ Supabase video deleted:", fileKey);
+}
+
 export async function storageList(bucket: string) {
   const { data, error } = await supabase.storage
     .from(bucket)
