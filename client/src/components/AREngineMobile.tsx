@@ -11,6 +11,8 @@ const DETECTION_INTERVAL_MS = 33;
 const LANDMARK_SMOOTHING = 0.68;
 const LOST_FACE_TIMEOUT_MS = 180;
 
+type ARStatus = "loading" | "ready" | "face" | "no-face" | "error";
+
 function grade(e: AREffect | null) {
   const c = e?.beautyConfig ?? {};
   const brighten = Math.max(0, Math.min(1, c.brightenSkin ?? 0));
@@ -45,7 +47,8 @@ export const AREngineMobile: React.FC<{
   activeEffect: AREffect | null;
   isRecording?: boolean;
   canvasRef?: React.RefObject<HTMLCanvasElement | null>;
-}> = ({ videoRef, activeEffect, canvasRef: externalCanvasRef }) => {
+  onStatusChange?: (status: ARStatus, error?: unknown) => void;
+}> = ({ videoRef, activeEffect, canvasRef: externalCanvasRef, onStatusChange }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const detector = useRef<FaceLandmarker | null>(null);
   const prev = useRef<NormalizedLandmark[] | null>(null);
@@ -54,6 +57,13 @@ export const AREngineMobile: React.FC<{
   const lastDetect = useRef(0);
   const lastFaceSeen = useRef(0);
   const activeEffectRef = useRef<AREffect | null>(activeEffect);
+  const statusRef = useRef<ARStatus>("loading");
+
+  const setStatus = useCallback((status: ARStatus, error?: unknown) => {
+    if (statusRef.current === status && status !== "error") return;
+    statusRef.current = status;
+    onStatusChange?.(status, error);
+  }, [onStatusChange]);
 
   useEffect(() => { activeEffectRef.current = activeEffect; }, [activeEffect]);
 
@@ -69,26 +79,30 @@ export const AREngineMobile: React.FC<{
     try {
       const result = lm.detectForVideo(v, t);
       const face = result.faceLandmarks?.[0];
-      if (face && face.length > 400) {
+      if (face && face.length >= 400) {
         prev.current = smoothLandmarks(face, prev.current, LANDMARK_SMOOTHING);
         lastFaceSeen.current = t;
+        setStatus("face");
       } else if (t - lastFaceSeen.current > LOST_FACE_TIMEOUT_MS) {
         prev.current = null;
         mapped.current = null;
+        setStatus("no-face");
       }
     } catch (error) {
-      console.error("[AREngineMobile] detect", error);
+      console.error("[AREngineMobile] detectForVideo", error);
+      setStatus("error", error);
     }
     return prev.current;
-  }, []);
+  }, [setStatus]);
 
   useEffect(() => {
     let disposed = false;
+    setStatus("loading");
     (async () => {
       try {
         const vision = await FilesetResolver.forVisionTasks(WASM);
         const lm = await FaceLandmarker.createFromOptions(vision, {
-          baseOptions: { modelAssetPath: MODEL },
+          baseOptions: { modelAssetPath: MODEL, delegate: "CPU" },
           runningMode: "VIDEO",
           numFaces: 1,
           minFaceDetectionConfidence: .15,
@@ -97,9 +111,14 @@ export const AREngineMobile: React.FC<{
           outputFaceBlendshapes: false,
           outputFacialTransformationMatrixes: false,
         });
-        if (disposed) lm.close(); else detector.current = lm;
+        if (disposed) lm.close();
+        else {
+          detector.current = lm;
+          setStatus("ready");
+        }
       } catch (error) {
-        console.error("[AREngineMobile] init", error);
+        console.error("[AREngineMobile] FaceLandmarker init", error);
+        setStatus("error", error);
       }
     })();
     return () => {
@@ -112,7 +131,7 @@ export const AREngineMobile: React.FC<{
       lastFaceSeen.current = 0;
       if (raf.current) cancelAnimationFrame(raf.current);
     };
-  }, []);
+  }, [setStatus]);
 
   const render = useCallback(() => {
     const video = videoRef.current;
@@ -143,8 +162,6 @@ export const AREngineMobile: React.FC<{
       mapped.current = mapLandmarks(landmarks, video, w, h, transform);
       const currentLandmarks = mapped.current;
 
-      // Beauty processing is optional and isolated. It can never prevent the
-      // selected AR effect from being drawn.
       if (effect?.beautyConfig) {
         try {
           applyBeautyPipeline(ctx, currentLandmarks, w, h, effect.beautyConfig);
@@ -153,19 +170,18 @@ export const AREngineMobile: React.FC<{
         }
       }
 
-      // Draw the selected AR layer LAST so glasses, hearts, ears, crown, etc.
-      // remain visible above any beauty/sculpting operation.
       if (effect) {
         try {
           renderFaceEffect(ctx, currentLandmarks, w, h, effect);
         } catch (error) {
           console.error("[AREngineMobile] selected AR effect", error);
+          setStatus("error", error);
         }
       }
     }
 
     raf.current = requestAnimationFrame(render);
-  }, [videoRef, detect]);
+  }, [videoRef, detect, setStatus]);
 
   useEffect(() => {
     raf.current = requestAnimationFrame(render);
