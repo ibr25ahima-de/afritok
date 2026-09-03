@@ -8,6 +8,12 @@ import { renderFaceEffect } from "@/features/beauty/FaceEffects";
 const WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm";
 const MODEL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 
+// Keep detection and rendering separate: the canvas renders every animation frame,
+// while MediaPipe refreshes the face landmarks at a stable mobile-friendly rate.
+const DETECTION_INTERVAL_MS = 33;
+const LANDMARK_SMOOTHING = 0.68;
+const LOST_FACE_TIMEOUT_MS = 180;
+
 function grade(e: AREffect | null) {
   const c = e?.beautyConfig ?? {};
   const brighten = Math.max(0, Math.min(1, c.brightenSkin ?? 0));
@@ -32,11 +38,19 @@ function drawCover(ctx: CanvasRenderingContext2D, video: HTMLVideoElement, width
   return { scale, dx, dy };
 }
 
-function mapLandmarks(landmarks: NormalizedLandmark[], video: HTMLVideoElement, width: number, height: number, transform: { scale: number; dx: number; dy: number }) {
+function mapLandmarks(
+  landmarks: NormalizedLandmark[],
+  video: HTMLVideoElement,
+  width: number,
+  height: number,
+  transform: { scale: number; dx: number; dy: number }
+) {
   const { scale, dx, dy } = transform;
-  // drawCover positions the scaled video at (dx, dy). Use the same transform
-  // for landmarks so effects stay attached to the face in portrait crop.
-  return landmarks.map(p => ({ ...p, x: (p.x * video.videoWidth * scale + dx) / width, y: (p.y * video.videoHeight * scale + dy) / height }));
+  return landmarks.map(p => ({
+    ...p,
+    x: (p.x * video.videoWidth * scale + dx) / width,
+    y: (p.y * video.videoHeight * scale + dy) / height,
+  }));
 }
 
 export const AREngineMobile: React.FC<{
@@ -51,44 +65,151 @@ export const AREngineMobile: React.FC<{
   const mapped = useRef<NormalizedLandmark[] | null>(null);
   const raf = useRef<number | null>(null);
   const lastDetect = useRef(0);
+  const lastFaceSeen = useRef(0);
+  const activeEffectRef = useRef<AREffect | null>(activeEffect);
 
-  const setCanvas = useCallback((node: HTMLCanvasElement | null) => { canvasRef.current = node; if (externalCanvasRef) externalCanvasRef.current = node; }, [externalCanvasRef]);
+  // Always use the newest selected effect inside the animation loop.
+  // This prevents a frame from rendering an older effect after a fast tap.
+  useEffect(() => {
+    activeEffectRef.current = activeEffect;
+  }, [activeEffect]);
+
+  const setCanvas = useCallback((node: HTMLCanvasElement | null) => {
+    canvasRef.current = node;
+    if (externalCanvasRef) externalCanvasRef.current = node;
+  }, [externalCanvasRef]);
 
   const detect = useCallback((v: HTMLVideoElement, t: number) => {
-    // A live camera stream does not advance `currentTime` reliably (often it stays at 0).
-    // Throttle by wall-clock time instead so face effects are refreshed continuously.
-    if (!detector.current || t - lastDetect.current < 50) return prev.current;
+    const lm = detector.current;
+    if (!lm) return prev.current;
+
+    // Do not use video.currentTime as a frame-change signal. For live camera
+    // streams it can remain at 0 on some mobile browsers, which stops AR updates.
+    if (t - lastDetect.current < DETECTION_INTERVAL_MS) return prev.current;
     lastDetect.current = t;
-    try { const result = detector.current.detectForVideo(v, t); const face = result.faceLandmarks?.[0]; if (face) prev.current = smoothLandmarks(face, prev.current, .52); }
-    catch (error) { console.error("[AREngineMobile] detect", error); }
+
+    try {
+      const result = lm.detectForVideo(v, t);
+      const face = result.faceLandmarks?.[0];
+
+      if (face && face.length >= 400) {
+        prev.current = smoothLandmarks(face, prev.current, LANDMARK_SMOOTHING);
+        lastFaceSeen.current = t;
+      } else if (t - lastFaceSeen.current > LOST_FACE_TIMEOUT_MS) {
+        // Avoid leaving an old effect floating on screen after the face is gone.
+        prev.current = null;
+        mapped.current = null;
+      }
+    } catch (error) {
+      // Keep the last valid landmarks for a short period so a transient detector
+      // hiccup does not make the selected effect visibly blink.
+      console.error("[AREngineMobile] detect", error);
+    }
+
     return prev.current;
   }, []);
 
   useEffect(() => {
     let disposed = false;
-    (async () => { try {
-      const vision = await FilesetResolver.forVisionTasks(WASM);
-      const lm = await FaceLandmarker.createFromOptions(vision, { baseOptions:{modelAssetPath:MODEL}, runningMode:"VIDEO", numFaces:1, minFaceDetectionConfidence:.20, minFacePresenceConfidence:.20, minTrackingConfidence:.20, outputFaceBlendshapes:false, outputFacialTransformationMatrixes:false });
-      if (disposed) lm.close(); else detector.current = lm;
-    } catch (error) { console.error("[AREngineMobile] init", error); } })();
-    return () => { disposed=true; detector.current?.close(); detector.current=null; prev.current=null; mapped.current=null; if(raf.current)cancelAnimationFrame(raf.current); };
+
+    (async () => {
+      try {
+        const vision = await FilesetResolver.forVisionTasks(WASM);
+        const lm = await FaceLandmarker.createFromOptions(vision, {
+          baseOptions: { modelAssetPath: MODEL },
+          runningMode: "VIDEO",
+          numFaces: 1,
+          minFaceDetectionConfidence: .15,
+          minFacePresenceConfidence: .15,
+          minTrackingConfidence: .15,
+          outputFaceBlendshapes: false,
+          outputFacialTransformationMatrixes: false,
+        });
+
+        if (disposed) {
+          lm.close();
+        } else {
+          detector.current = lm;
+        }
+      } catch (error) {
+        console.error("[AREngineMobile] init", error);
+      }
+    })();
+
+    return () => {
+      disposed = true;
+      detector.current?.close();
+      detector.current = null;
+      prev.current = null;
+      mapped.current = null;
+      lastDetect.current = 0;
+      lastFaceSeen.current = 0;
+      if (raf.current) cancelAnimationFrame(raf.current);
+    };
   }, []);
 
   const render = useCallback(() => {
-    const video=videoRef.current, canvas=canvasRef.current;
-    if(!video||!canvas||video.readyState<2||!video.videoWidth){raf.current=requestAnimationFrame(render);return;}
-    const size=outputSize(canvas);
-    if(canvas.width!==size.width||canvas.height!==size.height){canvas.width=size.width;canvas.height=size.height;}
-    const ctx=canvas.getContext("2d",{alpha:false}); if(!ctx)return;
-    const w=canvas.width,h=canvas.height;
-    ctx.globalAlpha=1;ctx.globalCompositeOperation="source-over";ctx.filter=grade(activeEffect);
-    const transform=drawCover(ctx,video,w,h);ctx.filter="none";
-    const landmarks=detect(video,performance.now());
-    if(landmarks?.length){try{mapped.current=mapLandmarks(landmarks,video,w,h,transform);applyBeautyPipeline(ctx,mapped.current,w,h,activeEffect?.beautyConfig);renderFaceEffect(ctx,mapped.current,w,h,activeEffect);}catch(error){console.error("[AREngineMobile] face effect",error);}}
-    raf.current=requestAnimationFrame(render);
-  },[videoRef,activeEffect,detect]);
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
 
-  useEffect(()=>{raf.current=requestAnimationFrame(render);return()=>{if(raf.current)cancelAnimationFrame(raf.current);};},[render]);
-  return <canvas ref={setCanvas} className="absolute inset-0 w-full h-full pointer-events-none z-20"/>;
+    if (!video || !canvas || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
+      raf.current = requestAnimationFrame(render);
+      return;
+    }
+
+    const size = outputSize(canvas);
+    if (canvas.width !== size.width || canvas.height !== size.height) {
+      canvas.width = size.width;
+      canvas.height = size.height;
+    }
+
+    const ctx = canvas.getContext("2d", { alpha: false });
+    if (!ctx) {
+      raf.current = requestAnimationFrame(render);
+      return;
+    }
+
+    const w = canvas.width;
+    const h = canvas.height;
+    const now = performance.now();
+    const effect = activeEffectRef.current;
+
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
+    ctx.filter = grade(effect);
+
+    // The exact same crop transform is used for the camera image and landmarks.
+    const transform = drawCover(ctx, video, w, h);
+    ctx.filter = "none";
+
+    const landmarks = detect(video, now);
+
+    if (landmarks?.length) {
+      try {
+        mapped.current = mapLandmarks(landmarks, video, w, h, transform);
+        const currentLandmarks = mapped.current;
+
+        // Apply the selected preset on every rendered frame. The selected effect
+        // is never cached by id here: changing the selection takes effect on the
+        // next frame without waiting for a new face-detection result.
+        applyBeautyPipeline(ctx, currentLandmarks, w, h, effect?.beautyConfig);
+        renderFaceEffect(ctx, currentLandmarks, w, h, effect);
+      } catch (error) {
+        console.error("[AREngineMobile] face effect", error);
+      }
+    }
+
+    raf.current = requestAnimationFrame(render);
+  }, [videoRef, detect]);
+
+  useEffect(() => {
+    raf.current = requestAnimationFrame(render);
+    return () => {
+      if (raf.current) cancelAnimationFrame(raf.current);
+    };
+  }, [render]);
+
+  return <canvas ref={setCanvas} className="absolute inset-0 w-full h-full pointer-events-none z-20" />;
 };
+
 export default AREngineMobile;
