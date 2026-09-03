@@ -34,7 +34,9 @@ function drawCover(ctx: CanvasRenderingContext2D, video: HTMLVideoElement, width
 
 function mapLandmarks(landmarks: NormalizedLandmark[], video: HTMLVideoElement, width: number, height: number, transform: { scale: number; dx: number; dy: number }) {
   const { scale, dx, dy } = transform;
-  return landmarks.map(p => ({ ...p, x: (p.x * video.videoWidth * scale - dx) / width, y: (p.y * video.videoHeight * scale - dy) / height }));
+  // drawCover positions the scaled video at (dx, dy). Use the same transform
+  // for landmarks so effects stay attached to the face in portrait crop.
+  return landmarks.map(p => ({ ...p, x: (p.x * video.videoWidth * scale + dx) / width, y: (p.y * video.videoHeight * scale + dy) / height }));
 }
 
 export const AREngineMobile: React.FC<{
