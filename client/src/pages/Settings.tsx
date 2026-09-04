@@ -25,13 +25,40 @@ type PrivacySettingsState = {
   showFollowing: boolean;
 };
 
+type SecuritySettingsState = {
+  twoFactorEnabled: boolean;
+  loginAlerts: boolean;
+};
+
+type NotificationSettingsState = {
+  newFollowers: boolean;
+  likes: boolean;
+  comments: boolean;
+  shares: boolean;
+  messages: boolean;
+  promotions: boolean;
+};
+
+type DisplaySettingsState = {
+  language: string;
+  darkMode: string;
+  dataSaver: boolean;
+  autoPlay: string;
+  textSize: string;
+  animations: boolean;
+};
+
 export default function Settings() {
   const { user, logout } = useAuth();
   const [, navigate] = useLocation();
-  const { data: savedSettings } = trpc.user.getDisplaySettings.useQuery();
+  const utils = trpc.useUtils();
+  const { data: savedSettings, isLoading: settingsLoading } = trpc.user.getDisplaySettings.useQuery();
 
   const updateSettingsMutation = trpc.user.updateDisplaySettings.useMutation({
-    onSuccess: () => toast.success("Paramètres enregistrés"),
+    onSuccess: async () => {
+      await utils.user.getDisplaySettings.invalidate();
+      toast.success("Paramètres enregistrés");
+    },
     onError: () => toast.error("Erreur lors de l'enregistrement"),
   });
 
@@ -46,12 +73,32 @@ export default function Settings() {
     showFollowing: true,
   });
 
-  const [securitySettings, setSecuritySettings] = useState({ twoFactorEnabled: false, loginAlerts: true });
-  const [notificationSettings, setNotificationSettings] = useState({ newFollowers: true, likes: true, comments: true, shares: true, messages: true, promotions: false });
-  const [displaySettings, setDisplaySettings] = useState({ language: "Français", darkMode: "Système", dataSaver: false, autoPlay: "Wi-Fi uniquement", textSize: "Normale", animations: true });
+  const [securitySettings, setSecuritySettings] = useState<SecuritySettingsState>({
+    twoFactorEnabled: false,
+    loginAlerts: true,
+  });
+
+  const [notificationSettings, setNotificationSettings] = useState<NotificationSettingsState>({
+    newFollowers: true,
+    likes: true,
+    comments: true,
+    shares: true,
+    messages: true,
+    promotions: false,
+  });
+
+  const [displaySettings, setDisplaySettings] = useState<DisplaySettingsState>({
+    language: "Français",
+    darkMode: "Système",
+    dataSaver: false,
+    autoPlay: "Wi-Fi uniquement",
+    textSize: "Normale",
+    animations: true,
+  });
 
   useEffect(() => {
     if (!savedSettings) return;
+
     setDisplaySettings({
       language: savedSettings.language,
       darkMode: savedSettings.darkMode,
@@ -60,6 +107,7 @@ export default function Settings() {
       textSize: savedSettings.textSize,
       animations: savedSettings.animations,
     });
+
     setPrivacySettings({
       profilePublic: savedSettings.profilePublic,
       allowMessages: savedSettings.allowMessages,
@@ -67,24 +115,108 @@ export default function Settings() {
       showFollowers: savedSettings.showFollowers,
       showFollowing: savedSettings.showFollowing,
     });
+
+    setSecuritySettings({
+      twoFactorEnabled: savedSettings.twoFactorEnabled,
+      loginAlerts: savedSettings.loginAlerts,
+    });
+
+    setNotificationSettings({
+      newFollowers: savedSettings.notifyFollowers,
+      likes: savedSettings.notifyLikes,
+      comments: savedSettings.notifyComments,
+      shares: savedSettings.notifyShares,
+      messages: savedSettings.notifyMessages,
+      promotions: savedSettings.notifyPromotions,
+    });
   }, [savedSettings]);
 
-  const handlePrivacyChange = (key: keyof PrivacySettingsState) => {
-    const newPrivacy = { ...privacySettings, [key]: !privacySettings[key] };
-    setPrivacySettings(newPrivacy);
-    updateSettingsMutation.mutate({ ...displaySettings, ...newPrivacy });
+  const saveSettings = (overrides: Partial<DisplaySettingsState> & Partial<PrivacySettingsState> & Partial<SecuritySettingsState> & {
+    notifyFollowers?: boolean;
+    notifyLikes?: boolean;
+    notifyComments?: boolean;
+    notifyShares?: boolean;
+    notifyMessages?: boolean;
+    notifyPromotions?: boolean;
+  }) => {
+    updateSettingsMutation.mutate({
+      ...displaySettings,
+      ...privacySettings,
+      ...securitySettings,
+      notifyFollowers: notificationSettings.newFollowers,
+      notifyLikes: notificationSettings.likes,
+      notifyComments: notificationSettings.comments,
+      notifyShares: notificationSettings.shares,
+      notifyMessages: notificationSettings.messages,
+      notifyPromotions: notificationSettings.promotions,
+      ...overrides,
+    });
   };
 
-  const handleSecurityChange = (key: string) => setSecuritySettings((prev) => ({ ...prev, [key]: !prev[key as keyof typeof securitySettings] }));
-  const handleNotificationChange = (key: string) => setNotificationSettings((prev) => ({ ...prev, [key]: !prev[key as keyof typeof notificationSettings] }));
+  const handlePrivacyChange = (key: keyof PrivacySettingsState) => {
+    const value = !privacySettings[key];
+    const newPrivacy = { ...privacySettings, [key]: value };
+    setPrivacySettings(newPrivacy);
+    saveSettings({ ...newPrivacy });
+  };
+
+  const handleSecurityChange = (key: keyof SecuritySettingsState) => {
+    const value = !securitySettings[key];
+    const newSecurity = { ...securitySettings, [key]: value };
+    setSecuritySettings(newSecurity);
+    saveSettings({ ...newSecurity });
+  };
+
+  const handleNotificationChange = (key: keyof NotificationSettingsState) => {
+    const value = !notificationSettings[key];
+    const newNotifications = { ...notificationSettings, [key]: value };
+    setNotificationSettings(newNotifications);
+
+    const notificationMap = {
+      newFollowers: newNotifications.newFollowers,
+      likes: newNotifications.likes,
+      comments: newNotifications.comments,
+      shares: newNotifications.shares,
+      messages: newNotifications.messages,
+      promotions: newNotifications.promotions,
+    };
+
+    saveSettings({
+      notifyFollowers: notificationMap.newFollowers,
+      notifyLikes: notificationMap.likes,
+      notifyComments: notificationMap.comments,
+      notifyShares: notificationMap.shares,
+      notifyMessages: notificationMap.messages,
+      notifyPromotions: notificationMap.promotions,
+    });
+  };
 
   const updateDisplaySetting = (key: string, value: any) => {
-    const newSettings = { ...displaySettings, [key]: value };
+    const newSettings = { ...displaySettings, [key]: value } as DisplaySettingsState;
     setDisplaySettings(newSettings);
-    updateSettingsMutation.mutate({ ...newSettings, ...privacySettings });
+
+    if (key === "darkMode") {
+      const root = document.documentElement;
+      const applyTheme = () => {
+        const dark = value === "Sombre" || (value === "Système" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        root.classList.toggle("dark", dark);
+      };
+      applyTheme();
+      window.dispatchEvent(new CustomEvent("afritok:theme-change", { detail: value }));
+    }
+
+    if (key === "textSize") {
+      document.documentElement.dataset.afritokTextSize = value;
+    }
+
+    if (key === "animations") {
+      document.documentElement.classList.toggle("reduce-motion", !value);
+    }
+
+    saveSettings({ [key]: value });
   };
 
-  const handleChangePassword = () => toast.info("Changement de mot de passe à venir");
+  const handleChangePassword = () => toast.info("Le changement de mot de passe n'est pas disponible avec la connexion OTP actuelle.");
 
   const handleLogout = async () => {
     try {
@@ -100,27 +232,56 @@ export default function Settings() {
   };
 
   const handleDeleteAccount = () => {
-    if (confirm("⚠️ Êtes-vous sûr ? Cette action est irréversible !")) toast.error("Fonctionnalité de suppression à venir");
+    toast.info("La suppression définitive du compte n'est pas encore implémentée côté serveur.");
   };
 
   return (
     <div className="min-h-screen bg-black text-white pb-20">
       <SettingsHeader userId={user?.id} />
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+        {settingsLoading && (
+          <div className="text-sm text-gray-500">Chargement de vos paramètres...</div>
+        )}
         <SettingsMenu activeTab={activeTab} setActiveTab={setActiveTab} isAdmin={user?.role === "admin"} />
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-          {activeTab === "privacy" && <PrivacySettings privacySettings={privacySettings} handlePrivacyChange={handlePrivacyChange} />}
-          {activeTab === "security" && <SecuritySettings securitySettings={securitySettings} handleSecurityChange={handleSecurityChange} handleChangePassword={handleChangePassword} isLoading={isLoading} />}
-          {activeTab === "notifications" && <NotificationSettings notificationSettings={notificationSettings} handleNotificationChange={handleNotificationChange} />}
-          {activeTab === "account" && <>
-            <AccountSettings user={user} isLoading={isLoading} handleLogout={handleLogout} handleDeleteAccount={handleDeleteAccount} />
-            <WarningsSettings />
-            <DisplaySettings settings={displaySettings} updateSetting={updateDisplaySetting} />
-            <CacheSettings />
-            <SupportSettings />
-            <AboutSettings />
-          </>}
-          {activeTab === "admin" && user?.role === "admin" && <div className="p-6 bg-gray-900 rounded-lg border border-gray-800"><h2 className="text-xl font-bold mb-4">Administration</h2><p className="text-gray-400">Accès restreint aux administrateurs.</p></div>}
+          {activeTab === "privacy" && (
+            <PrivacySettings privacySettings={privacySettings} handlePrivacyChange={handlePrivacyChange} />
+          )}
+          {activeTab === "security" && (
+            <SecuritySettings
+              securitySettings={securitySettings}
+              handleSecurityChange={handleSecurityChange}
+              handleChangePassword={handleChangePassword}
+              isLoading={isLoading || updateSettingsMutation.isPending}
+            />
+          )}
+          {activeTab === "notifications" && (
+            <NotificationSettings
+              notificationSettings={notificationSettings}
+              handleNotificationChange={handleNotificationChange}
+            />
+          )}
+          {activeTab === "account" && (
+            <>
+              <AccountSettings
+                user={user}
+                isLoading={isLoading}
+                handleLogout={handleLogout}
+                handleDeleteAccount={handleDeleteAccount}
+              />
+              <WarningsSettings />
+              <DisplaySettings settings={displaySettings} updateSetting={updateDisplaySetting} />
+              <CacheSettings />
+              <SupportSettings />
+              <AboutSettings />
+            </>
+          )}
+          {activeTab === "admin" && user?.role === "admin" && (
+            <div className="p-6 bg-gray-900 rounded-lg border border-gray-800">
+              <h2 className="text-xl font-bold mb-4">Administration</h2>
+              <p className="text-gray-400">Accès restreint aux administrateurs.</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
