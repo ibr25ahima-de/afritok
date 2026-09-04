@@ -30,11 +30,75 @@ function drawBunny(ctx:CanvasRenderingContext2D,l:NormalizedLandmark[],w:number,
  const mouth=center(points(l,LM.outerLips,w,h));ellipse(ctx,mouth,f.width*.055,f.height*.035,"rgba(250,120,150,.72)");
 }
 
+/**
+ * Real-time sunglasses AR. Nothing here uses the thumbnail: the glasses are
+ * reconstructed on every camera frame from the tracked eye landmarks. The
+ * lenses, rims, bridge and side arms rotate and scale with the user's head.
+ */
 function drawGlasses(ctx:CanvasRenderingContext2D,l:NormalizedLandmark[],w:number,h:number,style:"dark"|"heart"){
  const f=getFaceGeometry(l,w,h),eyes=eyeCenters(l,w,h),a=headAngle(l,w,h);
- if(style==="heart"){eyes.forEach(e=>{const s=f.width*.07;polygon(ctx,[{x:e.x,y:e.y+s*.9},{x:e.x-s*1.35,y:e.y-s*.35},{x:e.x-s*.72,y:e.y-s*1.05},{x:e.x,y:e.y-s*.35},{x:e.x+s*.72,y:e.y-s*1.05},{x:e.x+s*1.35,y:e.y-s*.35}],"rgba(255,55,105,.82)","rgba(255,255,255,.9)",2);});return;}
- eyes.forEach(e=>ellipse(ctx,e,f.width*.13,f.height*.068,"rgba(10,15,24,.76)","rgba(255,255,255,.95)",Math.max(2,f.width*.009),a));
- line(ctx,[{x:eyes[0].x+f.width*.105,y:eyes[0].y},{x:eyes[1].x-f.width*.105,y:eyes[1].y}],"rgba(255,255,255,.9)",Math.max(2,f.width*.008));
+ if(style==="heart"){
+   eyes.forEach(e=>{const s=f.width*.07;polygon(ctx,[{x:e.x,y:e.y+s*.9},{x:e.x-s*1.35,y:e.y-s*.35},{x:e.x-s*.72,y:e.y-s*1.05},{x:e.x,y:e.y-s*.35},{x:e.x+s*.72,y:e.y-s*1.05},{x:e.x+s*1.35,y:e.y-s*.35}],"rgba(255,55,105,.82)","rgba(255,255,255,.9)",2);});return;
+ }
+ const left=eyes[0], right=eyes[1];
+ const eyeDistance=Math.hypot(right.x-left.x,right.y-left.y);
+ if(!Number.isFinite(eyeDistance)||eyeDistance<20)return;
+ const lensW=eyeDistance*.47;
+ const lensH=Math.max(eyeDistance*.30,f.height*.072);
+ const rim=Math.max(2.5,eyeDistance*.018);
+ const bridge=eyeDistance*.10;
+ const centerX=(left.x+right.x)/2, centerY=(left.y+right.y)/2;
+ const ca=Math.cos(a),sa=Math.sin(a);
+ const local=(x:number,y:number):Point=>({x:centerX+x*ca-y*sa,y:centerY+y*ca+x*sa});
+
+ ctx.save();
+ ctx.lineCap="round";
+ ctx.lineJoin="round";
+ // Arms extend naturally from the outside of each lens toward the ears.
+ ctx.shadowColor="rgba(0,0,0,.35)";
+ ctx.shadowBlur=4;
+ line(ctx,[local(-eyeDistance*.20,-lensH*.04),local(-eyeDistance*.48,-lensH*.02),local(-f.width*.47, -f.height*.005)],"rgba(18,20,24,.96)",rim*1.15);
+ line(ctx,[local( eyeDistance*.20,-lensH*.04),local( eyeDistance*.48,-lensH*.02),local( f.width*.47, -f.height*.005)],"rgba(18,20,24,.96)",rim*1.15);
+ ctx.shadowBlur=0;
+
+ const drawLens=(eye:Point)=>{
+   ctx.save();
+   ctx.translate(eye.x,eye.y);
+   ctx.rotate(a);
+   const x=-(lensW/2), y=-(lensH/2);
+   const radius=Math.min(lensH*.28,lensW*.20);
+   const g=ctx.createLinearGradient(0,y,0,y+lensH);
+   g.addColorStop(0,"rgba(15,20,30,.90)");
+   g.addColorStop(.45,"rgba(25,31,43,.78)");
+   g.addColorStop(1,"rgba(5,8,14,.94)");
+   ctx.shadowColor="rgba(0,0,0,.42)";ctx.shadowBlur=5;
+   ctx.fillStyle=g;
+   ctx.beginPath();
+   if(typeof ctx.roundRect==="function") ctx.roundRect(x,y,lensW,lensH,radius);
+   else ctx.ellipse(0,0,lensW/2,lensH/2,0,0,Math.PI*2);
+   ctx.fill();
+   ctx.shadowBlur=0;
+   ctx.strokeStyle="rgba(235,238,245,.96)";
+   ctx.lineWidth=rim;
+   ctx.stroke();
+   // Glass reflection: a narrow moving-looking highlight makes the lens read
+   // as glass rather than a flat black oval.
+   const reflection=ctx.createLinearGradient(x,y,x+lensW,y+lensH);
+   reflection.addColorStop(0,"rgba(255,255,255,0)");
+   reflection.addColorStop(.42,"rgba(255,255,255,.02)");
+   reflection.addColorStop(.55,"rgba(255,255,255,.22)");
+   reflection.addColorStop(.68,"rgba(255,255,255,.03)");
+   reflection.addColorStop(1,"rgba(255,255,255,0)");
+   ctx.fillStyle=reflection;
+   ctx.beginPath();
+   if(typeof ctx.roundRect==="function") ctx.roundRect(x,y,lensW,lensH,radius); else ctx.ellipse(0,0,lensW/2,lensH/2,0,0,Math.PI*2);
+   ctx.fill();
+   ctx.restore();
+ };
+ drawLens(left);drawLens(right);
+ // Nose bridge is rendered after the lenses so it visually connects them.
+ line(ctx,[local(-bridge,-lensH*.02),local(0,lensH*.08),local(bridge,lensH*.02)],"rgba(235,238,245,.96)",rim*1.05);
+ ctx.restore();
 }
 
 function drawCrown(ctx:CanvasRenderingContext2D,l:NormalizedLandmark[],w:number,h:number){
