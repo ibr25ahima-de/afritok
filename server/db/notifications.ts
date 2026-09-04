@@ -1,10 +1,6 @@
 import { eq, desc } from "drizzle-orm";
 import { db } from "./index";
-import { notifications } from "../../drizzle/schema";
-
-/* =====================
-NOTIFICATIONS
-===================== */
+import { notifications, users } from "../../drizzle/schema";
 
 export async function getNotifications(userId: number) {
   return db
@@ -18,9 +14,7 @@ export async function getUnreadNotificationsCount(userId: number) {
   const result = await db
     .select()
     .from(notifications)
-    .where(
-      eq(notifications.userId, userId)
-    );
+    .where(eq(notifications.userId, userId));
   return result.filter((n) => !n.isRead).length;
 }
 
@@ -38,6 +32,14 @@ export async function markAllNotificationsAsRead(userId: number) {
     .where(eq(notifications.userId, userId));
 }
 
+/**
+ * Creates an in-app notification only when the recipient has enabled the
+ * corresponding existing notification preference.
+ *
+ * The current schema has preferences for followers, likes, comments, shares,
+ * messages and promotions. Other notification types are left unchanged
+ * because there is no matching user preference in the existing schema.
+ */
 export async function createNotification(
   userId: number,
   fromUserId: number,
@@ -45,13 +47,44 @@ export async function createNotification(
   videoId?: number,
   message?: string
 ) {
-  await db.insert(notifications).values({
-    userId,
-    fromUserId,
-    type,
-    videoId: videoId || null,
-    message,
-  });
+  const [recipient] = await db
+    .select({
+      notifyFollowers: users.notifyFollowers,
+      notifyLikes: users.notifyLikes,
+      notifyComments: users.notifyComments,
+      notifyShares: users.notifyShares,
+      notifyMessages: users.notifyMessages,
+      notifyPromotions: users.notifyPromotions,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (!recipient) return null;
+
+  const enabled =
+    type === "follow" ? recipient.notifyFollowers :
+    type === "like" ? recipient.notifyLikes :
+    type === "comment" ? recipient.notifyComments :
+    type === "share" ? recipient.notifyShares :
+    type === "message" ? recipient.notifyMessages :
+    type === "promotion" ? recipient.notifyPromotions :
+    true;
+
+  if (!enabled) return null;
+
+  const [created] = await db
+    .insert(notifications)
+    .values({
+      userId,
+      fromUserId,
+      type,
+      videoId: videoId || null,
+      message,
+    })
+    .returning({ id: notifications.id });
+
+  return created?.id ?? null;
 }
 
 export async function deleteNotification(notificationId: number) {
