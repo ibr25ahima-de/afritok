@@ -43,7 +43,6 @@
 }
 
 :root {
-  /* African Colors: Orange, Green, Red, Gold */
   --primary: #ff6b35;
   --primary-foreground: #ffffff;
   --sidebar-primary: #ff6b35;
@@ -114,155 +113,51 @@
   --sidebar-ring: #ff6b35;
 }
 
+/* The text-size setting changes the root rem scale, so existing Tailwind
+   typography responds without rewriting every component. */
+html[data-afritok-text-size="Petite"] { font-size: 90%; }
+html[data-afritok-text-size="Normale"] { font-size: 100%; }
+html[data-afritok-text-size="Grande"] { font-size: 112.5%; }
+
+/* The animation setting is global and also covers Tailwind/CSS animations. */
+html.reduce-motion *,
+html.reduce-motion *::before,
+html.reduce-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition-duration: 0.001ms !important;
+}
+
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-  button:not(:disabled),
-  [role="button"]:not([aria-disabled="true"]),
-  [type="button"]:not(:disabled),
-  [type="submit"]:not(:disabled),
-  [type="reset"]:not(:disabled),
-  a[href],
-  select:not(:disabled),
-  input[type="checkbox"]:not(:disabled),
-  input[type="radio"]:not(:disabled) {
-    @apply cursor-pointer;
-  }
+  * { @apply border-border outline-ring/50; }
+  body { @apply bg-background text-foreground; }
+  button:not(:disabled), [role="button"]:not([aria-disabled="true"]), [type="button"]:not(:disabled), [type="submit"]:not(:disabled), [type="reset"]:not(:disabled), a[href], select:not(:disabled), input[type="checkbox"]:not(:disabled), input[type="radio"]:not(:disabled) { @apply cursor-pointer; }
 }
 
 @layer components {
-  /**
-   * Custom container utility that centers content and adds responsive padding.
-   *
-   * This overrides Tailwind's default container behavior to:
-   * - Auto-center content (mx-auto)
-   * - Add responsive horizontal padding
-   * - Set max-width for large screens
-   *
-   * Usage: <div className="container">...</div>
-   *
-   * For custom widths, use max-w-* utilities directly:
-   * <div className="max-w-6xl mx-auto px-4">...</div>
-   */
-  .container {
-    width: 100%;
-    margin-left: auto;
-    margin-right: auto;
-    padding-left: 1rem; /* 16px - mobile padding */
-    padding-right: 1rem;
-  }
+  .container { width: 100%; margin-left: auto; margin-right: auto; padding-left: 1rem; padding-right: 1rem; }
+  .flex { min-height: 0; min-width: 0; }
+  @media (min-width: 640px) { .container { padding-left: 1.5rem; padding-right: 1.5rem; } }
+  @media (min-width: 1024px) { .container { padding-left: 2rem; padding-right: 2rem; max-width: 1280px; } }
 
-  .flex {
-    min-height: 0;
-    min-width: 0;
-  }
-
-  @media (min-width: 640px) {
-    .container {
-      padding-left: 1.5rem; /* 24px - tablet padding */
-      padding-right: 1.5rem;
-    }
-  }
-
-  @media (min-width: 1024px) {
-    .container {
-      padding-left: 2rem; /* 32px - desktop padding */
-      padding-right: 2rem;
-      max-width: 1280px; /* Standard content width */
-    }
-  }
-
-  /* Afritok Custom Animations */
-  @keyframes pulse-glow {
-    0%, 100% {
-      box-shadow: 0 0 20px rgba(255, 107, 53, 0.5);
-    }
-    50% {
-      box-shadow: 0 0 40px rgba(255, 165, 0, 0.8);
-    }
-  }
-
-  @keyframes slide-up {
-    from {
-      opacity: 0;
-      transform: translateY(20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  @keyframes fade-in {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
-  }
-
-  @keyframes bounce-subtle {
-    0%, 100% {
-      transform: translateY(0);
-    }
-    50% {
-      transform: translateY(-4px);
-    }
-  }
-
-  .animate-pulse-glow {
-    animation: pulse-glow 2s ease-in-out infinite;
-  }
-
-  .animate-slide-up {
-    animation: slide-up 0.5s ease-out;
-  }
-
-  .animate-fade-in {
-    animation: fade-in 0.3s ease-out;
-  }
-
-  .animate-bounce-subtle {
-    animation: bounce-subtle 1s ease-in-out infinite;
-  }
-
-  /* Gradient backgrounds for African theme */
-  .bg-afritok-gradient {
-    background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 50%, #2d3748 100%);
-  }
-
-  .bg-afritok-accent {
-    background: linear-gradient(135deg, #ff6b35 0%, #ffa500 100%);
-  }
-
-  .bg-afritok-success {
-    background: linear-gradient(135deg, #228b22 0%, #32cd32 100%);
-  }
+  @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 20px rgba(255, 107, 53, 0.5); } 50% { box-shadow: 0 0 40px rgba(255, 165, 0, 0.8); } }
+  @keyframes slide-up { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes bounce-subtle { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+  .animate-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+  .animate-slide-up { animation: slide-up 0.5s ease-out; }
+  .animate-fade-in { animation: fade-in 0.3s ease-out; }
+  .animate-bounce-subtle { animation: bounce-subtle 1s ease-in-out infinite; }
+  .bg-afritok-gradient { background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 50%, #2d3748 100%); }
+  .bg-afritok-accent { background: linear-gradient(135deg, #ff6b35 0%, #ffa500 100%); }
+  .bg-afritok-success { background: linear-gradient(135deg, #228b22 0%, #32cd32 100%); }
 }
 
 @layer utilities {
-  .text-afritok-primary {
-    @apply text-[#ff6b35];
-  }
-
-  .text-afritok-accent {
-    @apply text-[#ffa500];
-  }
-
-  .text-afritok-success {
-    @apply text-[#228b22];
-  }
-
-  .border-afritok-primary {
-    @apply border-[#ff6b35];
-  }
-
-  .border-afritok-accent {
-    @apply border-[#ffa500];
-  }
+  .text-afritok-primary { @apply text-[#ff6b35]; }
+  .text-afritok-accent { @apply text-[#ffa500]; }
+  .text-afritok-success { @apply text-[#228b22]; }
+  .border-afritok-primary { @apply border-[#ff6b35]; }
+  .border-afritok-accent { @apply border-[#ffa500]; }
 }
