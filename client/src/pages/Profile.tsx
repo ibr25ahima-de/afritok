@@ -4,7 +4,7 @@ import { trpc } from "@/lib/trpc";
 import { LiveStatusBadge } from "@/features/live/LiveStatusBadge";
 import { useLocation, useRoute } from "wouter";
 import { ArrowLeft, Edit3, UserPlus, UserCheck, MoreVertical, MapPin, Eye, X, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 
 interface Video { id:number; userId:number; title:string|null; description:string|null; videoUrl:string; thumbnailUrl:string|null; duration:number|null; views:number|null; likes:number|null; comments:number|null; shares:number|null; favorites:number|null; createdAt:Date; }
@@ -23,6 +23,7 @@ export default function Profile() {
   const [activeTab, setActiveTab] = useState<"videos"|"likes"|"favorites">("videos");
   const [isFollowing, setIsFollowing] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const utils = trpc.useUtils();
   const followMutation = trpc.follower.toggle.useMutation();
@@ -46,8 +47,14 @@ export default function Profile() {
   const filteredVideos = activeTab === "likes" && isOwnProfile ? likedVideos : activeTab === "favorites" && isOwnProfile ? favoriteVideos : ownVideos;
   const selectedVideo = selectedVideoId === null ? null : ownVideos.find(v => v.id === selectedVideoId) || null;
 
-  const handleVideoTap = (video: Video) => {
-    if (isOwnProfile && activeTab === "videos") setSelectedVideoId(video.id);
+  const startVideoLongPress = (video: Video) => {
+    if (!isOwnProfile || activeTab !== "videos") return;
+    longPressTimer.current = setTimeout(() => setSelectedVideoId(video.id), 550);
+  };
+
+  const cancelVideoLongPress = () => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    longPressTimer.current = null;
   };
 
   const closeVideoOptions = () => setSelectedVideoId(null);
@@ -63,7 +70,7 @@ export default function Profile() {
       await Promise.all([
         videosQuery.refetch(),
         utils.video.getByUser.invalidate({ userId: profileUserId }),
-        utils.video.feed.invalidate(),
+        utils.feed.getFeed.invalidate(),
         utils.like.getMyLikedVideos.invalidate(),
         utils.favorite.getMyVideos.invalidate(),
       ]);
@@ -117,7 +124,7 @@ export default function Profile() {
         <main className="grid grid-cols-3 gap-1 p-1 pb-10">
           {filteredVideos.map(video => (
             <div key={video.id} className="relative aspect-[9/16] bg-gray-900 overflow-hidden">
-              <button type="button" onClick={() => handleVideoTap(video)} className="absolute inset-0 z-10 w-full h-full cursor-pointer touch-manipulation" aria-label="Options de la vidéo">
+              <button type="button" onPointerDown={() => startVideoLongPress(video)} onPointerUp={cancelVideoLongPress} onPointerCancel={cancelVideoLongPress} onPointerLeave={cancelVideoLongPress} onContextMenu={event => event.preventDefault()} className="absolute inset-0 z-10 w-full h-full cursor-pointer touch-manipulation" aria-label={isOwnProfile && activeTab === "videos" ? "Maintenir appuyé pour gérer la vidéo" : "Voir la vidéo"}>
                 <video src={video.videoUrl} muted playsInline preload="metadata" className="w-full h-full object-cover pointer-events-none"/>
               </button>
               <div className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black/80 to-transparent px-2 pt-5 pb-1 text-left text-xs pointer-events-none"><span className="flex items-center gap-1"><Eye size={13}/>{video.views || 0} vues</span></div>

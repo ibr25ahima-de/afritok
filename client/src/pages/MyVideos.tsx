@@ -2,13 +2,17 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
-import { ArrowLeft, Video, Trash2, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Video, Eye, EyeOff } from "lucide-react";
 import { APP_LOGO, APP_TITLE } from "@/const";
+import { useRef, useState } from "react";
+import { toast } from "sonner";
 
 export default function MyVideos() {
   const { user, isAuthenticated } = useAuth();
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
+  const [selectedVideoId, setSelectedVideoId] = useState<number | null>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const userVideosQuery = trpc.video.getByUser.useQuery(
     { userId: user?.id || 0 },
@@ -27,13 +31,24 @@ export default function MyVideos() {
     return null;
   }
 
-  const handleDeleteVideo = async (videoId: number) => {
-    if (!confirm("Supprimer définitivement cette vidéo ?")) return;
+  const startVideoLongPress = (videoId: number) => {
+    longPressTimer.current = setTimeout(() => setSelectedVideoId(videoId), 550);
+  };
+
+  const cancelVideoLongPress = () => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    longPressTimer.current = null;
+  };
+
+  const handleDeleteVideo = async () => {
+    if (!selectedVideoId) return;
     try {
-      await deleteVideo.mutateAsync({ videoId });
+      await deleteVideo.mutateAsync({ videoId: selectedVideoId });
+      setSelectedVideoId(null);
+      toast.success("Vidéo supprimée");
     } catch (error) {
       console.error("Video deletion failed", error);
-      alert("La suppression a échoué. Réessaie.");
+      toast.error("La suppression a échoué. Réessaie.");
     }
   };
 
@@ -66,7 +81,7 @@ export default function MyVideos() {
         ) : userVideosQuery.data?.length ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {userVideosQuery.data.map((video) => (
-              <div key={video.id} className="bg-purple-900/30 border border-purple-800/50 rounded-lg overflow-hidden">
+              <div key={video.id} onPointerDown={() => startVideoLongPress(video.id)} onPointerUp={cancelVideoLongPress} onPointerCancel={cancelVideoLongPress} onPointerLeave={cancelVideoLongPress} onContextMenu={event => event.preventDefault()} className="bg-purple-900/30 border border-purple-800/50 rounded-lg overflow-hidden touch-manipulation">
                 <div className="relative bg-black h-48">
                   {video.thumbnailUrl ? (
                     <img src={video.thumbnailUrl} alt={video.title || "Video"} className="w-full h-full object-cover" />
@@ -84,14 +99,6 @@ export default function MyVideos() {
                     <Button disabled variant="outline" className="flex-1 text-sm text-purple-300 border-purple-800/50">
                       {video.isPublic ? <><Eye className="w-4 h-4 mr-1" /> Public</> : <><EyeOff className="w-4 h-4 mr-1" /> Privée</>}
                     </Button>
-                    <Button
-                      onClick={() => handleDeleteVideo(video.id)}
-                      disabled={deleteVideo.isPending}
-                      variant="destructive"
-                      className="flex-1 text-sm bg-red-600 hover:bg-red-700"
-                    >
-                      <Trash2 className="w-4 h-4 mr-1" /> {deleteVideo.isPending ? "Suppression…" : "Supprimer"}
-                    </Button>
                   </div>
                 </div>
               </div>
@@ -105,6 +112,7 @@ export default function MyVideos() {
           </div>
         )}
       </div>
+      {selectedVideoId && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-5" role="dialog" aria-modal="true" aria-labelledby="my-video-delete-title"><button type="button" aria-label="Annuler" onClick={() => setSelectedVideoId(null)} className="absolute inset-0 h-full w-full" /><div className="relative z-10 w-full max-w-sm rounded-2xl bg-slate-900 border border-purple-800 p-5 shadow-2xl"><h2 id="my-video-delete-title" className="text-lg font-bold text-white">Supprimer la vidéo ?</h2><p className="mt-2 text-sm text-purple-200">Cette action est définitive.</p><Button onClick={handleDeleteVideo} disabled={deleteVideo.isPending} className="mt-5 w-full bg-red-600 hover:bg-red-700">{deleteVideo.isPending ? "Suppression…" : "Supprimer la vidéo"}</Button><Button onClick={() => setSelectedVideoId(null)} disabled={deleteVideo.isPending} variant="outline" className="mt-3 w-full border-purple-800/50 text-white">Annuler</Button></div></div>}
     </div>
   );
 }

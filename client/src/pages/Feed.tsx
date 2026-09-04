@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 import CommentsModal from "@/components/CommentsModal";
 import ShareModal from "@/components/ShareModal";
 import { GiftSelector } from "@/components/GiftSelector";
+import { toast } from "sonner";
 import { FlowerIcon, BirdIcon, GemIcon, ButterflyIcon, LionAvatar, BaobabIcon, ElephantIcon, SunIcon, HummingbirdIcon, LeopardIcon, FollowPlusIcon, MuteIcon, UnmuteIcon, SearchIcon, BellIcon } from "@/components/Icons";
 
 interface Video {
@@ -35,6 +36,8 @@ export default function Feed() {
   const [selectedVideoId, setSelectedVideoId] = useState<number | null>(null);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   const [loadedVideos, setLoadedVideos] = useState<Set<number>>(new Set());
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const viewedVideos = useRef(new Set<number>());
   const videoRefs = useRef<Record<number, HTMLVideoElement | null>>({});
   const containerRef = useRef<HTMLDivElement>(null);
@@ -42,6 +45,8 @@ export default function Feed() {
   const likeToggleMutation = trpc.like.toggle.useMutation();
   const favoriteToggleMutation = trpc.favorite.toggle.useMutation();
   const incrementViewsMutation = trpc.video.incrementViews.useMutation();
+  const deleteVideoMutation = trpc.video.delete.useMutation();
+  const utils = trpc.useUtils();
   const videoIds = videos.map(v => v.id);
   const interactionsQuery = trpc.like.getMyForVideos.useQuery(
     { videoIds },
@@ -139,6 +144,39 @@ export default function Feed() {
     } catch { await interactionsQuery.refetch(); }
   };
 
+  const startVideoLongPress = (video: Video) => {
+    if (!isAuthenticated || video.userId !== user?.id) return;
+    longPressTimer.current = setTimeout(() => {
+      setSelectedVideoId(video.id);
+      setShowDeleteDialog(true);
+    }, 550);
+  };
+
+  const cancelVideoLongPress = () => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    longPressTimer.current = null;
+  };
+
+  const handleDeleteVideo = async () => {
+    if (!selectedVideoId || deleteVideoMutation.isPending) return;
+    const videoId = selectedVideoId;
+    try {
+      await deleteVideoMutation.mutateAsync({ videoId });
+      setVideos(current => current.filter(video => video.id !== videoId));
+      setVideoCounters(current => {
+        const next = { ...current };
+        delete next[videoId];
+        return next;
+      });
+      setSelectedVideoId(null);
+      setShowDeleteDialog(false);
+      await utils.feed.getFeed.invalidate();
+      toast.success("Vidéo supprimée");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "La suppression a échoué. Réessaie.");
+    }
+  };
+
   if (trpcLoading && videos.length === 0) return <div className="h-screen bg-black flex items-center justify-center"><Loader2 className="animate-spin text-amber-400" size={40} /></div>;
 
   return (
@@ -153,7 +191,7 @@ export default function Feed() {
           const counter = videoCounters[video.id] || { likes: video.likes || 0, comments: video.comments || 0, shares: video.shares || 0, favorites: video.favorites || 0 };
           return <div key={video.id} data-index={i} className="video-item h-screen w-full relative snap-start bg-black flex-shrink-0">
             {video.thumbnailUrl && <img src={video.thumbnailUrl} alt="" className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${loadedVideos.has(video.id) ? "opacity-0" : "opacity-100"}`} />}
-            {isVisible && <video ref={el => { videoRefs.current[video.id] = el; }} src={video.videoUrl} className="w-full h-full object-cover" loop playsInline muted={muted} autoPlay={i === currentVideoIndex} onPlaying={() => setLoadedVideos(prev => new Set(prev).add(video.id))} onLoadedData={e => { if (i === currentVideoIndex) e.currentTarget.play().catch(() => {}); }} />}
+            {isVisible && <video ref={el => { videoRefs.current[video.id] = el; }} src={video.videoUrl} className="w-full h-full object-cover" loop playsInline muted={muted} autoPlay={i === currentVideoIndex} onPointerDown={() => startVideoLongPress(video)} onPointerUp={cancelVideoLongPress} onPointerCancel={cancelVideoLongPress} onPointerLeave={cancelVideoLongPress} onContextMenu={event => event.preventDefault()} onPlaying={() => setLoadedVideos(prev => new Set(prev).add(video.id))} onLoadedData={e => { if (i === currentVideoIndex) e.currentTarget.play().catch(() => {}); }} />}
             <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60 pointer-events-none" />
             <button onClick={() => setMuted(!muted)} className="absolute top-24 right-4 z-40 p-2 bg-black/30 rounded-full backdrop-blur-md">{muted ? <MuteIcon size={20} /> : <UnmuteIcon size={20} />}</button>
             <div className="absolute right-3 top-32 flex flex-col gap-5 z-40 items-center">
@@ -179,6 +217,7 @@ export default function Feed() {
       {showComments && selectedVideoId && <CommentsModal videoId={selectedVideoId} onClose={() => setShowComments(false)} onCommentAdded={() => setVideoCounters(prev => ({ ...prev, [selectedVideoId]: { ...(prev[selectedVideoId] || { likes: 0, comments: 0, shares: 0, favorites: 0 }), comments: (prev[selectedVideoId]?.comments || 0) + 1 } }))} />}
       {showShare && selectedVideoId && <ShareModal videoId={selectedVideoId} onClose={() => setShowShare(false)} />}
       {showGiftSelector && selectedVideoId && <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4"><div className="w-full max-w-md max-h-[85vh] overflow-y-auto"><GiftSelector receiverId={videos.find(v => v.id === selectedVideoId)?.userId ?? 0} videoId={selectedVideoId} onClose={() => setShowGiftSelector(false)} /></div></div>}
+      {showDeleteDialog && selectedVideoId && <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/75 px-5" role="dialog" aria-modal="true" aria-labelledby="delete-video-title"><button type="button" aria-label="Annuler" onClick={() => { setShowDeleteDialog(false); setSelectedVideoId(null); }} className="absolute inset-0 h-full w-full" /><div className="relative z-10 w-full max-w-sm rounded-2xl bg-gray-900 border border-gray-700 p-5 shadow-2xl"><h2 id="delete-video-title" className="text-lg font-bold">Supprimer la vidéo ?</h2><p className="mt-2 text-sm text-gray-400">Cette action est définitive.</p><button type="button" onClick={handleDeleteVideo} disabled={deleteVideoMutation.isPending} className="mt-5 w-full rounded-xl bg-red-600 px-4 py-3 font-semibold disabled:opacity-50">{deleteVideoMutation.isPending ? "Suppression…" : "Supprimer la vidéo"}</button><button type="button" onClick={() => { setShowDeleteDialog(false); setSelectedVideoId(null); }} disabled={deleteVideoMutation.isPending} className="mt-3 w-full rounded-xl bg-gray-800 px-4 py-3 font-semibold disabled:opacity-50">Annuler</button></div></div>}
     </div>
   );
 }
