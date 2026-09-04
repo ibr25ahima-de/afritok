@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -21,8 +22,13 @@ type SecuritySettingsState = { twoFactorEnabled: boolean; loginAlerts: boolean }
 type NotificationSettingsState = { newFollowers: boolean; likes: boolean; comments: boolean; shares: boolean; messages: boolean; promotions: boolean };
 type DisplaySettingsState = { language: string; darkMode: string; dataSaver: boolean; autoPlay: string; textSize: string; animations: boolean };
 
+const LANGUAGE_CODES: Record<string, "fr" | "en" | "sw" | "yo" | "ha" | "zu"> = {
+  "Français": "fr", English: "en", Kiswahili: "sw", "Yorùbá": "yo", Hausa: "ha", isiZulu: "zu",
+};
+
 export default function Settings() {
   const { user, logout } = useAuth();
+  const { setLanguage } = useLanguage();
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
   const { data: savedSettings, isLoading: settingsLoading } = trpc.user.getDisplaySettings.useQuery();
@@ -54,7 +60,7 @@ export default function Settings() {
   const applyDisplayEffects = (settings: DisplaySettingsState) => {
     if (typeof window === "undefined") return;
     localStorage.setItem("afritok:darkMode", settings.darkMode);
-    localStorage.setItem("afritok:language", settings.language);
+    localStorage.setItem("afritok:language", LANGUAGE_CODES[settings.language] ?? "fr");
     localStorage.setItem("afritok:dataSaver", String(settings.dataSaver));
     localStorage.setItem("afritok:autoPlay", settings.autoPlay);
     localStorage.setItem("afritok:textSize", settings.textSize);
@@ -66,46 +72,27 @@ export default function Settings() {
     document.documentElement.classList.toggle("reduce-motion", !settings.animations);
     window.dispatchEvent(new CustomEvent("afritok:settings-change", { detail: settings }));
     window.dispatchEvent(new CustomEvent("afritok:theme-change", { detail: settings.darkMode }));
+    if (LANGUAGE_CODES[settings.language]) setLanguage(LANGUAGE_CODES[settings.language]);
   };
 
   const saveSettings = (overrides: Partial<DisplaySettingsState> & Partial<PrivacySettingsState> & Partial<SecuritySettingsState> & { notifyFollowers?: boolean; notifyLikes?: boolean; notifyComments?: boolean; notifyShares?: boolean; notifyMessages?: boolean; notifyPromotions?: boolean; }) => {
-    updateSettingsMutation.mutate({
-      ...displaySettings,
-      ...privacySettings,
-      ...securitySettings,
-      notifyFollowers: notificationSettings.newFollowers,
-      notifyLikes: notificationSettings.likes,
-      notifyComments: notificationSettings.comments,
-      notifyShares: notificationSettings.shares,
-      notifyMessages: notificationSettings.messages,
-      notifyPromotions: notificationSettings.promotions,
-      ...overrides,
-    });
+    updateSettingsMutation.mutate({ ...displaySettings, ...privacySettings, ...securitySettings, notifyFollowers: notificationSettings.newFollowers, notifyLikes: notificationSettings.likes, notifyComments: notificationSettings.comments, notifyShares: notificationSettings.shares, notifyMessages: notificationSettings.messages, notifyPromotions: notificationSettings.promotions, ...overrides });
   };
 
   const handlePrivacyChange = (key: keyof PrivacySettingsState) => {
     const newPrivacy = { ...privacySettings, [key]: !privacySettings[key] };
-    setPrivacySettings(newPrivacy);
-    saveSettings(newPrivacy);
+    setPrivacySettings(newPrivacy); saveSettings(newPrivacy);
   };
 
   const handleSecurityChange = (key: keyof SecuritySettingsState) => {
     const newSecurity = { ...securitySettings, [key]: !securitySettings[key] };
-    setSecuritySettings(newSecurity);
-    saveSettings(newSecurity);
+    setSecuritySettings(newSecurity); saveSettings(newSecurity);
   };
 
   const handleNotificationChange = (key: keyof NotificationSettingsState) => {
     const newNotifications = { ...notificationSettings, [key]: !notificationSettings[key] };
     setNotificationSettings(newNotifications);
-    saveSettings({
-      notifyFollowers: newNotifications.newFollowers,
-      notifyLikes: newNotifications.likes,
-      notifyComments: newNotifications.comments,
-      notifyShares: newNotifications.shares,
-      notifyMessages: newNotifications.messages,
-      notifyPromotions: newNotifications.promotions,
-    });
+    saveSettings({ notifyFollowers: newNotifications.newFollowers, notifyLikes: newNotifications.likes, notifyComments: newNotifications.comments, notifyShares: newNotifications.shares, notifyMessages: newNotifications.messages, notifyPromotions: newNotifications.promotions });
   };
 
   const updateDisplaySetting = (key: string, value: any) => {
@@ -118,16 +105,9 @@ export default function Settings() {
   const handleChangePassword = () => toast.info("Le changement de mot de passe n'est pas disponible avec la connexion OTP actuelle.");
 
   const handleLogout = async () => {
-    try {
-      setIsLoading(true);
-      await logout();
-      toast.success("Déconnecté avec succès");
-      navigate("/login");
-    } catch {
-      toast.error("Erreur lors de la déconnexion");
-    } finally {
-      setIsLoading(false);
-    }
+    try { setIsLoading(true); await logout(); toast.success("Déconnecté avec succès"); navigate("/login"); }
+    catch { toast.error("Erreur lors de la déconnexion"); }
+    finally { setIsLoading(false); }
   };
 
   const handleDeleteAccount = () => toast.info("La suppression définitive du compte n'est pas encore implémentée côté serveur.");
