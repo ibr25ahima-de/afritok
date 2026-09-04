@@ -13,7 +13,9 @@ function polygon(ctx: CanvasRenderingContext2D, points: Point[]) {
 }
 
 function protectedRegions(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: number, h: number) {
-  for (const ids of [LM.leftEye, LM.rightEye, LM.outerLips, LM.nose]) {
+  // Protect only the features that must remain sharp. The nose is intentionally
+  // NOT protected: skin retouch must cover the bridge, sides and tip as well.
+  for (const ids of [LM.leftEye, LM.rightEye, LM.outerLips]) {
     const p = getPoints(l, ids, w, h);
     if (p.length < 3) continue;
     ctx.moveTo(p[0].x, p[0].y);
@@ -23,8 +25,9 @@ function protectedRegions(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[]
 }
 
 /**
- * TikTok-style skin cleanup: removes the visual contrast of small dark
- * spots/marks while preserving the eyes, lips, nose and strong facial edges.
+ * Strong live skin cleanup across the complete face oval, including the nose.
+ * Eyes and lips stay sharp while small dark isolated marks are pulled toward
+ * their local skin tone.
  */
 export function applyBlemishReduction(
   ctx: CanvasRenderingContext2D,
@@ -39,8 +42,6 @@ export function applyBlemishReduction(
   const face = getFaceGeometry(landmarks, width, height);
   if (face.width < 30 || face.height < 30) return;
 
-  // Keep pixel work small enough for a mobile camera loop while retaining
-  // enough detail to target individual blemishes.
   const scale = Math.min(1, 720 / Math.max(width, height));
   const rw = Math.max(1, Math.round(width * scale));
   const rh = Math.max(1, Math.round(height * scale));
@@ -55,9 +56,7 @@ export function applyBlemishReduction(
   if (!s || !b) return;
 
   s.drawImage(ctx.canvas, 0, 0, width, height, 0, 0, rw, rh);
-  // A slightly wider local average catches small spots without washing out
-  // larger facial structure.
-  b.filter = `blur(${(2.2 + amount * 1.8).toFixed(1)}px)`;
+  b.filter = `blur(${(2.8 + amount * 2.8).toFixed(1)}px)`;
   b.drawImage(source, 0, 0);
   b.filter = "none";
 
@@ -77,10 +76,8 @@ export function applyBlemishReduction(
     const ay = 0.2126 * ar + 0.7152 * ag + 0.0722 * ab;
     const darkGap = ay - y;
 
-    // Lower threshold + stronger correction makes small blackheads and dark
-    // marks visibly fade instead of producing an imperceptible change.
-    const isolated = Math.max(0, Math.min(1, (darkGap - 2) / 24));
-    const correction = isolated * (0.48 + amount * 0.46);
+    const isolated = Math.max(0, Math.min(1, (darkGap - 1) / 18));
+    const correction = isolated * (0.58 + amount * 0.42);
 
     out.data[i] = Math.round(r + (ar - r) * correction);
     out.data[i + 1] = Math.round(g + (ag - g) * correction);
@@ -107,8 +104,7 @@ export function applyBlemishReduction(
     ctx.clip();
   }
 
-  // Blend the corrected skin strongly enough to be visible in the live view.
-  ctx.globalAlpha = 0.78 + amount * 0.20;
+  ctx.globalAlpha = 0.86 + amount * 0.14;
   ctx.drawImage(corrected, 0, 0, rw, rh, 0, 0, width, height);
   ctx.restore();
 }
