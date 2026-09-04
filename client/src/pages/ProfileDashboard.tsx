@@ -4,8 +4,8 @@ import { CoinsButton } from "@/components/CoinsButton";
 import { WalletButton } from "@/components/WalletButton";
 import { Button } from "@/components/ui/button";
 import { LiveStatusBadge } from "@/features/live/LiveStatusBadge";
-import { ArrowLeft, Edit3, Flame, Heart, Lock, MoreVertical, Play, Settings, Share2, UserPlus, UserCheck, BarChart3, Trash2, ChevronUp, ChevronDown } from "lucide-react";
-import { useState } from "react";
+import { ArrowLeft, Edit3, Flame, Heart, Lock, MoreVertical, Play, Settings, Share2, UserPlus, UserCheck, BarChart3, Trash2, ChevronUp, ChevronDown, X } from "lucide-react";
+import { useRef, useState } from "react";
 import { useLocation, useRoute } from "wouter";
 
 type Video = { id:number; title:string|null; description:string|null; videoUrl:string; likes:number|null; comments:number|null; shares:number|null };
@@ -20,15 +20,22 @@ export default function ProfileDashboard() {
   const [monetization, setMonetization] = useState(false);
   const [tab, setTab] = useState<"videos"|"likes"|"favorites">("videos");
   const [selected, setSelected] = useState<number|null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Video|null>(null);
   const [touchStartY, setTouchStartY] = useState<number|null>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTriggered = useRef(false);
   const follow = trpc.follower.toggle.useMutation();
   const profileQuery = trpc.user.getProfile.useQuery({userId:userId || 0},{enabled:!!userId});
   const videosQuery = trpc.video.getByUser.useQuery({userId:userId || 0},{enabled:!!userId});
   const utils = trpc.useUtils();
   const deleteVideo = trpc.video.delete.useMutation({
     onSuccess: async () => {
-      await utils.video.getByUser.invalidate({ userId: userId || 0 });
-      await utils.feed.getFeed.invalidate();
+      await Promise.all([
+        utils.video.getByUser.invalidate({ userId: userId || 0 }),
+        utils.video.feed.invalidate(),
+        utils.feed.getFeed.invalidate(),
+      ]);
+      setDeleteTarget(null);
       setSelected(null);
     },
   });
@@ -46,9 +53,37 @@ export default function ProfileDashboard() {
     setSelected((selected + direction + videos.length) % videos.length);
   };
   const handleDeleteVideo = async (videoId: number) => {
-    if (!isOwn || !confirm("Supprimer définitivement cette vidéo ?")) return;
+    if (!isOwn || deleteVideo.isPending) return;
     try { await deleteVideo.mutateAsync({ videoId }); }
     catch { alert("La suppression a échoué. Réessaie."); }
+  };
+
+  const clearLongPressTimer = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const handleVideoPointerDown = (video: Video) => {
+    if (!isOwn || tab !== "videos") return;
+    longPressTriggered.current = false;
+    clearLongPressTimer();
+    longPressTimer.current = setTimeout(() => {
+      longPressTriggered.current = true;
+      setDeleteTarget(video);
+    }, 600);
+  };
+
+  const handleVideoPointerUp = (videoIndex: number) => {
+    clearLongPressTimer();
+    if (!longPressTriggered.current) setSelected(videoIndex);
+    longPressTriggered.current = false;
+  };
+
+  const handleVideoPointerCancel = () => {
+    clearLongPressTimer();
+    longPressTriggered.current = false;
   };
 
   return <div className="min-h-screen bg-black text-white pb-20">
@@ -74,7 +109,9 @@ export default function ProfileDashboard() {
     </section>
 
     <div className="flex border-b border-gray-800"><button onClick={()=>setTab("videos")} className={`flex-1 py-3 ${tab==="videos"?"border-b-2 border-red-500":"text-gray-400"}`}>Vidéos</button><button onClick={()=>setTab("likes")} className={`flex-1 py-3 ${tab==="likes"?"border-b-2 border-red-500":"text-gray-400"}`}><Heart size={16} className="inline"/> Likes</button><button onClick={()=>setTab("favorites")} className={`flex-1 py-3 ${tab==="favorites"?"border-b-2 border-red-500":"text-gray-400"}`}>Favoris</button></div>
-    <div className="grid grid-cols-3 gap-1 p-1">{videos.map((v,i)=><button key={v.id} onClick={()=>setSelected(i)} className="aspect-square bg-gray-900 overflow-hidden relative"><video src={v.videoUrl} muted playsInline className="w-full h-full object-cover"/><span className="absolute bottom-1 left-1 text-xs flex items-center gap-1"><Heart size={11}/>{v.likes||0}</span>{isOwn && <span role="button" tabIndex={0} onClick={(event)=>{event.stopPropagation(); handleDeleteVideo(v.id);}} className="absolute top-1 right-1 rounded-full bg-red-600/90 p-2 text-white"><Trash2 size={14}/></span>}</button>)}</div>
+    <div className="grid grid-cols-3 gap-1 p-1">{videos.map((v,i)=><button key={v.id} onPointerDown={()=>handleVideoPointerDown(v)} onPointerUp={()=>handleVideoPointerUp(i)} onPointerCancel={handleVideoPointerCancel} onPointerLeave={handleVideoPointerCancel} onContextMenu={(event)=>event.preventDefault()} className="aspect-square bg-gray-900 overflow-hidden relative select-none touch-manipulation"><video src={v.videoUrl} muted playsInline className="w-full h-full object-cover pointer-events-none"/><span className="absolute bottom-1 left-1 text-xs flex items-center gap-1"><Heart size={11}/>{v.likes||0}</span></button>)}</div>
+
+    {deleteTarget && isOwn && <div className="fixed inset-0 z-[120] bg-black/80 flex items-center justify-center px-5" onClick={()=>!deleteVideo.isPending && setDeleteTarget(null)}><div className="w-full max-w-sm bg-gray-900 rounded-2xl border border-gray-700 p-5 shadow-2xl" onClick={(event)=>event.stopPropagation()}><div className="flex items-center justify-between mb-4"><h2 className="text-lg font-bold">Options de la vidéo</h2><button onClick={()=>setDeleteTarget(null)} disabled={deleteVideo.isPending} aria-label="Fermer"><X size={20}/></button></div><p className="text-gray-300 text-sm mb-5">Que veux-tu faire avec cette vidéo ?</p><Button onClick={()=>handleDeleteVideo(deleteTarget.id)} disabled={deleteVideo.isPending} className="w-full bg-red-600 hover:bg-red-500">{deleteVideo.isPending ? "Suppression…" : "Supprimer"}</Button><Button onClick={()=>setDeleteTarget(null)} disabled={deleteVideo.isPending} variant="outline" className="w-full mt-3">Annuler</Button></div></div>}
 
     {monetization && <div className="fixed inset-0 z-[100] bg-black/80 flex items-end"><div className="w-full bg-gray-900 rounded-t-3xl p-6"><div className="flex justify-between"><h2 className="text-2xl font-bold">🔥 Monétisation</h2><button onClick={()=>setMonetization(false)}>✕</button></div><p className="text-gray-300 mt-5">Total gagné : <b className="text-green-400">${Number(earnings.total||0).toFixed(2)}</b></p><p className="text-gray-400 mt-4">Gagne de l'argent avec tes vidéos, tes Lives et les cadeaux reçus.</p><Button onClick={()=>navigate("/monetization")} className="w-full mt-6">Ouvrir le portail de monétisation</Button></div></div>}
     {selected!==null && videos[selected] && <div className="fixed inset-0 z-[100] bg-black flex flex-col" onWheel={(event)=>{if (Math.abs(event.deltaY)>20) moveSelected(event.deltaY>0 ? 1 : -1);}} onTouchStart={(event)=>setTouchStartY(event.touches[0].clientY)} onTouchEnd={(event)=>{if (touchStartY !== null) { const delta = touchStartY - event.changedTouches[0].clientY; if (Math.abs(delta)>40) moveSelected(delta>0 ? 1 : -1); } setTouchStartY(null);}}><button onClick={()=>setSelected(null)} className="absolute top-4 left-4 z-10 bg-black/60 rounded-full p-3"><ArrowLeft/></button>{videos.length>1 && <><button onClick={()=>moveSelected(-1)} aria-label="Vidéo précédente" className="absolute top-1/2 left-4 z-10 -translate-y-1/2 rounded-full bg-black/60 p-3"><ChevronUp/></button><button onClick={()=>moveSelected(1)} aria-label="Vidéo suivante" className="absolute top-1/2 right-4 z-10 -translate-y-1/2 rounded-full bg-black/60 p-3"><ChevronDown/></button></>}<video key={videos[selected].id} src={videos[selected].videoUrl} autoPlay controls className="w-full h-full object-contain"/></div>}
