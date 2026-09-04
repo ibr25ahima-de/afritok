@@ -7,10 +7,10 @@ WORKDIR /app
 RUN npm install -g pnpm
 
 # Copier les fichiers de dépendances
-COPY pnpm-lock.yaml package.json ./
+COPY package.json ./
 
-# Installer les dépendances
-RUN pnpm install --frozen-lockfile
+# Installer les dépendances avec la même stratégie que Render
+RUN pnpm install --no-frozen-lockfile
 
 # Copier le code source
 COPY . .
@@ -29,7 +29,6 @@ RUN npm install -g pnpm
 # Copier les dépendances du builder
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/pnpm-lock.yaml ./pnpm-lock.yaml
 
 # Copier les fichiers construits
 COPY --from=builder /app/dist ./dist
@@ -48,5 +47,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
 
-# Démarrer l'application
-CMD ["node", "dist/server/index.js"]
+# Le build esbuild produit dist/index.js (voir script start)
+CMD ["node", "dist/index.js"]
