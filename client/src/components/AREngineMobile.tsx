@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef } from "react";
 import { FaceLandmarker, FilesetResolver, NormalizedLandmark } from "@mediapipe/tasks-vision";
-import type { AREffect } from "./EffectsPanel";
+import type { AREffect } from "@/features/ar/ARRegistry";
 import { smoothLandmarks } from "./faceUtils";
 import { applyBeautyPipeline } from "@/features/beauty/BeautyPipeline";
 import { renderFaceEffect } from "@/features/beauty/FaceEffects";
@@ -11,8 +11,6 @@ const DETECTION_INTERVAL_MS = 40;
 const LANDMARK_SMOOTHING = 0.72;
 const LOST_FACE_TIMEOUT_MS = 350;
 
-// TikTok-style base beauty: active as soon as a face is detected,
-// even when the user has not selected a beauty preset or creative effect.
 const BASE_BEAUTY_CONFIG = {
   smoothSkin: 0.72,
   skinTexture: 0.78,
@@ -23,9 +21,8 @@ const BASE_BEAUTY_CONFIG = {
 };
 
 type ARStatus = "loading" | "ready" | "face" | "no-face" | "error";
-type DiagnosticStage = "package" | "wasm" | "model" | "detector" | "face" | "error";
+type ARError = { message: string; cause?: unknown };
 type CoverTransform = { scale: number; dx: number; dy: number };
-type ARError = { stage: DiagnosticStage; message: string; cause?: unknown };
 
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : String(error); }
 
@@ -73,14 +70,10 @@ export const AREngineMobile: React.FC<{
   const lastDetectAt = useRef(0), lastVideoTime = useRef(-1), lastTimestamp = useRef(0), lastFaceSeenAt = useRef(0);
   const activeEffectRef = useRef<AREffect | null>(activeEffect);
   const statusRef = useRef<ARStatus>("loading");
-  const diagnosticRef = useRef<{ package: boolean; wasm: boolean; model: boolean; detector: boolean; face: boolean; error: string | null }>({ package: false, wasm: false, model: false, detector: false, face: false, error: null });
 
   const setStatus = useCallback((status: ARStatus, error?: ARError) => {
     if (statusRef.current === status && status !== "error") return;
     statusRef.current = status;
-    if (status === "face") diagnosticRef.current.face = true;
-    if (status === "no-face") diagnosticRef.current.face = false;
-    if (error) diagnosticRef.current.error = `[${error.stage}] ${error.message}`;
     onStatusChange?.(status, error);
   }, [onStatusChange]);
 
@@ -102,54 +95,48 @@ export const AREngineMobile: React.FC<{
       if (face && face.length > 400) {
         previousLandmarks.current = smoothLandmarks(face, previousLandmarks.current, LANDMARK_SMOOTHING);
         lastFaceSeenAt.current = now;
-        diagnosticRef.current.face = true;
         setStatus("face");
       } else if (now - lastFaceSeenAt.current > LOST_FACE_TIMEOUT_MS) {
         previousLandmarks.current = null;
         mappedLandmarks.current = null;
-        diagnosticRef.current.face = false;
         setStatus("no-face");
       }
     } catch (error) {
       console.error("[AREngineMobile] detectForVideo", error);
-      diagnosticRef.current.error = `[face] ${errorMessage(error)}`;
-      setStatus("error", { stage: "face", message: errorMessage(error), cause: error });
+      setStatus("error", { message: errorMessage(error), cause: error });
     }
     return previousLandmarks.current;
   }, [setStatus]);
 
   useEffect(() => {
     let disposed = false;
-    diagnosticRef.current = { package: false, wasm: false, model: false, detector: false, face: false, error: null };
     setStatus("loading");
     (async () => {
-      let stage: DiagnosticStage = "package";
       try {
         if (!FaceLandmarker || !FilesetResolver) throw new Error("@mediapipe/tasks-vision est absent du bundle");
-        diagnosticRef.current.package = true;
-        stage = "wasm";
         const vision = await FilesetResolver.forVisionTasks(WASM);
-        diagnosticRef.current.wasm = true;
-        stage = "model";
         const landmarker = await FaceLandmarker.createFromOptions(vision, {
-          baseOptions: { modelAssetPath: MODEL }, runningMode: "VIDEO", numFaces: 1,
-          minFaceDetectionConfidence: 0.15, minFacePresenceConfidence: 0.15, minTrackingConfidence: 0.15,
-          outputFaceBlendshapes: false, outputFacialTransformationMatrixes: false,
+          baseOptions: { modelAssetPath: MODEL },
+          runningMode: "VIDEO",
+          numFaces: 1,
+          minFaceDetectionConfidence: 0.15,
+          minFacePresenceConfidence: 0.15,
+          minTrackingConfidence: 0.15,
+          outputFaceBlendshapes: false,
+          outputFacialTransformationMatrixes: false,
         });
         if (disposed) { landmarker.close(); return; }
-        diagnosticRef.current.model = true;
-        diagnosticRef.current.detector = true;
         detector.current = landmarker;
         setStatus("ready");
       } catch (error) {
-        const diagnostic: ARError = { stage, message: errorMessage(error), cause: error };
-        diagnosticRef.current.error = `[${stage}] ${diagnostic.message}`;
-        console.error("[AREngineMobile] MediaPipe init", diagnostic);
-        setStatus("error", diagnostic);
+        console.error("[AREngineMobile] MediaPipe init", error);
+        setStatus("error", { message: errorMessage(error), cause: error });
       }
     })();
     return () => {
-      disposed = true; detector.current?.close(); detector.current = null; previousLandmarks.current = null; mappedLandmarks.current = null;
+      disposed = true;
+      detector.current?.close(); detector.current = null;
+      previousLandmarks.current = null; mappedLandmarks.current = null;
       lastDetectAt.current = 0; lastVideoTime.current = -1; lastTimestamp.current = 0; lastFaceSeenAt.current = 0;
       if (raf.current !== null) cancelAnimationFrame(raf.current);
     };
@@ -163,49 +150,26 @@ export const AREngineMobile: React.FC<{
     const ctx = canvas.getContext("2d", { alpha: false });
     if (!ctx) { raf.current = requestAnimationFrame(render); return; }
     const width = canvas.width, height = canvas.height, now = performance.now(), effect = activeEffectRef.current;
-    ctx.save(); ctx.globalAlpha = 1; ctx.globalCompositeOperation = "source-over"; ctx.filter = grade(effect);
-    const transform = drawCover(ctx, video, width, height); ctx.restore();
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
+    ctx.filter = grade(effect);
+    const transform = drawCover(ctx, video, width, height);
+    ctx.restore();
 
     const landmarks = detect(video, now);
     if (landmarks?.length) {
       mappedLandmarks.current = mapLandmarks(landmarks, video, width, height, transform);
       const current = mappedLandmarks.current;
       if (current) {
-        try {
-          // Base beauty is always active. A selected beauty preset replaces it;
-          // creative effects keep the same base retouch underneath.
-          applyBeautyPipeline(ctx, current, width, height, effect?.beautyConfig ?? BASE_BEAUTY_CONFIG);
-        } catch (error) {
-          console.error("[AREngineMobile] beauty pipeline", error);
-        }
+        try { applyBeautyPipeline(ctx, current, width, height, effect?.beautyConfig ?? BASE_BEAUTY_CONFIG); }
+        catch (error) { console.error("[AREngineMobile] beauty pipeline", error); }
         if (effect) {
           try { renderFaceEffect(ctx, current, width, height, effect); }
           catch (error) { console.error("[AREngineMobile] selected AR effect", error); }
         }
       }
     }
-
-    // Diagnostic overlay: proves each MediaPipe layer independently on the real device.
-    const d = diagnosticRef.current;
-    const parts = [`MP ${d.package ? "✓" : "…"}`, `WASM ${d.wasm ? "✓" : "…"}`, `MODELE ${d.model ? "✓" : "…"}`, `DETECTEUR ${d.detector ? "✓" : "…"}`, `VISAGE ${d.face ? "✓" : "—"}`];
-    ctx.save();
-    ctx.font = "600 11px sans-serif";
-    ctx.textBaseline = "middle";
-    const text = parts.join("  •  ");
-    const x = 10, y = 10, paddingX = 10, h = 25, w = Math.min(width - 20, ctx.measureText(text).width + paddingX * 2);
-    ctx.fillStyle = "rgba(0,0,0,0.68)";
-    ctx.beginPath(); ctx.roundRect(x, y, w, h, 12); ctx.fill();
-    ctx.fillStyle = "white";
-    ctx.fillText(text.slice(0, Math.max(0, Math.floor(text.length * (w / Math.max(1, ctx.measureText(text).width + paddingX * 2))))), x + paddingX, y + h / 2);
-    if (d.error) {
-      ctx.font = "500 10px sans-serif";
-      const msg = d.error.length > 90 ? `${d.error.slice(0, 87)}…` : d.error;
-      ctx.fillStyle = "rgba(120,0,0,0.78)";
-      ctx.fillRect(10, 40, Math.min(width - 20, ctx.measureText(msg).width + 16), 22);
-      ctx.fillStyle = "white";
-      ctx.fillText(msg, 18, 51);
-    }
-    ctx.restore();
     raf.current = requestAnimationFrame(render);
   }, [videoRef, detect]);
 
