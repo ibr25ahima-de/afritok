@@ -2,7 +2,6 @@ import type { NormalizedLandmark } from "@mediapipe/tasks-vision";
 import { LM, getFaceGeometry, getPoints } from "@/components/faceUtils";
 import type { BeautyConfig } from "./BeautyConfig";
 import { normalizeBeautyConfig } from "./BeautyConfig";
-import { applyBlemishReduction } from "./SkinRetouch";
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 type Point = { x: number; y: number };
@@ -33,13 +32,13 @@ function retouchSkin(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: 
   if (oval.length < 3 || face.width < 20) return;
 
   const temp = document.createElement("canvas");
-  const scale = Math.min(1, 800 / Math.max(w, h));
+  const scale = Math.min(1, 900 / Math.max(w, h));
   temp.width = Math.max(1, Math.round(w * scale));
   temp.height = Math.max(1, Math.round(h * scale));
   const t = temp.getContext("2d");
   if (!t) return;
 
-  t.filter = `blur(${(1.4 + amount * 2.2).toFixed(1)}px)`;
+  t.filter = `blur(${(3 + amount * 5).toFixed(1)}px)`;
   t.drawImage(ctx.canvas, 0, 0, w, h, 0, 0, temp.width, temp.height);
   t.filter = "none";
 
@@ -47,7 +46,7 @@ function retouchSkin(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: 
   polygon(ctx, oval);
   protectedRegions(ctx, l, w, h);
   try { ctx.clip("evenodd"); } catch { ctx.clip(); }
-  ctx.globalAlpha = 0.10 + amount * 0.18;
+  ctx.globalAlpha = 0.24 + amount * 0.30;
   ctx.drawImage(temp, 0, 0, temp.width, temp.height, 0, 0, w, h);
   ctx.restore();
 }
@@ -63,8 +62,8 @@ function tone(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: number,
   protectedRegions(ctx, l, w, h);
   try { ctx.clip("evenodd"); } catch { ctx.clip(); }
   const g = ctx.createRadialGradient(f.cx, f.cy - f.height * .12, f.width * .05, f.cx, f.cy, f.width * .72);
-  g.addColorStop(0, `rgba(255,255,255,${0.055 * amount})`);
-  g.addColorStop(0.65, `rgba(255,255,255,${0.020 * amount})`);
+  g.addColorStop(0, `rgba(255,255,255,${0.10 * amount})`);
+  g.addColorStop(0.65, `rgba(255,255,255,${0.035 * amount})`);
   g.addColorStop(1, "rgba(255,255,255,0)");
   ctx.fillStyle = g;
   ctx.fillRect(f.left, f.top, f.width, f.height);
@@ -117,7 +116,6 @@ export function applyBeautyPipeline(ctx: CanvasRenderingContext2D, landmarks: No
   if (!landmarks?.length) return;
   const c = normalizeBeautyConfig(config);
   const skinAmount = Math.max(c.smoothSkin, c.skinTexture);
-  applyBlemishReduction(ctx, landmarks, width, height, skinAmount);
   retouchSkin(ctx, landmarks, width, height, skinAmount);
   tone(ctx, landmarks, width, height, c.brightenSkin);
   sculpt(ctx, landmarks, width, height, c);
