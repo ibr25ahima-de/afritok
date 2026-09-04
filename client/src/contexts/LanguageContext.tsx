@@ -1,27 +1,26 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Language, useTranslation as useTranslationHook } from '@/i18n/translations';
+import { ExtendedLanguage, languageAdditions } from '@/i18n/languageAdditions';
 
 interface LanguageContextType {
-  language: Language;
-  setLanguage: (lang: Language) => void;
+  language: ExtendedLanguage;
+  setLanguage: (lang: ExtendedLanguage) => void;
   t: (key: string, defaultValue?: string) => string;
 }
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
-function normalizeLanguage(value: string | null): Language {
-  if (value === 'en' || value === 'sw' || value === 'yo' || value === 'ha' || value === 'zu') return value;
+function normalizeLanguage(value: string | null): ExtendedLanguage {
+  if (value === 'en' || value === 'sw' || value === 'yo' || value === 'ha' || value === 'zu' || value === 'es' || value === 'ar' || value === 'pt') return value;
   return 'fr';
 }
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [language, setLanguageState] = useState<Language>(() =>
-    normalizeLanguage(localStorage.getItem('afritok-language'))
-  );
+  const [language, setLanguageState] = useState<ExtendedLanguage>(() => normalizeLanguage(localStorage.getItem('afritok-language')));
+  const baseTranslate = useTranslationHook(language as Language);
+  const t = (key: string, defaultValue?: string) => languageAdditions[language as 'es' | 'ar' | 'pt']?.[key] ?? baseTranslate(key, defaultValue);
 
-  const t = useTranslationHook(language);
-
-  const setLanguage = (lang: Language) => {
+  const setLanguage = (lang: ExtendedLanguage) => {
     setLanguageState(lang);
     localStorage.setItem('afritok-language', lang);
   };
@@ -31,24 +30,15 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
       const detail = event instanceof CustomEvent ? event.detail : null;
       const value = detail?.language;
       if (!value) return;
-
-      const names: Record<string, Language> = {
-        'Français': 'fr',
-        'English': 'en',
-        'Kiswahili': 'sw',
-        'Yorùbá': 'yo',
-        'Hausa': 'ha',
-        'isiZulu': 'zu',
+      const names: Record<string, ExtendedLanguage> = {
+        'Français': 'fr', 'English': 'en', 'Kiswahili': 'sw', 'Yorùbá': 'yo', 'Hausa': 'ha', 'isiZulu': 'zu',
+        'Español': 'es', 'العربية': 'ar', 'Português': 'pt',
       };
-      const next = names[value] ?? normalizeLanguage(value);
-      setLanguage(next);
+      setLanguage(names[value] ?? normalizeLanguage(value));
     };
-
     const handleStorage = (event: StorageEvent) => {
-      if (event.key !== 'afritok-language') return;
-      setLanguageState(normalizeLanguage(event.newValue));
+      if (event.key === 'afritok-language') setLanguageState(normalizeLanguage(event.newValue));
     };
-
     window.addEventListener('afritok:settings-change', handleSettingsChange);
     window.addEventListener('storage', handleStorage);
     return () => {
@@ -57,17 +47,11 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  return (
-    <LanguageContext.Provider value={{ language, setLanguage, t }}>
-      {children}
-    </LanguageContext.Provider>
-  );
+  return <LanguageContext.Provider value={{ language, setLanguage, t }}>{children}</LanguageContext.Provider>;
 }
 
 export function useLanguage() {
   const context = useContext(LanguageContext);
-  if (context === undefined) {
-    throw new Error('useLanguage must be used within a LanguageProvider');
-  }
+  if (!context) throw new Error('useLanguage must be used within a LanguageProvider');
   return context;
 }
