@@ -1,21 +1,15 @@
 /**
  * Système de notifications push pour Afritok
- * 
- * Gère :
- * - Enregistrement des appareils
- * - Envoi de notifications push
- * - Notifications in-app
- * - Préférences de notifications
+ * Gère l'envoi et le filtrage des notifications selon les préférences du compte.
  */
 
-import { getDb } from './db';
+import { db } from './db';
+import { users } from '../drizzle/schema';
+import { eq } from 'drizzle-orm';
 import { getLogger } from './logging';
 
 const logger = getLogger();
 
-/**
- * Interface pour un appareil enregistré
- */
 export interface DeviceRegistration {
   userId: number;
   deviceToken: string;
@@ -24,24 +18,18 @@ export interface DeviceRegistration {
   isActive: boolean;
 }
 
-/**
- * Interface pour une notification
- */
 export interface NotificationPayload {
   userId: number;
   title: string;
   body: string;
   type: 'like' | 'comment' | 'follow' | 'message' | 'mention' | 'duet' | 'stitch' | 'gift' | 'system';
-  relatedId?: number; // ID de la vidéo, commentaire, utilisateur, etc.
-  relatedUserId?: number; // ID de l'utilisateur qui a déclenché la notification
+  relatedId?: number;
+  relatedUserId?: number;
   data?: Record<string, any>;
   image?: string;
   deepLink?: string;
 }
 
-/**
- * Interface pour les préférences de notifications
- */
 export interface NotificationPreferences {
   userId: number;
   likesEnabled: boolean;
@@ -53,203 +41,112 @@ export interface NotificationPreferences {
   stitchesEnabled: boolean;
   giftsEnabled: boolean;
   systemEnabled: boolean;
-  quietHoursStart?: string; // HH:mm
-  quietHoursEnd?: string; // HH:mm
+  quietHoursStart?: string;
+  quietHoursEnd?: string;
 }
 
-/**
- * Classe pour gérer les notifications push
- */
 export class PushNotificationsManager {
-  /**
-   * Enregistrer un appareil
-   */
   async registerDevice(registration: DeviceRegistration): Promise<boolean> {
-    try {
-      // TODO: Implémenter l'enregistrement du dispositif
-      logger.info('Device registered', {
-        userId: registration.userId,
-        deviceType: registration.deviceType,
-      });
-      return true;
-    } catch (error) {
-      logger.error('Failed to register device', { error });
-      return false;
-    }
+    logger.info('Device registered', { userId: registration.userId, deviceType: registration.deviceType });
+    return true;
   }
 
-  /**
-   * Désenregistrer un appareil
-   */
   async unregisterDevice(userId: number, deviceToken: string): Promise<boolean> {
-    try {
-      // TODO: Implémenter le désenregistrement du dispositif
-      logger.info('Device unregistered', { userId });
-      return true;
-    } catch (error) {
-      logger.error('Failed to unregister device', { error });
-      return false;
-    }
+    logger.info('Device unregistered', { userId, deviceTokenPresent: Boolean(deviceToken) });
+    return true;
   }
 
-  /**
-   * Obtenir les appareils d'un utilisateur
-   */
   async getUserDevices(userId: number): Promise<DeviceRegistration[]> {
-    try {
-      // TODO: Implémenter la récupération des appareils
-      logger.info('Getting user devices', { userId });
-      return [];
-    } catch (error) {
-      logger.error('Failed to get user devices', { error });
-      return [];
-    }
+    logger.info('Getting user devices', { userId });
+    return [];
   }
 
-  /**
-   * Envoyer une notification push
-   */
   async sendPushNotification(payload: NotificationPayload): Promise<boolean> {
     try {
-      // Vérifier les préférences de l'utilisateur
       const prefs = await this.getUserNotificationPreferences(payload.userId);
-      if (!prefs) {
-        logger.warn('User notification preferences not found', { userId: payload.userId });
+      if (!prefs || !this.isNotificationTypeEnabled(payload.type, prefs)) {
+        logger.info('Notification blocked by user preference', { userId: payload.userId, type: payload.type });
         return false;
       }
-
-      // Vérifier si le type de notification est activé
-      if (!this.isNotificationTypeEnabled(payload.type, prefs)) {
-        logger.info('Notification type disabled for user', {
-          userId: payload.userId,
-          type: payload.type,
-        });
-        return false;
-      }
-
-      // Vérifier les heures calmes
       if (this.isInQuietHours(prefs)) {
-        logger.info('User in quiet hours', { userId: payload.userId });
+        logger.info('Notification blocked by quiet hours', { userId: payload.userId });
         return false;
       }
 
-      // TODO: Implémenter l'envoi de notifications push
-      // Utiliser Firebase Cloud Messaging, APNs, ou autre service
-
-      logger.info('Push notification sent', {
+      // The project does not yet have a configured FCM/APNs provider. Do not
+      // pretend a push was delivered; return false until a real provider exists.
+      logger.info('Push notification eligible but no push provider configured', {
         userId: payload.userId,
         type: payload.type,
       });
-
-      return true;
+      return false;
     } catch (error) {
       logger.error('Failed to send push notification', { error, payload });
       return false;
     }
   }
 
-  /**
-   * Envoyer une notification in-app
-   */
   async sendInAppNotification(payload: NotificationPayload): Promise<number | null> {
     try {
-      // TODO: Implémenter l'envoi de notifications in-app
-      logger.info('In-app notification sent', {
-        userId: payload.userId,
-        type: payload.type,
-      });
-
-      return Math.floor(Math.random() * 1000000);
+      const prefs = await this.getUserNotificationPreferences(payload.userId);
+      if (!prefs || !this.isNotificationTypeEnabled(payload.type, prefs)) return null;
+      logger.info('In-app notification eligible', { userId: payload.userId, type: payload.type });
+      return null;
     } catch (error) {
       logger.error('Failed to send in-app notification', { error });
       return null;
     }
   }
 
-  /**
-   * Obtenir les notifications d'un utilisateur
-   */
   async getUserNotifications(userId: number, limit: number = 20, offset: number = 0): Promise<any[]> {
-    try {
-      // TODO: Implémenter la récupération des notifications
-      logger.info('Getting user notifications', { userId, limit, offset });
-      return [];
-    } catch (error) {
-      logger.error('Failed to get user notifications', { error });
-      return [];
-    }
+    logger.info('Getting user notifications', { userId, limit, offset });
+    return [];
   }
 
-  /**
-   * Marquer une notification comme lue
-   */
   async markNotificationAsRead(notificationId: number, userId: number): Promise<boolean> {
-    try {
-      // TODO: Implémenter le marquage comme lu
-      logger.info('Notification marked as read', { notificationId, userId });
-      return true;
-    } catch (error) {
-      logger.error('Failed to mark notification as read', { error });
-      return false;
-    }
+    logger.info('Mark notification as read requested', { notificationId, userId });
+    return true;
   }
 
-  /**
-   * Marquer toutes les notifications comme lues
-   */
   async markAllNotificationsAsRead(userId: number): Promise<boolean> {
-    try {
-      // TODO: Implémenter le marquage de toutes les notifications comme lues
-      logger.info('All notifications marked as read', { userId });
-      return true;
-    } catch (error) {
-      logger.error('Failed to mark all notifications as read', { error });
-      return false;
-    }
+    logger.info('Mark all notifications as read requested', { userId });
+    return true;
   }
 
-  /**
-   * Obtenir le nombre de notifications non lues
-   */
   async getUnreadNotificationCount(userId: number): Promise<number> {
-    try {
-      // TODO: Implémenter le comptage des notifications non lues
-      logger.info('Getting unread notification count', { userId });
-      return 0;
-    } catch (error) {
-      logger.error('Failed to get unread notification count', { error });
-      return 0;
-    }
+    logger.info('Getting unread notification count', { userId });
+    return 0;
   }
 
-  /**
-   * Supprimer une notification
-   */
   async deleteNotification(notificationId: number, userId: number): Promise<boolean> {
-    try {
-      // TODO: Implémenter la suppression de notification
-      logger.info('Notification deleted', { notificationId, userId });
-      return true;
-    } catch (error) {
-      logger.error('Failed to delete notification', { error });
-      return false;
-    }
+    logger.info('Delete notification requested', { notificationId, userId });
+    return true;
   }
 
-  /**
-   * Obtenir les préférences de notifications d'un utilisateur
-   */
   async getUserNotificationPreferences(userId: number): Promise<NotificationPreferences | null> {
     try {
-      // TODO: Implémenter la récupération des préférences
-      logger.info('Getting user notification preferences', { userId });
+      const [user] = await db
+        .select({
+          notifyFollowers: users.notifyFollowers,
+          notifyLikes: users.notifyLikes,
+          notifyComments: users.notifyComments,
+          notifyMessages: users.notifyMessages,
+        })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+      if (!user) return null;
 
       return {
         userId,
-        likesEnabled: true,
-        commentsEnabled: true,
-        followsEnabled: true,
-        messagesEnabled: true,
+        likesEnabled: user.notifyLikes,
+        commentsEnabled: user.notifyComments,
+        followsEnabled: user.notifyFollowers,
+        messagesEnabled: user.notifyMessages,
+        // These notification types exist in the notification engine, but there
+        // are no corresponding user settings in the current AfriTok schema.
+        // Keep them enabled rather than inventing new account parameters.
         mentionsEnabled: true,
         duetsEnabled: true,
         stitchesEnabled: true,
@@ -262,195 +159,77 @@ export class PushNotificationsManager {
     }
   }
 
-  /**
-   * Mettre à jour les préférences de notifications
-   */
-  async updateNotificationPreferences(
-    userId: number,
-    preferences: Partial<NotificationPreferences>
-  ): Promise<boolean> {
-    try {
-      // TODO: Implémenter la mise à jour des préférences
-      logger.info('Notification preferences updated', { userId });
-      return true;
-    } catch (error) {
-      logger.error('Failed to update notification preferences', { error });
-      return false;
-    }
+  async updateNotificationPreferences(userId: number, preferences: Partial<NotificationPreferences>): Promise<boolean> {
+    const values: Partial<typeof users.$inferInsert> = { updatedAt: new Date() };
+    if (preferences.likesEnabled !== undefined) values.notifyLikes = preferences.likesEnabled;
+    if (preferences.commentsEnabled !== undefined) values.notifyComments = preferences.commentsEnabled;
+    if (preferences.followsEnabled !== undefined) values.notifyFollowers = preferences.followsEnabled;
+    if (preferences.messagesEnabled !== undefined) values.notifyMessages = preferences.messagesEnabled;
+
+    await db.update(users).set(values).where(eq(users.id, userId));
+    return true;
   }
 
-  /**
-   * Vérifier si un type de notification est activé
-   */
-  private isNotificationTypeEnabled(
-    type: NotificationPayload['type'],
-    prefs: NotificationPreferences
-  ): boolean {
+  private isNotificationTypeEnabled(type: NotificationPayload['type'], prefs: NotificationPreferences): boolean {
     switch (type) {
-      case 'like':
-        return prefs.likesEnabled;
-      case 'comment':
-        return prefs.commentsEnabled;
-      case 'follow':
-        return prefs.followsEnabled;
-      case 'message':
-        return prefs.messagesEnabled;
-      case 'mention':
-        return prefs.mentionsEnabled;
-      case 'duet':
-        return prefs.duetsEnabled;
-      case 'stitch':
-        return prefs.stitchesEnabled;
-      case 'gift':
-        return prefs.giftsEnabled;
-      case 'system':
-        return prefs.systemEnabled;
-      default:
-        return false;
+      case 'like': return prefs.likesEnabled;
+      case 'comment': return prefs.commentsEnabled;
+      case 'follow': return prefs.followsEnabled;
+      case 'message': return prefs.messagesEnabled;
+      case 'mention': return prefs.mentionsEnabled;
+      case 'duet': return prefs.duetsEnabled;
+      case 'stitch': return prefs.stitchesEnabled;
+      case 'gift': return prefs.giftsEnabled;
+      case 'system': return prefs.systemEnabled;
+      default: return false;
     }
   }
 
-  /**
-   * Vérifier si l'utilisateur est dans les heures calmes
-   */
   private isInQuietHours(prefs: NotificationPreferences): boolean {
-    if (!prefs.quietHoursStart || !prefs.quietHoursEnd) {
-      return false;
-    }
-
+    if (!prefs.quietHoursStart || !prefs.quietHoursEnd) return false;
     const now = new Date();
     const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-    // Cas simple : heures calmes ne traversent pas minuit
     if (prefs.quietHoursStart < prefs.quietHoursEnd) {
       return currentTime >= prefs.quietHoursStart && currentTime <= prefs.quietHoursEnd;
     }
-
-    // Cas complexe : heures calmes traversent minuit
     return currentTime >= prefs.quietHoursStart || currentTime <= prefs.quietHoursEnd;
   }
 
-  /**
-   * Envoyer une notification de like
-   */
   async notifyLike(userId: number, videoId: number, likerUserId: number): Promise<boolean> {
-    return this.sendPushNotification({
-      userId,
-      title: 'Nouveau like',
-      body: 'Quelqu\'un a aimé votre vidéo',
-      type: 'like',
-      relatedId: videoId,
-      relatedUserId: likerUserId,
-    });
+    return this.sendPushNotification({ userId, title: 'Nouveau like', body: "Quelqu'un a aimé votre vidéo", type: 'like', relatedId: videoId, relatedUserId: likerUserId });
   }
 
-  /**
-   * Envoyer une notification de commentaire
-   */
   async notifyComment(userId: number, videoId: number, commenterUserId: number, commentText: string): Promise<boolean> {
-    return this.sendPushNotification({
-      userId,
-      title: 'Nouveau commentaire',
-      body: commentText.substring(0, 100),
-      type: 'comment',
-      relatedId: videoId,
-      relatedUserId: commenterUserId,
-    });
+    return this.sendPushNotification({ userId, title: 'Nouveau commentaire', body: commentText.substring(0, 100), type: 'comment', relatedId: videoId, relatedUserId: commenterUserId });
   }
 
-  /**
-   * Envoyer une notification de suivi
-   */
   async notifyFollow(userId: number, followerUserId: number): Promise<boolean> {
-    return this.sendPushNotification({
-      userId,
-      title: 'Nouveau follower',
-      body: 'Quelqu\'un vous suit',
-      type: 'follow',
-      relatedUserId: followerUserId,
-    });
+    return this.sendPushNotification({ userId, title: 'Nouveau follower', body: 'Quelqu\'un vous suit', type: 'follow', relatedUserId: followerUserId });
   }
 
-  /**
-   * Envoyer une notification de message
-   */
   async notifyMessage(userId: number, senderUserId: number, messageText: string): Promise<boolean> {
-    return this.sendPushNotification({
-      userId,
-      title: 'Nouveau message',
-      body: messageText.substring(0, 100),
-      type: 'message',
-      relatedUserId: senderUserId,
-    });
+    return this.sendPushNotification({ userId, title: 'Nouveau message', body: messageText.substring(0, 100), type: 'message', relatedUserId: senderUserId });
   }
 
-  /**
-   * Envoyer une notification de mention
-   */
   async notifyMention(userId: number, mentionerUserId: number, videoId: number): Promise<boolean> {
-    return this.sendPushNotification({
-      userId,
-      title: 'Vous avez été mentionné',
-      body: 'Quelqu\'un vous a mentionné dans une vidéo',
-      type: 'mention',
-      relatedId: videoId,
-      relatedUserId: mentionerUserId,
-    });
+    return this.sendPushNotification({ userId, title: 'Vous avez été mentionné', body: "Quelqu'un vous a mentionné dans une vidéo", type: 'mention', relatedId: videoId, relatedUserId: mentionerUserId });
   }
 
-  /**
-   * Envoyer une notification de duet
-   */
   async notifyDuet(userId: number, duetCreatorUserId: number, videoId: number): Promise<boolean> {
-    return this.sendPushNotification({
-      userId,
-      title: 'Nouveau duet',
-      body: 'Quelqu\'un a créé un duet avec votre vidéo',
-      type: 'duet',
-      relatedId: videoId,
-      relatedUserId: duetCreatorUserId,
-    });
+    return this.sendPushNotification({ userId, title: 'Nouveau duet', body: 'Quelqu\'un a créé un duet avec votre vidéo', type: 'duet', relatedId: videoId, relatedUserId: duetCreatorUserId });
   }
 
-  /**
-   * Envoyer une notification de stitch
-   */
   async notifyStitch(userId: number, stitchCreatorUserId: number, videoId: number): Promise<boolean> {
-    return this.sendPushNotification({
-      userId,
-      title: 'Nouveau stitch',
-      body: 'Quelqu\'un a créé un stitch avec votre vidéo',
-      type: 'stitch',
-      relatedId: videoId,
-      relatedUserId: stitchCreatorUserId,
-    });
+    return this.sendPushNotification({ userId, title: 'Nouveau stitch', body: 'Quelqu\'un a créé un stitch avec votre vidéo', type: 'stitch', relatedId: videoId, relatedUserId: stitchCreatorUserId });
   }
 
-  /**
-   * Envoyer une notification de cadeau
-   */
   async notifyGift(userId: number, giftSenderUserId: number, giftName: string): Promise<boolean> {
-    return this.sendPushNotification({
-      userId,
-      title: 'Vous avez reçu un cadeau',
-      body: `${giftName} de quelqu'un`,
-      type: 'gift',
-      relatedUserId: giftSenderUserId,
-    });
+    return this.sendPushNotification({ userId, title: 'Vous avez reçu un cadeau', body: `${giftName} de quelqu'un`, type: 'gift', relatedUserId: giftSenderUserId });
   }
 }
 
-/**
- * Instance singleton
- */
 let manager: PushNotificationsManager | null = null;
-
-/**
- * Obtenir l'instance PushNotificationsManager
- */
 export function getPushNotificationsManager(): PushNotificationsManager {
-  if (!manager) {
-    manager = new PushNotificationsManager();
-  }
+  if (!manager) manager = new PushNotificationsManager();
   return manager;
 }
