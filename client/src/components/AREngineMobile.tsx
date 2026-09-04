@@ -11,6 +11,17 @@ const DETECTION_INTERVAL_MS = 40;
 const LANDMARK_SMOOTHING = 0.72;
 const LOST_FACE_TIMEOUT_MS = 350;
 
+// TikTok-style base beauty: active as soon as a face is detected,
+// even when the user has not selected a beauty preset or creative effect.
+const BASE_BEAUTY_CONFIG = {
+  smoothSkin: 0.72,
+  skinTexture: 0.78,
+  brightenSkin: 0.10,
+  darkCircles: 0.38,
+  eyeBrilliance: 0.24,
+  smileLines: 0.28,
+};
+
 type ARStatus = "loading" | "ready" | "face" | "no-face" | "error";
 type DiagnosticStage = "package" | "wasm" | "model" | "detector" | "face" | "error";
 type CoverTransform = { scale: number; dx: number; dy: number };
@@ -19,7 +30,7 @@ type ARError = { stage: DiagnosticStage; message: string; cause?: unknown };
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : String(error); }
 
 function grade(e: AREffect | null) {
-  const c = e?.beautyConfig ?? {};
+  const c = e?.beautyConfig ?? BASE_BEAUTY_CONFIG;
   const brighten = Math.max(0, Math.min(1, c.brightenSkin ?? 0));
   const smooth = Math.max(0, Math.min(1, Math.max(c.smoothSkin ?? 0, c.skinTexture ?? 0)));
   return `brightness(${(1 + brighten * 0.055).toFixed(3)}) contrast(${(1 - smooth * 0.018).toFixed(3)}) saturate(${(1 + brighten * 0.045).toFixed(3)})`;
@@ -159,8 +170,19 @@ export const AREngineMobile: React.FC<{
     if (landmarks?.length) {
       mappedLandmarks.current = mapLandmarks(landmarks, video, width, height, transform);
       const current = mappedLandmarks.current;
-      if (current && effect?.beautyConfig) { try { applyBeautyPipeline(ctx, current, width, height, effect.beautyConfig); } catch (error) { console.error("[AREngineMobile] beauty pipeline", error); } }
-      if (current && effect) { try { renderFaceEffect(ctx, current, width, height, effect); } catch (error) { console.error("[AREngineMobile] selected AR effect", error); } }
+      if (current) {
+        try {
+          // Base beauty is always active. A selected beauty preset replaces it;
+          // creative effects keep the same base retouch underneath.
+          applyBeautyPipeline(ctx, current, width, height, effect?.beautyConfig ?? BASE_BEAUTY_CONFIG);
+        } catch (error) {
+          console.error("[AREngineMobile] beauty pipeline", error);
+        }
+        if (effect) {
+          try { renderFaceEffect(ctx, current, width, height, effect); }
+          catch (error) { console.error("[AREngineMobile] selected AR effect", error); }
+        }
+      }
     }
 
     // Diagnostic overlay: proves each MediaPipe layer independently on the real device.
