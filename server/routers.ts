@@ -51,8 +51,9 @@ export const appRouter = router({
       try {
         await storageDeleteVideo(video.videoUrl);
       } catch (error) {
-        console.error("[video.delete] Storage deletion failed; database record kept:", error);
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Impossible de supprimer le fichier vidéo. La vidéo n'a pas été supprimée." });
+        // The database record must not keep a deleted video visible when an
+        // old/external URL or a missing storage credential prevents cleanup.
+        console.error("[video.delete] Storage cleanup failed; deleting database record anyway:", error);
       }
       await db.delete(comments).where(eq(comments.videoId, input.videoId));
       await db.delete(likes).where(eq(likes.videoId, input.videoId));

@@ -134,7 +134,7 @@ export default function Profile() {
 
         {selectedVideo && isOwnProfile && activeTab === "videos" && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 px-5">
-            <button type="button" aria-label="Fermer" onClick={closeVideoOptions} className="absolute inset-0 w-full h-full" />
+            <div className="absolute inset-0" aria-hidden="true" />
             <div className="relative z-10 w-full max-w-sm rounded-2xl bg-gray-900 border border-gray-700 shadow-2xl overflow-hidden">
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700"><h3 className="text-base font-semibold">Options de la vidéo</h3><button type="button" onClick={closeVideoOptions} className="p-1 text-gray-400 hover:text-white" aria-label="Fermer"><X size={20}/></button></div>
               <div className="p-4">

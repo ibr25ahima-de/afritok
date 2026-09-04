@@ -285,7 +285,11 @@ export const usersRouter = router({
       if (!video) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Vidéo introuvable." });
       }
-      await storageDeleteVideo(video.videoUrl);
+      try {
+        await storageDeleteVideo(video.videoUrl);
+      } catch (error) {
+        console.error("[admin.video.delete] Storage cleanup failed; deleting database record anyway:", error);
+      }
       await db.delete(comments).where(eq(comments.videoId, input.videoId));
       await db.delete(likes).where(eq(likes.videoId, input.videoId));
       await db.delete(favorites).where(eq(favorites.videoId, input.videoId));
