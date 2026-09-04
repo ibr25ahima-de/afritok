@@ -1,16 +1,13 @@
 import { Languages, Moon, Wifi, PlayCircle, Type, Sparkles, ChevronRight } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { useLanguage } from "@/contexts/LanguageContext";
-import { getSettingsText } from "@/i18n/settingsTranslations";
+import { useSettingsText } from "@/hooks/useSettingsText";
 
 interface Props { settings: { language: string; darkMode: string; dataSaver: boolean; autoPlay: string; textSize: string; animations: boolean }; updateSetting: (key: string, value: any) => void; }
-const LANGUAGES = ["Français", "English", "Kiswahili", "Yorùbá", "Hausa", "isiZulu"];
-const LANGUAGE_CODES: Record<string, "fr"|"en"|"sw"|"yo"|"ha"|"zu"> = {"Français":"fr",English:"en",Kiswahili:"sw","Yorùbá":"yo",Hausa:"ha",isiZulu:"zu"};
+const LANGUAGES = ["Français", "English", "Kiswahili", "Yorùbá", "Hausa", "isiZulu", "Español", "العربية", "Português"];
 
 export default function DisplaySettings({ settings, updateSetting }: Props) {
-  const { language } = useLanguage();
-  const t = (key: string, fallback: string) => getSettingsText(language, key, fallback);
-  const languageNames: Record<string,string> = {Français:"Français",English:"English",Kiswahili:"Kiswahili","Yorùbá":"Yorùbá",Hausa:"Hausa",isiZulu:"isiZulu"};
+  const t = useSettingsText();
+  const languageNames: Record<string,string> = {Français:"Français",English:"English",Kiswahili:"Kiswahili","Yorùbá":"Yorùbá",Hausa:"Hausa",isiZulu:"isiZulu",Español:"Español",العربية:"العربية",Português:"Português"};
   const localized = (value: string) => {
     const map: Record<string,string> = {"Système":t("system","Système"),"Sombre":t("dark","Sombre"),"Clair":t("light","Clair"),"Wi-Fi uniquement":t("wifiOnly","Wi-Fi uniquement"),"Toujours":t("always","Toujours"),"Jamais":t("never","Jamais"),"Normale":t("normal","Normale"),"Grande":t("large","Grande"),"Petite":t("small","Petite")};
     return map[value] ?? value;
