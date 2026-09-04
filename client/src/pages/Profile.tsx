@@ -5,6 +5,7 @@ import { LiveStatusBadge } from "@/features/live/LiveStatusBadge";
 import { useLocation, useRoute } from "wouter";
 import { ArrowLeft, Edit3, UserPlus, UserCheck, MoreVertical, MapPin, Eye, X, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 
 interface Video { id:number; userId:number; title:string|null; description:string|null; videoUrl:string; thumbnailUrl:string|null; duration:number|null; views:number|null; likes:number|null; comments:number|null; shares:number|null; favorites:number|null; createdAt:Date; }
 
@@ -45,8 +46,6 @@ export default function Profile() {
   const filteredVideos = activeTab === "likes" && isOwnProfile ? likedVideos : activeTab === "favorites" && isOwnProfile ? favoriteVideos : ownVideos;
   const selectedVideo = selectedVideoId === null ? null : ownVideos.find(v => v.id === selectedVideoId) || null;
 
-  // On the owner's Videos tab, every video opens the options dialog.
-  // Do not depend on a possibly string-typed/missing userId from the API for the UI tap.
   const handleVideoTap = (video: Video) => {
     if (isOwnProfile && activeTab === "videos") setSelectedVideoId(video.id);
   };
@@ -54,15 +53,24 @@ export default function Profile() {
   const closeVideoOptions = () => setSelectedVideoId(null);
 
   const handleDeleteVideo = async () => {
-    if (!selectedVideo || !isOwnProfile) return;
+    if (!selectedVideo || !isOwnProfile || deleteVideoMutation.isPending) return;
+    const videoId = selectedVideo.id;
     try {
-      await deleteVideoMutation.mutateAsync({ videoId: selectedVideo.id });
+      await deleteVideoMutation.mutateAsync({ videoId });
       closeVideoOptions();
-      await videosQuery.refetch();
-      await utils.video.getByUser.invalidate({ userId: profileUserId });
+      // Refresh every relevant cache so the deleted video cannot reappear
+      // after navigation, a tab switch, or a new deployment/client session.
+      await Promise.all([
+        videosQuery.refetch(),
+        utils.video.getByUser.invalidate({ userId: profileUserId }),
+        utils.video.feed.invalidate(),
+        utils.like.getMyLikedVideos.invalidate(),
+        utils.favorite.getMyVideos.invalidate(),
+      ]);
+      toast.success("Vidéo supprimée");
     } catch (error) {
       console.error("[Profile] delete video failed", error);
-      alert(error instanceof Error ? error.message : "La suppression a échoué. Réessaie.");
+      toast.error(error instanceof Error ? error.message : "La suppression a échoué. Réessaie.");
     }
   };
 
