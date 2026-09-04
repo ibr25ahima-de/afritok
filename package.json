@@ -67,7 +67,7 @@
     "helmet": "^8.1.0",
     "input-otp": "^1.4.2",
     "jose": "^6.1.0",
-    "jsonwebtoken": "^9.0.0",
+    "jsonwebtoken": "^9.1.0",
     "lucide-react": "^0.453.0",
     "@mediapipe/tasks-vision": "^0.10.22",
     "multer": "^1.4.5-lts.1",
