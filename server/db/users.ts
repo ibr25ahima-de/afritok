@@ -17,6 +17,7 @@ import {
   warnings,
   microEarnings,
 } from "../../drizzle/schema";
+import { storageDeleteVideo } from "../storage";
 
 /* =====================
 USERS
@@ -57,6 +58,11 @@ export async function getUserByPhone(phone: string) {
 }
 
 export async function deleteUserAccount(userId: number) {
+  const userVideos = await db.select({ videoUrl: videos.videoUrl }).from(videos).where(eq(videos.userId, userId));
+  await Promise.all(userVideos.map(video => storageDeleteVideo(video.videoUrl).catch(error => {
+    console.error("[users.delete] Video storage cleanup failed", error);
+  })));
+
   // Supprimer les interactions
   await db.delete(likes).where(eq(likes.userId, userId));
   await db.delete(comments).where(eq(comments.userId, userId));

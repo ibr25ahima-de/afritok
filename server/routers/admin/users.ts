@@ -9,6 +9,7 @@ import {
   comments,
   likes,
   favorites,
+  shares,
   followers,
   warnings,
 } from "../../../drizzle/schema";
@@ -18,6 +19,8 @@ import {
   count,
   sum,
 } from "drizzle-orm";
+import { getVideoById } from "../../db/videos";
+import { storageDeleteVideo } from "../../storage";
 
 export const usersRouter = router({
   /**
@@ -278,9 +281,16 @@ export const usersRouter = router({
         throw new TRPCError({ code: "FORBIDDEN" });
       }
 
-      await db
-        .delete(videos)
-        .where(eq(videos.id, input.videoId));
+      const video = await getVideoById(input.videoId);
+      if (!video) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Vidéo introuvable." });
+      }
+      await storageDeleteVideo(video.videoUrl);
+      await db.delete(comments).where(eq(comments.videoId, input.videoId));
+      await db.delete(likes).where(eq(likes.videoId, input.videoId));
+      await db.delete(favorites).where(eq(favorites.videoId, input.videoId));
+      await db.delete(shares).where(eq(shares.videoId, input.videoId));
+      await db.delete(videos).where(eq(videos.id, input.videoId));
 
       return { success: true };
     }),
