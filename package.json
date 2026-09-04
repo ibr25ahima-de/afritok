@@ -12,9 +12,7 @@
     "test": "vitest run",
     "db:push": "drizzle-kit generate && drizzle-kit migrate"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
-  },
+  "pnpm": {"onlyBuiltDependencies": ["esbuild"]},
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",
     "@aws-sdk/s3-request-presigner": "^3.693.0",
@@ -87,7 +85,7 @@
     "sonner": "^2.0.7",
     "streamdown": "^1.4.0",
     "stripe": "^19.2.0",
-    "superjson": "^1.13.0",
+    "superjson": "^1.13.3",
     "tone": "^15.1.22",
     "uuid": "^13.0.0",
     "vaul": "^1.1.1",
