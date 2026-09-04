@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 interface SecuritySettingsProps {
   securitySettings: { loginAlerts: boolean };
   handleSecurityChange: (key: "loginAlerts") => void;
+  handleChangePassword?: () => void;
   isLoading: boolean;
 }
 
@@ -13,7 +14,6 @@ export default function SecuritySettings({ securitySettings, handleSecurityChang
       <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
         <Shield size={20} className="text-green-400" /> Sécurité
       </h2>
-
       <div className="space-y-4">
         <div className="p-4 bg-black/50 rounded-lg">
           <div className="flex items-center gap-2 mb-2">
@@ -22,18 +22,9 @@ export default function SecuritySettings({ securitySettings, handleSecurityChang
           </div>
           <p className="text-sm text-gray-400">Votre connexion AfriTok utilise actuellement un code OTP envoyé par SMS.</p>
         </div>
-
         <div className="flex items-center justify-between p-3 bg-black/50 rounded-lg">
-          <div>
-            <span>Alertes de sécurité</span>
-            <p className="text-xs text-gray-500 mt-1">Contrôle les notifications liées aux connexions.</p>
-          </div>
-          <button
-            type="button"
-            aria-pressed={securitySettings.loginAlerts}
-            onClick={() => handleSecurityChange("loginAlerts")}
-            className={`relative w-12 h-7 rounded-full ${securitySettings.loginAlerts ? "bg-green-500" : "bg-gray-700"}`}
-          >
+          <div><span>Alertes de sécurité</span><p className="text-xs text-gray-500 mt-1">Contrôle les notifications liées aux connexions.</p></div>
+          <button type="button" aria-pressed={securitySettings.loginAlerts} onClick={() => handleSecurityChange("loginAlerts")} className={`relative w-12 h-7 rounded-full ${securitySettings.loginAlerts ? "bg-green-500" : "bg-gray-700"}`}>
             <div className={`absolute top-1 w-5 h-5 bg-white rounded-full ${securitySettings.loginAlerts ? "right-1" : "left-1"}`} />
           </button>
         </div>
