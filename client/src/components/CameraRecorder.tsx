@@ -2,7 +2,8 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { X, Music, RefreshCw, Zap, ZapOff, Timer, Gauge, Layout, Palette } from 'lucide-react';
 import { toast } from 'sonner';
 import { AudioPlayer } from '@/services/audioService';
-import { EffectsPanel, AREffect } from './EffectsPanel';
+import { EffectsPanel } from './EffectsPanel';
+import type { AREffect } from '@/features/ar/ARRegistry';
 import { AREngineMobile as AREngine } from './AREngineMobile';
 import { LiveEntryButton } from '@/features/live/LiveEntryButton';
 
@@ -21,7 +22,6 @@ export const CameraRecorder:React.FC<CameraRecorderProps>=({onVideoRecorded,onPh
  const musicElementRef=useRef<HTMLAudioElement|null>(null);
  const recordingStartedAtRef=useRef(0);
  const [isRecording,setIsRecording]=useState(false),[facingMode,setFacingMode]=useState<"user"|"environment">("user"),[selectedDuration,setSelectedDuration]=useState('15 s'),[recordingTime,setRecordingTime]=useState(0),[flashEnabled,setFlashEnabled]=useState(false),[activeSpeed,setActiveSpeed]=useState('1x'),[timerValue,setTimerValue]=useState(0),[timerCountdown,setTimerCountdown]=useState(0),[isTimerActive,setIsTimerActive]=useState(false),[activeAREffect,setActiveAREffect]=useState<AREffect|null>(null),[showAREffectsPanel,setShowAREffectsPanel]=useState(false),[arStatus,setArStatus]=useState<ARStatus>('loading');
-
  const toggleFlash=async()=>{const n=!flashEnabled;setFlashEnabled(n);const t=streamRef.current?.getVideoTracks()[0];if(!t)return;const c=t.getCapabilities() as any;if(c.torch)try{await t.applyConstraints({advanced:[{torch:n}]} as any)}catch(e){console.error(e)}else toast.info("Le flash n'est pas supporté sur cet appareil")};
  const handleAREffectSelect=(e:AREffect|null)=>{setActiveAREffect(e);setShowAREffectsPanel(true);if(e)toast.info(`Effet AR "${e.name}" sélectionné — détection du visage en cours`) };
  const handleARStatus=useCallback((status:ARStatus,error?:unknown)=>{setArStatus(status);if(status==='error')toast.error("Les effets AR ne peuvent pas démarrer sur cet appareil");if(error)console.error('[CameraRecorder] AR status',status,error)},[]);
@@ -29,7 +29,6 @@ export const CameraRecorder:React.FC<CameraRecorderProps>=({onVideoRecorded,onPh
  useEffect(()=>{if(!selectedMusic){musicPlayerRef.current?.stop();return}musicPlayerRef.current=new AudioPlayer(selectedMusic.url);return()=>musicPlayerRef.current?.stop()},[selectedMusic]);
  const startCamera=useCallback(async()=>{try{streamRef.current?.getTracks().forEach(t=>t.stop());const s=await navigator.mediaDevices.getUserMedia({video:{facingMode,width:{ideal:1280},height:{ideal:720}},audio:true});streamRef.current=s;if(videoRef.current){videoRef.current.srcObject=s;await videoRef.current.play().catch(()=>{})}}catch{toast.error('Erreur caméra') }},[facingMode]);
  useEffect(()=>{startCamera();return()=>streamRef.current?.getTracks().forEach(t=>t.stop())},[startCamera]);
-
  const takeProcessedPhoto=useCallback(()=>{const source=processedCanvasRef.current;if(!source||source.width<2||source.height<2){toast.error("La caméra n'est pas encore prête");return}source.toBlob(blob=>{if(blob)onPhotoTaken?.(blob)},'image/jpeg',.95)},[onPhotoTaken]);
  const stopRecording=useCallback(()=>{mediaRecorderRef.current?.stop();setIsRecording(false)},[]);
  const handleCapture=async()=>{if(timerValue>0&&!isRecording)await startTimer(timerValue);if(selectedDuration==='PHOTO'){takeProcessedPhoto();return}if(isRecording){stopRecording();return}const processedCanvas=processedCanvasRef.current;if(!processedCanvas||processedCanvas.width<2||processedCanvas.height<2){toast.error("La caméra avec effets n'est pas encore prête");return}if(!streamRef.current){toast.error("Caméra indisponible");return}
@@ -37,7 +36,6 @@ export const CameraRecorder:React.FC<CameraRecorderProps>=({onVideoRecorded,onPh
  useEffect(()=>{let i:NodeJS.Timeout;if(isRecording)i=setInterval(()=>setRecordingTime(p=>p+1),1000);return()=>clearInterval(i)},[isRecording]);
  useEffect(()=>{if(!isRecording)return;const m=selectedDuration==='10 min'?600:selectedDuration==='60 s'?60:15;if(recordingTime>=m)stopRecording()},[recordingTime,isRecording,selectedDuration,stopRecording]);
  useEffect(()=>()=>{mediaRecorderRef.current?.stop();recordingCanvasStreamRef.current?.getTracks().forEach(t=>t.stop());streamRef.current?.getTracks().forEach(t=>t.stop());audioContextRef.current?.close()},[]);
-
  const arLabel=arStatus==='face'?'Visage détecté • AR actif':arStatus==='ready'?'AR prêt • regardez la caméra':arStatus==='no-face'?'Visage non détecté':arStatus==='error'?'AR indisponible':'Chargement des effets…';
  return <div className="h-screen bg-black text-white relative overflow-hidden flex flex-col">
    <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover opacity-0 pointer-events-none"/>
