@@ -31,6 +31,28 @@ import { eq, desc, and, sql } from "drizzle-orm";
 
 const premiumVideoOptionsSchema = z.object({ quality: z.enum(["standard", "hd"]).default("standard"), scheduledAt: z.string().datetime().nullable().optional(), commentsMode: z.enum(["all", "followers", "off"]).default("all") });
 
+const settingsSchema = z.object({
+  language: z.string().min(2).max(20),
+  darkMode: z.enum(["Système", "Sombre", "Clair"]),
+  dataSaver: z.boolean(),
+  autoPlay: z.enum(["Wi-Fi uniquement", "Toujours", "Jamais"]),
+  textSize: z.enum(["Petite", "Normale", "Grande"]),
+  animations: z.boolean(),
+  profilePublic: z.boolean().optional(),
+  allowMessages: z.boolean().optional(),
+  allowComments: z.boolean().optional(),
+  showFollowers: z.boolean().optional(),
+  showFollowing: z.boolean().optional(),
+  twoFactorEnabled: z.boolean().optional(),
+  loginAlerts: z.boolean().optional(),
+  notifyFollowers: z.boolean().optional(),
+  notifyLikes: z.boolean().optional(),
+  notifyComments: z.boolean().optional(),
+  notifyShares: z.boolean().optional(),
+  notifyMessages: z.boolean().optional(),
+  notifyPromotions: z.boolean().optional(),
+});
+
 export const appRouter = router({
   system: systemRouter, feed: feedRouter, music: musicRouter, adminMusic: adminMusicRouter, coins: coinsRouter, gifts: giftRouter, wallet: walletRouter, payment: paymentRouter, platformFinance: platformFinanceRouter, advertising: advertisingRouter, subscription: subscriptionRouter, live: liveRouter, liveChat: liveChatRouter, directMessages: directMessagesRouter, instantWithdrawal: instantWithdrawalRouter, monetization: monetizationRouter,
   auth: router({
@@ -48,13 +70,7 @@ export const appRouter = router({
     delete: protectedProcedure.input(z.object({ videoId: z.number() })).mutation(async ({ ctx, input }) => {
       const video = await getVideoById(input.videoId); if (!video) throw new TRPCError({ code: "NOT_FOUND", message: "Vidéo introuvable." });
       if (video.userId !== ctx.user.id && ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "Vous ne pouvez supprimer que vos propres vidéos." });
-      try {
-        await storageDeleteVideo(video.videoUrl);
-      } catch (error) {
-        // The database record must not keep a deleted video visible when an
-        // old/external URL or a missing storage credential prevents cleanup.
-        console.error("[video.delete] Storage cleanup failed; deleting database record anyway:", error);
-      }
+      try { await storageDeleteVideo(video.videoUrl); } catch (error) { console.error("[video.delete] Storage cleanup failed; deleting database record anyway:", error); }
       await db.delete(comments).where(eq(comments.videoId, input.videoId));
       await db.delete(likes).where(eq(likes.videoId, input.videoId));
       await db.delete(favorites).where(eq(favorites.videoId, input.videoId));
@@ -66,7 +82,16 @@ export const appRouter = router({
   like: likeRouter, comment: commentRouter, favorite: favoriteRouter, share: shareRouter, admin: adminRouter,
   follower: router({ toggle: protectedProcedure.input(z.object({ userId: z.number() })).mutation(async ({ ctx, input }) => { const following = await isFollowing(ctx.user.id, input.userId); if (following) { await db.delete(followers).where(and(eq(followers.followerId, ctx.user.id), eq(followers.followingId, input.userId))); return { following: false }; } await db.insert(followers).values({ followerId: ctx.user.id, followingId: input.userId }); return { following: true }; }), getCount: publicProcedure.input(z.object({ userId: z.number() })).query(async ({ input }) => ({ followers: await getFollowerCount(input.userId), following: await getFollowingCount(input.userId) })), isFollowing: protectedProcedure.input(z.object({ userId: z.number() })).query(async ({ ctx, input }) => ({ following: await isFollowing(ctx.user.id, input.userId) })), }),
   earnings: router({ getMyEarnings: protectedProcedure.query(({ ctx }) => getUserEarnings(ctx.user.id)), getMyWithdrawals: protectedProcedure.query(({ ctx }) => getUserWithdrawals(ctx.user.id)), }),
-  user: router({ getProfile: publicProcedure.input(z.object({ userId: z.number() })).query(async ({ input }) => { const result = await db.select().from(users).where(eq(users.id, input.userId)); return result[0] || null; }), getMyWarnings: protectedProcedure.query(async ({ ctx }) => db.select({ id: warnings.id, reason: warnings.reason, message: warnings.message, createdAt: warnings.createdAt }).from(warnings).where(eq(warnings.userId, ctx.user.id)).orderBy(desc(warnings.createdAt))), getAll: publicProcedure.query(async () => db.select().from(users)), getVideos: publicProcedure.input(z.object({ userId: z.number() })).query(async ({ input }) => getUserVideos(input.userId)), updateProfile: protectedProcedure.input(z.object({ name: z.string(), bio: z.string().optional(), country: z.string().optional() })).mutation(async ({ ctx, input }) => updateUserProfile(ctx.user.id, input)), uploadAvatar: protectedProcedure.input(z.object({ avatarUrl: z.string() })).mutation(async ({ ctx, input }) => updateUserAvatar(ctx.user.id, input)), getDisplaySettings: protectedProcedure.query(async ({ ctx }) => getDisplaySettings(ctx.user.id)), updateDisplaySettings: protectedProcedure.input(z.object({ language: z.string(), darkMode: z.string(), dataSaver: z.boolean(), autoPlay: z.string(), textSize: z.string(), animations: z.boolean(), profilePublic: z.boolean().optional(), allowMessages: z.boolean().optional(), allowComments: z.boolean().optional(), showFollowers: z.boolean().optional(), showFollowing: z.boolean().optional() })).mutation(async ({ ctx, input }) => updateDisplaySettings(ctx.user.id, input)), }),
+  user: router({
+    getProfile: publicProcedure.input(z.object({ userId: z.number() })).query(async ({ input }) => { const result = await db.select().from(users).where(eq(users.id, input.userId)); return result[0] || null; }),
+    getMyWarnings: protectedProcedure.query(async ({ ctx }) => db.select({ id: warnings.id, reason: warnings.reason, message: warnings.message, createdAt: warnings.createdAt }).from(warnings).where(eq(warnings.userId, ctx.user.id)).orderBy(desc(warnings.createdAt))),
+    getAll: publicProcedure.query(async () => db.select().from(users)),
+    getVideos: publicProcedure.input(z.object({ userId: z.number() })).query(async ({ input }) => getUserVideos(input.userId)),
+    updateProfile: protectedProcedure.input(z.object({ name: z.string(), bio: z.string().optional(), country: z.string().optional() })).mutation(async ({ ctx, input }) => updateUserProfile(ctx.user.id, input)),
+    uploadAvatar: protectedProcedure.input(z.object({ avatarUrl: z.string() })).mutation(async ({ ctx, input }) => updateUserAvatar(ctx.user.id, input)),
+    getDisplaySettings: protectedProcedure.query(async ({ ctx }) => getDisplaySettings(ctx.user.id)),
+    updateDisplaySettings: protectedProcedure.input(settingsSchema).mutation(async ({ ctx, input }) => updateDisplaySettings(ctx.user.id, input)),
+  }),
 });
 
 export type AppRouter = typeof appRouter;
