@@ -5,8 +5,9 @@ import { smoothLandmarks } from "./faceUtils";
 import { applyBeautyPipeline } from "@/features/beauty/BeautyPipeline";
 import { renderFaceEffect } from "@/features/beauty/FaceEffects";
 
-const WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm";
-const MODEL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+// The Render build prepares these files locally. The camera never depends on a CDN at runtime.
+const WASM = "/mediapipe/wasm";
+const MODEL = "/mediapipe/face_landmarker.task";
 const DETECTION_INTERVAL_MS = 40;
 const LANDMARK_SMOOTHING = 0.72;
 const LOST_FACE_TIMEOUT_MS = 350;
