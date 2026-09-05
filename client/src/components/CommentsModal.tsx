@@ -1,12 +1,11 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
-import { Button } from "@/components/ui/button";
 import { X, Send, User } from "lucide-react";
 
 interface CommentsModalProps {
   videoId: number;
   onClose: () => void;
-  onCommentAdded?: () => void; // ✅ NOUVEAU
+  onCommentAdded?: () => void;
 }
 
 export default function CommentsModal({ videoId, onClose, onCommentAdded }: CommentsModalProps) {
@@ -35,40 +34,20 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
 
       setNewComment("");
 
-      // refresh commentaires
       await commentsQuery.refetch();
-      
-      // ✅ NOUVEAU : Notifier le parent (Feed)
       onCommentAdded?.();
 
-      // 💰 MONETIZATION FEEDBACK (on garde tout)
-      if (res?.earning?.success) {
+      if (res.earning) {
         alert("💰 + gain commentaire !");
       }
-
-      if (res?.earning?.shadow) {
-        alert("⚠️ Limite atteinte aujourd'hui");
-      }
-
-      if (res?.earning?.reason === "too_fast") {
-        alert("🚫 Tu spam trop");
-      }
-
-      if (res?.earning?.reason === "duplicate") {
-        alert("⚠️ Commentaire déjà compté");
-      }
-
     } catch (error) {
       console.error("Comment error", error);
     }
-
   };
 
   return (
     <div className="fixed inset-0 bg-black/80 z-50 flex items-end">
       <div className="bg-slate-900 w-full h-[70vh] flex flex-col rounded-t-lg shadow-2xl">
-
-        {/* Header */}
         <div className="border-b border-purple-800/30 p-4 flex items-center justify-between">
           <h2 className="text-white font-semibold">Comments</h2>
           <button
@@ -79,7 +58,6 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
           </button>
         </div>
 
-        {/* Comments List */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {commentsQuery.isLoading ? (
             <p className="text-purple-300 text-center py-8">
@@ -111,32 +89,29 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
           )}
         </div>
 
-        {/* Comment Input */}
         <div className="border-t border-purple-800/30 p-4 bg-slate-900 sticky bottom-0">
-  <div className="flex items-center gap-2 bg-slate-800 border border-purple-800/50 rounded-full px-4 py-1">
-    <input
-      type="text"
-      value={newComment}
-      onChange={(e) => setNewComment(e.target.value)}
-      placeholder="Add a comment..."
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          handleSubmitComment();
-        }
-      }}
-      className="flex-1 bg-transparent border-none text-white placeholder-gray-500 focus:outline-none text-sm py-2"
-    />
-    <button
-      onClick={handleSubmitComment}
-      disabled={!newComment.trim() || createCommentMutation.isPending}
-      className="text-purple-400 hover:text-purple-300 disabled:text-gray-600 p-1"
-    >
-      <Send className="w-5 h-5" />
-    </button>
-  </div>
-</div>
-        
-
+          <div className="flex items-center gap-2 bg-slate-800 border border-purple-800/50 rounded-full px-4 py-1">
+            <input
+              type="text"
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              placeholder="Add a comment..."
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  handleSubmitComment();
+                }
+              }}
+              className="flex-1 bg-transparent border-none text-white placeholder-gray-500 focus:outline-none text-sm py-2"
+            />
+            <button
+              onClick={handleSubmitComment}
+              disabled={!newComment.trim() || createCommentMutation.isPending}
+              className="text-purple-400 hover:text-purple-300 disabled:text-gray-600 p-1"
+            >
+              <Send className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
