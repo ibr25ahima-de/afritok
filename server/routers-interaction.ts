@@ -9,11 +9,18 @@ import { recordLikeEarning, recordCommentEarning, recordShareEarning } from "./m
 
 export const likeRouter = router({
   toggle: protectedProcedure.input(z.object({ videoId: z.number() })).mutation(async ({ ctx, input }) => {
-    const user = ctx.user; if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
-    const video = await getVideoById(input.videoId); if (!video) throw new TRPCError({ code: "NOT_FOUND" });
+    const user = ctx.user;
+    const video = await getVideoById(input.videoId);
+    if (!video) throw new TRPCError({ code: "NOT_FOUND" });
     const existing = await getUserLike(user.id, input.videoId);
-    if (existing) { await unlikeVideo(user.id, input.videoId); await db.update(videos).set({ likes: sql`GREATEST(COALESCE(${videos.likes}, 0) - 1, 0)` }).where(eq(videos.id, input.videoId)); return { liked: false, likes: Math.max((video.likes || 0) - 1, 0) }; }
-    await likeVideo(user.id, input.videoId); await db.update(videos).set({ likes: sql`COALESCE(${videos.likes}, 0) + 1` }).where(eq(videos.id, input.videoId)); return { liked: true, likes: (video.likes || 0) + 1, earning: await recordLikeEarning(user.id, input.videoId) };
+    if (existing) {
+      await unlikeVideo(user.id, input.videoId);
+      await db.update(videos).set({ likes: sql`GREATEST(COALESCE(${videos.likes}, 0) - 1, 0)` }).where(eq(videos.id, input.videoId));
+      return { liked: false, likes: Math.max((video.likes || 0) - 1, 0) };
+    }
+    await likeVideo(user.id, input.videoId);
+    await db.update(videos).set({ likes: sql`COALESCE(${videos.likes}, 0) + 1` }).where(eq(videos.id, input.videoId));
+    return { liked: true, likes: (video.likes || 0) + 1, earning: await recordLikeEarning(user.id, input.videoId) };
   }),
   getMyForVideos: protectedProcedure.input(z.object({ videoIds: z.array(z.number()).max(100) })).query(async ({ ctx, input }) => {
     if (!input.videoIds.length) return { likedVideoIds: [], favoritedVideoIds: [] };
@@ -29,10 +36,17 @@ export const likeRouter = router({
 });
 
 export const commentRouter = router({
-  getByVideo: publicProcedure.input(z.object({ videoId: z.number() })).query(async ({ input }) => { const video = await getVideoById(input.videoId); if (!video) throw new TRPCError({ code: "NOT_FOUND" }); return getVideoComments(input.videoId); }),
+  getByVideo: publicProcedure.input(z.object({ videoId: z.number() })).query(async ({ input }) => {
+    const video = await getVideoById(input.videoId);
+    if (!video) throw new TRPCError({ code: "NOT_FOUND" });
+    const [owner] = await db.select({ allowComments: users.allowComments }).from(users).where(eq(users.id, video.userId)).limit(1);
+    if (!owner || !owner.allowComments) return [];
+    return getVideoComments(input.videoId);
+  }),
   create: protectedProcedure.input(z.object({ videoId: z.number(), text: z.string().min(1).max(500) })).mutation(async ({ ctx, input }) => {
-    const user = ctx.user; if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
-    const video = await getVideoById(input.videoId); if (!video) throw new TRPCError({ code: "NOT_FOUND" });
+    const user = ctx.user;
+    const video = await getVideoById(input.videoId);
+    if (!video) throw new TRPCError({ code: "NOT_FOUND" });
     await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "commentsMode" text`);
     const [owner] = await db.select({ allowComments: users.allowComments }).from(users).where(eq(users.id, video.userId)).limit(1);
     if (!owner) throw new TRPCError({ code: "NOT_FOUND", message: "Propriétaire du contenu introuvable." });
@@ -46,10 +60,9 @@ export const commentRouter = router({
     return { success: true, comments: (video.comments || 0) + 1, earning: await recordCommentEarning(user.id, input.videoId) };
   }),
   delete: protectedProcedure.input(z.object({ commentId: z.number() })).mutation(async ({ ctx, input }) => {
-    const user = ctx.user; if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
     const comment = (await db.select().from(comments).where(eq(comments.id, input.commentId)).limit(1))[0];
     if (!comment) throw new TRPCError({ code: "NOT_FOUND", message: "Commentaire introuvable." });
-    if (comment.userId !== user.id && user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "Vous ne pouvez supprimer que vos propres commentaires." });
+    if (comment.userId !== ctx.user.id && ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "Vous ne pouvez supprimer que vos propres commentaires." });
     await deleteComment(input.commentId);
     await db.update(videos).set({ comments: sql`GREATEST(COALESCE(${videos.comments}, 0) - 1, 0)` }).where(eq(videos.id, comment.videoId));
     return { success: true, message: "Commentaire supprimé avec succès." };
@@ -58,11 +71,17 @@ export const commentRouter = router({
 
 export const favoriteRouter = router({
   toggle: protectedProcedure.input(z.object({ videoId: z.number() })).mutation(async ({ ctx, input }) => {
-    const user = ctx.user; if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
-    const video = await getVideoById(input.videoId); if (!video) throw new TRPCError({ code: "NOT_FOUND" });
-    const existing = await getUserFavorite(user.id, input.videoId);
-    if (existing) { await unfavoriteVideo(user.id, input.videoId); await db.update(videos).set({ favorites: sql`GREATEST(COALESCE(${videos.favorites}, 0) - 1, 0)` }).where(eq(videos.id, input.videoId)); return { favorited: false, favorites: Math.max((video.favorites || 0) - 1, 0) }; }
-    await favoriteVideo(user.id, input.videoId); await db.update(videos).set({ favorites: sql`COALESCE(${videos.favorites}, 0) + 1` }).where(eq(videos.id, input.videoId)); return { favorited: true, favorites: (video.favorites || 0) + 1 };
+    const video = await getVideoById(input.videoId);
+    if (!video) throw new TRPCError({ code: "NOT_FOUND" });
+    const existing = await getUserFavorite(ctx.user.id, input.videoId);
+    if (existing) {
+      await unfavoriteVideo(ctx.user.id, input.videoId);
+      await db.update(videos).set({ favorites: sql`GREATEST(COALESCE(${videos.favorites}, 0) - 1, 0)` }).where(eq(videos.id, input.videoId));
+      return { favorited: false, favorites: Math.max((video.favorites || 0) - 1, 0) };
+    }
+    await favoriteVideo(ctx.user.id, input.videoId);
+    await db.update(videos).set({ favorites: sql`COALESCE(${videos.favorites}, 0) + 1` }).where(eq(videos.id, input.videoId));
+    return { favorited: true, favorites: (video.favorites || 0) + 1 };
   }),
   getMyVideos: protectedProcedure.query(async ({ ctx }) => {
     return db.select({ video: videos }).from(favorites).innerJoin(videos, eq(videos.id, favorites.videoId)).where(eq(favorites.userId, ctx.user.id));
@@ -70,5 +89,11 @@ export const favoriteRouter = router({
 });
 
 export const shareRouter = router({
-  create: protectedProcedure.input(z.object({ videoId: z.number(), platform: z.string() })).mutation(async ({ ctx, input }) => { const user = ctx.user; if (!user) throw new TRPCError({ code: "UNAUTHORIZED" }); const video = await getVideoById(input.videoId); if (!video) throw new TRPCError({ code: "NOT_FOUND" }); await shareVideo(user.id, input.videoId, input.platform); await db.update(videos).set({ shares: sql`COALESCE(${videos.shares}, 0) + 1` }).where(eq(videos.id, input.videoId)); return { success: true, shares: (video.shares || 0) + 1, earning: await recordShareEarning(user.id, input.videoId) }; }),
+  create: protectedProcedure.input(z.object({ videoId: z.number(), platform: z.string().min(1).max(50) })).mutation(async ({ ctx, input }) => {
+    const video = await getVideoById(input.videoId);
+    if (!video) throw new TRPCError({ code: "NOT_FOUND" });
+    await shareVideo(ctx.user.id, input.videoId, input.platform);
+    await db.update(videos).set({ shares: sql`COALESCE(${videos.shares}, 0) + 1` }).where(eq(videos.id, input.videoId));
+    return { success: true, shares: (video.shares || 0) + 1, earning: await recordShareEarning(ctx.user.id, input.videoId) };
+  }),
 });
