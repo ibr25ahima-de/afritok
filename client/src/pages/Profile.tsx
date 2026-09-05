@@ -40,7 +40,7 @@ export default function Profile() {
   const profile = userQuery.data;
   const ownVideos = (videosQuery.data || []) as Video[];
   const followerStats = followerCountQuery.data;
-  const followerCount = typeof followerStats === "number" ? followerStats : (followerStats?.followers ?? 0);
+  const followerCount = typeof followerStats === "number" ? followerStats : followerStats?.followers;
   const totalLikes = ownVideos.reduce((sum, v) => sum + (v.likes || 0), 0);
   const likedVideos = (likedQuery.data || []).map((x:any) => x.video).filter(Boolean) as Video[];
   const favoriteVideos = (favoritesQuery.data || []).map((x:any) => x.video).filter(Boolean) as Video[];
@@ -65,8 +65,6 @@ export default function Profile() {
     try {
       await deleteVideoMutation.mutateAsync({ videoId });
       closeVideoOptions();
-      // Refresh every relevant cache so the deleted video cannot reappear
-      // after navigation, a tab switch, or a new deployment/client session.
       await Promise.all([
         videosQuery.refetch(),
         utils.video.getByUser.invalidate({ userId: profileUserId }),
@@ -103,7 +101,6 @@ export default function Profile() {
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2 flex-wrap"><h2 className="text-2xl font-bold">{profile?.name || "Utilisateur"}</h2><PremiumBadge compact/></div>
-              <p className="text-gray-400 text-sm">@{profile?.email?.split("@")[0] || "username"}</p>
               {profile?.country && <p className="text-gray-400 text-sm flex items-center gap-1 mt-1"><MapPin size={14}/>{profile.country}</p>}
             </div>
             {isOwnProfile ? <button type="button" onClick={() => navigate("/edit-profile")} className="bg-red-500 text-white px-4 py-2 rounded-full font-semibold"><Edit3 size={18}/></button> : <button type="button" onClick={() => followMutation.mutate({userId: profileUserId}, {onSuccess:r => setIsFollowing(Boolean(r.following))})} className="bg-red-500 text-white px-4 py-2 rounded-full font-semibold">{isFollowing ? <UserCheck size={18}/> : <UserPlus size={18}/>}</button>}
@@ -111,7 +108,7 @@ export default function Profile() {
           <div className="grid grid-cols-3 gap-4 text-center mt-5">
             <div><p className="text-2xl font-bold">{ownVideos.length}</p><p className="text-gray-400 text-sm">Vidéos</p></div>
             <div><p className="text-2xl font-bold">{totalLikes}</p><p className="text-gray-400 text-sm">Likes</p></div>
-            <div><p className="text-2xl font-bold">{followerCount}</p><p className="text-gray-400 text-sm">Abonnés</p></div>
+            <div><p className="text-2xl font-bold">{followerCount ?? "—"}</p><p className="text-gray-400 text-sm">Abonnés</p></div>
           </div>
         </section>
 
