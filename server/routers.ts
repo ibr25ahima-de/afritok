@@ -26,7 +26,7 @@ import { applyPremiumVideoOptions } from "./subscriptions/premium-video-publishi
 import { recordWatchEarning } from "./micro-earnings";
 import { getUserVideos, getVideoById, getFeedVideos, getFollowerCount, getFollowingCount, isFollowing, getUserEarnings, getUserWithdrawals, getDisplaySettings, updateDisplaySettings, db, createOTP, getValidOTP, deleteOTP, getUserByPhone, upsertUser, updateUserProfile, updateUserAvatar } from "./db";
 import { storagePut, storageDeleteVideo } from "./storage";
-import { videos, followers, users, reports, warnings, comments, likes, favorites, shares } from "../drizzle/schema";
+import { videos, followers, users, warnings, comments, likes, favorites, shares } from "../drizzle/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 
 const premiumVideoOptionsSchema = z.object({
@@ -75,58 +75,40 @@ export const appRouter = router({
   instantWithdrawal: instantWithdrawalRouter,
   monetization: monetizationRouter,
   auth: router({
-    me: publicProcedure.query(async (opts) => {
-      const user = opts.ctx.user;
-      return user;
-    }),
+    me: publicProcedure.query(({ ctx }) => ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true };
     }),
-    requestOtp: publicProcedure
-      .input(z.object({ phone: z.string().min(10) }))
-      .mutation(async ({ input }) => {
-        const code = Math.floor(100000 + Math.random() * 900000).toString();
-        await createOTP(input.phone, code);
-        console.log(`[OTP] ${input.phone}: ${code}`);
-        return { success: true, code };
-      }),
-    verifyOtp: publicProcedure
-      .input(z.object({ phone: z.string(), code: z.string() }))
-      .mutation(async ({ input, ctx }) => {
-        const validOtp = await getValidOTP(input.phone, input.code);
-        if (!validOtp) throw new TRPCError({ code: "UNAUTHORIZED" });
-        let user = await getUserByPhone(input.phone);
-        let isNewUser = false;
-        if (!user) {
-          isNewUser = true;
-          await upsertUser({ phone: input.phone, name: "", loginMethod: "phone_otp", role: "user", lastSignedIn: new Date() });
-          user = await getUserByPhone(input.phone);
-        }
-        await deleteOTP(validOtp.id);
-        const token = await sdk.createSessionToken(user!.id, user!.phone);
-        const cookieOptions = getSessionCookieOptions(ctx.req);
-        ctx.res.cookie(COOKIE_NAME, token, cookieOptions);
-        return { success: true, user, isNewUser };
-      }),
+    requestOtp: publicProcedure.input(z.object({ phone: z.string().min(10) })).mutation(async ({ input }) => {
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      await createOTP(input.phone, code);
+      console.log(`[OTP] ${input.phone}: ${code}`);
+      return { success: true, code };
+    }),
+    verifyOtp: publicProcedure.input(z.object({ phone: z.string(), code: z.string() })).mutation(async ({ input, ctx }) => {
+      const validOtp = await getValidOTP(input.phone, input.code);
+      if (!validOtp) throw new TRPCError({ code: "UNAUTHORIZED" });
+      let user = await getUserByPhone(input.phone);
+      let isNewUser = false;
+      if (!user) {
+        isNewUser = true;
+        await upsertUser({ phone: input.phone, name: "", loginMethod: "phone_otp", role: "user", lastSignedIn: new Date() });
+        user = await getUserByPhone(input.phone);
+      }
+      await deleteOTP(validOtp.id);
+      const token = await sdk.createSessionToken(user!.id, user!.phone);
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      ctx.res.cookie(COOKIE_NAME, token, cookieOptions);
+      return { success: true, user, isNewUser };
+    }),
   }),
   video: router({
     feed: publicProcedure.input(z.object({ limit: z.number().default(20), offset: z.number().default(0) })).query(async ({ input }) => {
       try {
-        try {
-          await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "musicUrl" text;`);
-          await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "musicName" text;`);
-          await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "thumbnailUrl" text;`);
-          await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "premiumQuality" text;`);
-          await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "scheduledAt" timestamp;`);
-          await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "commentsMode" text;`);
-        } catch (migrationError) {
-          console.error("[Migration] Error adding columns:", migrationError);
-        }
         return await getFeedVideos(input.limit, input.offset);
       } catch (error) {
-        console.error("[video.feed] ERROR:", error);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error instanceof Error ? error.message : "Unknown feed error" });
       }
     }),
@@ -194,17 +176,11 @@ export const appRouter = router({
     getMyWithdrawals: protectedProcedure.query(({ ctx }) => getUserWithdrawals(ctx.user.id)),
   }),
   user: router({
-    getProfile: publicProcedure.input(z.object({ userId: z.number() })).query(async ({ input }) => {
+    getProfile: publicProcedure.input(z.object({ userId: z.number() })).query(async ({ input, ctx }) => {
       const [user] = await db.select().from(users).where(eq(users.id, input.userId)).limit(1);
       if (!user) return null;
-      if (!user.profilePublic) {
-        return {
-          id: user.id,
-          name: user.name,
-          avatarUrl: user.avatarUrl,
-          country: user.country,
-          profilePublic: false,
-        };
+      if (!user.profilePublic && ctx.user?.id !== user.id && ctx.user?.role !== "admin") {
+        return { id: user.id, name: user.name, avatarUrl: user.avatarUrl, country: user.country, profilePublic: false };
       }
       return user;
     }),
