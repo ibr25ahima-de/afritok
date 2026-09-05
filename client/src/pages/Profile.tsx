@@ -7,7 +7,7 @@ import { ArrowLeft, Edit3, UserPlus, UserCheck, MoreVertical, MapPin, Eye, X, Tr
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
-interface Video { id:number; userId:number; title:string|null; description:string|null; videoUrl:string; thumbnailUrl:string|null; duration:number|null; views:number|null; likes:number|null; comments:number|null; shares:number|null; favorites:number|null; createdAt:Date; }
+interface Video { id:number; userId:number; title:string|null; description:string|null; videoUrl:string; thumbnailUrl:string|null; duration:number|null; views:number|null; likes:number|null; comments:number|null; shares:number|null; favorites:number|null; createdAt:string; }
 
 export default function Profile() {
   const { user: currentUser } = useAuth();
