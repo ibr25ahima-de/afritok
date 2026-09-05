@@ -1,6 +1,7 @@
-import { sql } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
+import { ensureDirectMessageTables } from './direct-messages-pg';
 import { db } from './db';
+import { sql } from 'drizzle-orm';
 
 export type ConversationParticipants = {
   id: number;
@@ -9,6 +10,7 @@ export type ConversationParticipants = {
 };
 
 export async function getConversationParticipants(conversationId: number): Promise<ConversationParticipants | null> {
+  await ensureDirectMessageTables();
   const result = await db.execute(sql`
     SELECT "id", "participant1Id", "participant2Id"
     FROM "conversations"
