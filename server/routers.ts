@@ -51,15 +51,7 @@ export const appRouter = router({
   like: likeRouter, comment: commentRouter, favorite: favoriteRouter, share: shareRouter, admin: adminRouter,
   follower: router({
     toggle: protectedProcedure.input(z.object({ userId: z.number() })).mutation(async ({ ctx, input }) => { if (ctx.user.id === input.userId) throw new TRPCError({ code: "BAD_REQUEST", message: "Vous ne pouvez pas vous suivre vous-même." }); const following = await isFollowing(ctx.user.id, input.userId); if (following) { await db.delete(followers).where(and(eq(followers.followerId, ctx.user.id), eq(followers.followingId, input.userId))); return { following: false }; } const [target] = await db.select({ id: users.id, profilePublic: users.profilePublic }).from(users).where(eq(users.id, input.userId)).limit(1); if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Utilisateur introuvable." }); if (!target.profilePublic) throw new TRPCError({ code: "FORBIDDEN", message: "Ce profil est privé." }); await db.insert(followers).values({ followerId: ctx.user.id, followingId: input.userId }); return { following: true }; }),
-    getCount: publicProcedure.input(z.object({ userId: z.number() })).query(async ({ input, ctx }) => {
-      const [target] = await db.select({ id: users.id, profilePublic: users.profilePublic, showFollowers: users.showFollowers, showFollowing: users.showFollowing }).from(users).where(eq(users.id, input.userId)).limit(1);
-      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Utilisateur introuvable." });
-      const canViewPrivateStats = ctx.user?.id === target.id || ctx.user?.role === "admin";
-      return {
-        followers: canViewPrivateStats || target.showFollowers ? await getFollowerCount(input.userId) : null,
-        following: canViewPrivateStats || target.showFollowing ? await getFollowingCount(input.userId) : null,
-      };
-    }),
+    getCount: publicProcedure.input(z.object({ userId: z.number() })).query(async ({ input, ctx }) => { const [target] = await db.select({ id: users.id, profilePublic: users.profilePublic, showFollowers: users.showFollowers, showFollowing: users.showFollowing }).from(users).where(eq(users.id, input.userId)).limit(1); if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Utilisateur introuvable." }); const canViewPrivateStats = ctx.user?.id === target.id || ctx.user?.role === "admin"; return { followers: canViewPrivateStats || target.showFollowers ? await getFollowerCount(input.userId) : null, following: canViewPrivateStats || target.showFollowing ? await getFollowingCount(input.userId) : null }; }),
     isFollowing: protectedProcedure.input(z.object({ userId: z.number() })).query(async ({ ctx, input }) => ({ following: await isFollowing(ctx.user.id, input.userId) }))
   }),
   earnings: router({ getMyEarnings: protectedProcedure.query(({ ctx }) => getUserEarnings(ctx.user.id)), getMyWithdrawals: protectedProcedure.query(({ ctx }) => getUserWithdrawals(ctx.user.id)) }),
@@ -67,9 +59,9 @@ export const appRouter = router({
     getProfile: publicProcedure.input(z.object({ userId: z.number() })).query(async ({ input, ctx }) => {
       const [user] = await db.select().from(users).where(eq(users.id, input.userId)).limit(1);
       if (!user) return null;
-      if (!user.profilePublic && ctx.user?.id !== user.id && ctx.user?.role !== "admin") return { id: user.id, name: user.name, avatarUrl: user.avatarUrl, country: user.country, profilePublic: false };
+      if (!user.profilePublic && ctx.user?.id !== user.id && ctx.user?.role !== "admin") return { id: user.id, name: user.name, avatarUrl: user.avatarUrl, country: user.country, profilePublic: false, email: undefined, bio: undefined };
       if (ctx.user?.id === user.id || ctx.user?.role === "admin") return user;
-      return { id: user.id, name: user.name, avatarUrl: user.avatarUrl, country: user.country, profilePublic: user.profilePublic, allowMessages: user.allowMessages };
+      return { id: user.id, name: user.name, avatarUrl: user.avatarUrl, country: user.country, profilePublic: user.profilePublic, allowMessages: user.allowMessages, email: undefined, bio: undefined };
     }),
     getMyWarnings: protectedProcedure.query(async ({ ctx }) => db.select({ id: warnings.id, reason: warnings.reason, message: warnings.message, createdAt: warnings.createdAt }).from(warnings).where(eq(warnings.userId, ctx.user.id)).orderBy(desc(warnings.createdAt))),
     getAll: publicProcedure.query(async () => db.select({ id: users.id, name: users.name, avatarUrl: users.avatarUrl, country: users.country, profilePublic: users.profilePublic }).from(users).where(eq(users.profilePublic, true))),
