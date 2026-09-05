@@ -29,7 +29,11 @@ import { storagePut, storageDeleteVideo } from "./storage";
 import { videos, followers, users, reports, warnings, comments, likes, favorites, shares } from "../drizzle/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 
-const premiumVideoOptionsSchema = z.object({ quality: z.enum(["standard", "hd"]).default("standard"), scheduledAt: z.string().datetime().nullable().optional(), commentsMode: z.enum(["all", "followers", "off"]).default("all") });
+const premiumVideoOptionsSchema = z.object({
+  quality: z.enum(["standard", "hd"]).default("standard"),
+  scheduledAt: z.string().datetime().nullable().optional(),
+  commentsMode: z.enum(["all", "followers", "off"]).default("all"),
+});
 
 const settingsSchema = z.object({
   language: z.string().min(2).max(20),
@@ -54,21 +58,105 @@ const settingsSchema = z.object({
 });
 
 export const appRouter = router({
-  system: systemRouter, feed: feedRouter, music: musicRouter, adminMusic: adminMusicRouter, coins: coinsRouter, gifts: giftRouter, wallet: walletRouter, payment: paymentRouter, platformFinance: platformFinanceRouter, advertising: advertisingRouter, subscription: subscriptionRouter, live: liveRouter, liveChat: liveChatRouter, directMessages: directMessagesRouter, instantWithdrawal: instantWithdrawalRouter, monetization: monetizationRouter,
+  system: systemRouter,
+  feed: feedRouter,
+  music: musicRouter,
+  adminMusic: adminMusicRouter,
+  coins: coinsRouter,
+  gifts: giftRouter,
+  wallet: walletRouter,
+  payment: paymentRouter,
+  platformFinance: platformFinanceRouter,
+  advertising: advertisingRouter,
+  subscription: subscriptionRouter,
+  live: liveRouter,
+  liveChat: liveChatRouter,
+  directMessages: directMessagesRouter,
+  instantWithdrawal: instantWithdrawalRouter,
+  monetization: monetizationRouter,
   auth: router({
-    me: publicProcedure.query(async (opts) => { const user = opts.ctx.user; if (user && user.phone === "+225 05 64 19 41 33" && user.role !== "admin") { try { await db.update(users).set({ role: "admin" }).where(eq(users.id, user.id)); user.role = "admin"; } catch (error) { console.error("[Auth.me] Promotion failed:", error); } } return user; }),
-    logout: publicProcedure.mutation(({ ctx }) => { const cookieOptions = getSessionCookieOptions(ctx.req); ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 }); return { success: true }; }),
-    requestOtp: publicProcedure.input(z.object({ phone: z.string().min(10) })).mutation(async ({ input }) => { const code = Math.floor(100000 + Math.random() * 900000).toString(); await createOTP(input.phone, code); console.log(`[OTP] ${input.phone}: ${code}`); return { success: true, code }; }),
-    verifyOtp: publicProcedure.input(z.object({ phone: z.string(), code: z.string() })).mutation(async ({ input, ctx }) => { const validOtp = await getValidOTP(input.phone, input.code); if (!validOtp) throw new TRPCError({ code: "UNAUTHORIZED" }); let user = await getUserByPhone(input.phone); let isNewUser = false; if (!user) { isNewUser = true; await upsertUser({ phone: input.phone, name: "", loginMethod: "phone_otp", role: "user", lastSignedIn: new Date() }); user = await getUserByPhone(input.phone); } await deleteOTP(validOtp.id); const token = await sdk.createSessionToken(user!.id, user!.phone); const cookieOptions = getSessionCookieOptions(ctx.req); ctx.res.cookie(COOKIE_NAME, token, cookieOptions); return { success: true, user, isNewUser }; }),
+    me: publicProcedure.query(async (opts) => {
+      const user = opts.ctx.user;
+      return user;
+    }),
+    logout: publicProcedure.mutation(({ ctx }) => {
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      return { success: true };
+    }),
+    requestOtp: publicProcedure
+      .input(z.object({ phone: z.string().min(10) }))
+      .mutation(async ({ input }) => {
+        const code = Math.floor(100000 + Math.random() * 900000).toString();
+        await createOTP(input.phone, code);
+        console.log(`[OTP] ${input.phone}: ${code}`);
+        return { success: true, code };
+      }),
+    verifyOtp: publicProcedure
+      .input(z.object({ phone: z.string(), code: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        const validOtp = await getValidOTP(input.phone, input.code);
+        if (!validOtp) throw new TRPCError({ code: "UNAUTHORIZED" });
+        let user = await getUserByPhone(input.phone);
+        let isNewUser = false;
+        if (!user) {
+          isNewUser = true;
+          await upsertUser({ phone: input.phone, name: "", loginMethod: "phone_otp", role: "user", lastSignedIn: new Date() });
+          user = await getUserByPhone(input.phone);
+        }
+        await deleteOTP(validOtp.id);
+        const token = await sdk.createSessionToken(user!.id, user!.phone);
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie(COOKIE_NAME, token, cookieOptions);
+        return { success: true, user, isNewUser };
+      }),
   }),
   video: router({
-    feed: publicProcedure.input(z.object({ limit: z.number().default(20), offset: z.number().default(0) })).query(async ({ input }) => { try { try { await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "musicUrl" text;`); await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "musicName" text;`); await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "thumbnailUrl" text;`); await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "premiumQuality" text;`); await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "scheduledAt" timestamp;`); await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "commentsMode" text;`); } catch (migrationError) { console.error("[Migration] Error adding columns:", migrationError); } return await getFeedVideos(input.limit, input.offset); } catch (error) { console.error("[video.feed] ERROR:", error); throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error instanceof Error ? error.message : "Unknown feed error" }); } }),
-    upload: protectedProcedure.input(z.object({ title: z.string(), description: z.string().optional().nullable(), videoUrl: z.string(), thumbnailUrl: z.string().optional().nullable(), musicUrl: z.string().optional().nullable(), musicName: z.string().optional().nullable(), premiumOptions: premiumVideoOptionsSchema.optional() })).mutation(async ({ ctx, input }) => { const [video] = await db.insert(videos).values({ userId: ctx.user.id, title: input.title, description: input.description ?? null, videoUrl: input.videoUrl, thumbnailUrl: input.thumbnailUrl ?? null, musicUrl: input.musicUrl ?? null, musicName: input.musicName ?? null }).returning({ id: videos.id }); if (!video?.id) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Impossible d'enregistrer la vidéo." }); if (input.premiumOptions) await applyPremiumVideoOptions(ctx.user.id, video.id, input.premiumOptions); return { success: true, videoId: video.id }; }),
-    uploadFile: protectedProcedure.input(z.object({ fileBuffer: z.instanceof(Uint8Array), fileName: z.string(), fileType: z.string() })).mutation(async ({ ctx, input }) => { try { const fileKey = `videos/${ctx.user.id}-${Date.now()}-${input.fileName}`; const { url: videoUrl } = await storagePut(fileKey, Buffer.from(input.fileBuffer), input.fileType); return { success: true, videoUrl }; } catch (error) { throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error instanceof Error ? error.message : "Upload failed" }); } }),
-    incrementViews: publicProcedure.input(z.object({ videoId: z.number() })).mutation(async ({ input, ctx }) => { const video = await getVideoById(input.videoId); if (!video) throw new TRPCError({ code: "NOT_FOUND" }); await db.update(videos).set({ views: sql`COALESCE(${videos.views}, 0) + 1` }).where(eq(videos.id, input.videoId)); await recordWatchEarning(video.userId, input.videoId, 10); if (ctx.user?.id && ctx.user.id !== video.userId) await recordWatchEarning(ctx.user.id, input.videoId, 10); return { success: true, views: (video.views || 0) + 1 }; }),
+    feed: publicProcedure.input(z.object({ limit: z.number().default(20), offset: z.number().default(0) })).query(async ({ input }) => {
+      try {
+        try {
+          await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "musicUrl" text;`);
+          await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "musicName" text;`);
+          await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "thumbnailUrl" text;`);
+          await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "premiumQuality" text;`);
+          await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "scheduledAt" timestamp;`);
+          await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "commentsMode" text;`);
+        } catch (migrationError) {
+          console.error("[Migration] Error adding columns:", migrationError);
+        }
+        return await getFeedVideos(input.limit, input.offset);
+      } catch (error) {
+        console.error("[video.feed] ERROR:", error);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error instanceof Error ? error.message : "Unknown feed error" });
+      }
+    }),
+    upload: protectedProcedure.input(z.object({ title: z.string(), description: z.string().optional().nullable(), videoUrl: z.string(), thumbnailUrl: z.string().optional().nullable(), musicUrl: z.string().optional().nullable(), musicName: z.string().optional().nullable(), premiumOptions: premiumVideoOptionsSchema.optional() })).mutation(async ({ ctx, input }) => {
+      const [video] = await db.insert(videos).values({ userId: ctx.user.id, title: input.title, description: input.description ?? null, videoUrl: input.videoUrl, thumbnailUrl: input.thumbnailUrl ?? null, musicUrl: input.musicUrl ?? null, musicName: input.musicName ?? null }).returning({ id: videos.id });
+      if (!video?.id) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Impossible d'enregistrer la vidéo." });
+      if (input.premiumOptions) await applyPremiumVideoOptions(ctx.user.id, video.id, input.premiumOptions);
+      return { success: true, videoId: video.id };
+    }),
+    uploadFile: protectedProcedure.input(z.object({ fileBuffer: z.instanceof(Uint8Array), fileName: z.string(), fileType: z.string() })).mutation(async ({ ctx, input }) => {
+      try {
+        const fileKey = `videos/${ctx.user.id}-${Date.now()}-${input.fileName}`;
+        const { url: videoUrl } = await storagePut(fileKey, Buffer.from(input.fileBuffer), input.fileType);
+        return { success: true, videoUrl };
+      } catch (error) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error instanceof Error ? error.message : "Upload failed" });
+      }
+    }),
+    incrementViews: publicProcedure.input(z.object({ videoId: z.number() })).mutation(async ({ input, ctx }) => {
+      const video = await getVideoById(input.videoId);
+      if (!video) throw new TRPCError({ code: "NOT_FOUND" });
+      await db.update(videos).set({ views: sql`COALESCE(${videos.views}, 0) + 1` }).where(eq(videos.id, input.videoId));
+      await recordWatchEarning(video.userId, input.videoId, 10);
+      if (ctx.user?.id && ctx.user.id !== video.userId) await recordWatchEarning(ctx.user.id, input.videoId, 10);
+      return { success: true, views: (video.views || 0) + 1 };
+    }),
     getByUser: publicProcedure.input(z.object({ userId: z.number() })).query(async ({ input }) => getUserVideos(input.userId)),
     delete: protectedProcedure.input(z.object({ videoId: z.number() })).mutation(async ({ ctx, input }) => {
-      const video = await getVideoById(input.videoId); if (!video) throw new TRPCError({ code: "NOT_FOUND", message: "Vidéo introuvable." });
+      const video = await getVideoById(input.videoId);
+      if (!video) throw new TRPCError({ code: "NOT_FOUND", message: "Vidéo introuvable." });
       if (video.userId !== ctx.user.id && ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "Vous ne pouvez supprimer que vos propres vidéos." });
       try { await storageDeleteVideo(video.videoUrl); } catch (error) { console.error("[video.delete] Storage cleanup failed; deleting database record anyway:", error); }
       await db.delete(comments).where(eq(comments.videoId, input.videoId));
@@ -79,11 +167,47 @@ export const appRouter = router({
       return { success: true, videoId: input.videoId };
     }),
   }),
-  like: likeRouter, comment: commentRouter, favorite: favoriteRouter, share: shareRouter, admin: adminRouter,
-  follower: router({ toggle: protectedProcedure.input(z.object({ userId: z.number() })).mutation(async ({ ctx, input }) => { const following = await isFollowing(ctx.user.id, input.userId); if (following) { await db.delete(followers).where(and(eq(followers.followerId, ctx.user.id), eq(followers.followingId, input.userId))); return { following: false }; } await db.insert(followers).values({ followerId: ctx.user.id, followingId: input.userId }); return { following: true }; }), getCount: publicProcedure.input(z.object({ userId: z.number() })).query(async ({ input }) => ({ followers: await getFollowerCount(input.userId), following: await getFollowingCount(input.userId) })), isFollowing: protectedProcedure.input(z.object({ userId: z.number() })).query(async ({ ctx, input }) => ({ following: await isFollowing(ctx.user.id, input.userId) })), }),
-  earnings: router({ getMyEarnings: protectedProcedure.query(({ ctx }) => getUserEarnings(ctx.user.id)), getMyWithdrawals: protectedProcedure.query(({ ctx }) => getUserWithdrawals(ctx.user.id)), }),
+  like: likeRouter,
+  comment: commentRouter,
+  favorite: favoriteRouter,
+  share: shareRouter,
+  admin: adminRouter,
+  follower: router({
+    toggle: protectedProcedure.input(z.object({ userId: z.number() })).mutation(async ({ ctx, input }) => {
+      if (ctx.user.id === input.userId) throw new TRPCError({ code: "BAD_REQUEST", message: "Vous ne pouvez pas vous suivre vous-même." });
+      const following = await isFollowing(ctx.user.id, input.userId);
+      if (following) {
+        await db.delete(followers).where(and(eq(followers.followerId, ctx.user.id), eq(followers.followingId, input.userId)));
+        return { following: false };
+      }
+      const [target] = await db.select({ id: users.id, profilePublic: users.profilePublic }).from(users).where(eq(users.id, input.userId)).limit(1);
+      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Utilisateur introuvable." });
+      if (!target.profilePublic) throw new TRPCError({ code: "FORBIDDEN", message: "Ce profil est privé." });
+      await db.insert(followers).values({ followerId: ctx.user.id, followingId: input.userId });
+      return { following: true };
+    }),
+    getCount: publicProcedure.input(z.object({ userId: z.number() })).query(async ({ input }) => ({ followers: await getFollowerCount(input.userId), following: await getFollowingCount(input.userId) })),
+    isFollowing: protectedProcedure.input(z.object({ userId: z.number() })).query(async ({ ctx, input }) => ({ following: await isFollowing(ctx.user.id, input.userId) })),
+  }),
+  earnings: router({
+    getMyEarnings: protectedProcedure.query(({ ctx }) => getUserEarnings(ctx.user.id)),
+    getMyWithdrawals: protectedProcedure.query(({ ctx }) => getUserWithdrawals(ctx.user.id)),
+  }),
   user: router({
-    getProfile: publicProcedure.input(z.object({ userId: z.number() })).query(async ({ input }) => { const result = await db.select().from(users).where(eq(users.id, input.userId)); return result[0] || null; }),
+    getProfile: publicProcedure.input(z.object({ userId: z.number() })).query(async ({ input }) => {
+      const [user] = await db.select().from(users).where(eq(users.id, input.userId)).limit(1);
+      if (!user) return null;
+      if (!user.profilePublic) {
+        return {
+          id: user.id,
+          name: user.name,
+          avatarUrl: user.avatarUrl,
+          country: user.country,
+          profilePublic: false,
+        };
+      }
+      return user;
+    }),
     getMyWarnings: protectedProcedure.query(async ({ ctx }) => db.select({ id: warnings.id, reason: warnings.reason, message: warnings.message, createdAt: warnings.createdAt }).from(warnings).where(eq(warnings.userId, ctx.user.id)).orderBy(desc(warnings.createdAt))),
     getAll: publicProcedure.query(async () => db.select().from(users)),
     getVideos: publicProcedure.input(z.object({ userId: z.number() })).query(async ({ input }) => getUserVideos(input.userId)),
