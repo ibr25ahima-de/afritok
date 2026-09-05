@@ -49,7 +49,7 @@ export default function AudioSelector({ onSelectAudio, onClose }: AudioSelectorP
   const handleSelectAudio = (sound: any) => {
     setSelectedAudio(sound.id);
     if (onSelectAudio) {
-      onSelectAudio(sound.audioUrl || sound.url, sound.title || sound.name);
+      onSelectAudio(sound.audioUrl || sound.url, sound.title);
     }
   };
 
@@ -148,7 +148,7 @@ export default function AudioSelector({ onSelectAudio, onClose }: AudioSelectorP
               >
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
-                    <h3 className="text-white font-semibold">{sound.title || sound.name}</h3>
+                    <h3 className="text-white font-semibold">{sound.title}</h3>
                     <div className="flex items-center gap-3 mt-2 text-sm">
                       <span className="text-purple-400 capitalize">{sound.category}</span>
                       <span className="text-purple-300">{Math.round(sound.duration || 0)}s</span>
