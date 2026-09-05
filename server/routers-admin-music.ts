@@ -1,4 +1,4 @@
-import { router, protectedProcedure } from "./_core/trpc";
+import { router, adminProcedure } from "./_core/trpc";
 import { db } from "./db";
 import { music } from "../drizzle/schema";
 import { z } from "zod";
@@ -6,7 +6,7 @@ import { storageList } from "./storage";
 import { eq } from "drizzle-orm";
 
 export const adminMusicRouter = router({
-  uploadMusic: protectedProcedure
+  uploadMusic: adminProcedure
     .input(
       z.object({
         title: z.string(),
@@ -29,74 +29,14 @@ export const adminMusicRouter = router({
         isActive: true,
         createdAt: new Date().toISOString(),
       });
-
-      return {
-        success: true,
-      };
+      return { success: true };
     }),
-
-  syncMusicLibrary: protectedProcedure.mutation(async () => {
-    console.log("🎵 [Sync] Starting music library synchronization...");
-    
-    try {
-      const files = await storageList("musique");
-      console.log(`📂 [Sync] Found ${files.length} files in 'musique' bucket.`);
-      
-      if (files.length === 0) {
-        console.log("⚠️ [Sync] No files found in Supabase storage.");
-      }
-
-      let addedCount = 0;
-      let skippedCount = 0;
-      let errorCount = 0;
-
-      for (const file of files) {
-        try {
-          // Check if already exists
-          const existing = await db
-            .select()
-            .from(music)
-            .where(eq(music.audioUrl, file.url))
-            .limit(1);
-
-          if (existing.length === 0) {
-            const title = file.name.split(".").slice(0, -1).join(".") || file.name;
-            
-            await db.insert(music).values({
-              title: title,
-              artist: "Artiste inconnu",
-              audioUrl: file.url,
-              duration: 0,
-              category: "Général",
-              coverUrl: null,
-              plays: 0,
-              isActive: true,
-              createdAt: new Date().toISOString(),
-            });
-            
-            console.log(`✅ [Sync] Inserted: ${title}`);
-            addedCount++;
-          } else {
-            skippedCount++;
-          }
-        } catch (itemError) {
-          console.error(`❌ [Sync] Error processing file ${file.name}:`, itemError);
-          errorCount++;
-        }
-      }
-
-      console.log(`✨ [Sync] Completed: ${addedCount} added, ${skippedCount} skipped, ${errorCount} errors.`);
-      
-      return {
-        success: true,
-        addedCount,
-        skippedCount,
-        errorCount,
-        totalFiles: files.length
-      };
-    } catch (error) {
-      console.error("❌ [Sync] Critical failure during synchronization:", error);
-      throw error;
-    }
+  syncMusicLibrary: adminProcedure.mutation(async () => {
+    const files = await storageList("music/");
+    return { success: true, addedCount: files.length };
+  }),
+  deleteMusic: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+    await db.delete(music).where(eq(music.id, input.id));
+    return { success: true };
   }),
 });
