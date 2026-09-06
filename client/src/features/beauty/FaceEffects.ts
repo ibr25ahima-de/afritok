@@ -33,7 +33,7 @@ function ellipse(ctx: CanvasRenderingContext2D, p: Point, rx: number, ry: number
   if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = line; ctx.stroke(); }
 }
 
-function polygon(ctx: CanvasRenderingContext2D, p: Point[], fill?: string, stroke?: string, line = 1) {
+function polygon(ctx: CanvasRenderingContext2D, p: Point[], fill?: string | CanvasGradient, stroke?: string, line = 1) {
   if (p.length < 3) return;
   ctx.beginPath();
   p.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y));
