@@ -33,20 +33,20 @@ function svgThumb(renderer: EffectRenderer, beauty = false): string {
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
-const B = (renderer: EffectRenderer, config: BeautyConfig) => ({ renderer, beautyConfig: config, thumbnail: svgThumb(renderer, true) });
+const B = (id: string, name: string, config: BeautyConfig, description: string) => ({ id, name, category: "beauty" as const, renderer: "none" as const, beautyConfig: config, thumbnail: svgThumb("none", true), description });
 const C = (id: string, name: string, renderer: EffectRenderer, description: string) => ({ id, name, category: "creative" as const, renderer, thumbnail: svgThumb(renderer), description });
 
 export const AR_EFFECTS: AREffect[] = [
-  { id: "beauty-none", name: "Naturel", category: "beauty", ...B("none", { smoothSkin: .72, skinTexture: .78, brightenSkin: .10, darkCircles: .38, eyeBrilliance: .24, smileLines: .28 }) },
-  { id: "beauty-natural", name: "Doux", category: "beauty", ...B("none", { smoothSkin: .68, skinTexture: .70, brightenSkin: .10, darkCircles: .35, eyeBrilliance: .28, smileLines: .25 }) },
-  { id: "beauty-foundation", name: "Fond de teint", category: "beauty", ...B("none", { smoothSkin: 1, skinTexture: 1, brightenSkin: .10, darkCircles: .62, smileLines: .55, eyeBrilliance: .20 }) },
-  { id: "beauty-porcelain", name: "Porcelaine", category: "beauty", ...B("none", { smoothSkin: 1, skinTexture: 1, brightenSkin: .18, darkCircles: .70, smileLines: .72, eyeBrilliance: .30 }) },
-  { id: "beauty-glow", name: "Glow", category: "beauty", ...B("none", { smoothSkin: .82, skinTexture: .82, brightenSkin: .60, darkCircles: .42, eyeBrilliance: .70, smileLines: .30 }) },
-  { id: "beauty-big-eyes", name: "Grands yeux", category: "beauty", ...B("none", { smoothSkin: .62, skinTexture: .62, enlargeEyes: 1, eyeBrilliance: .78, darkCircles: .35 }) },
-  { id: "beauty-slim", name: "Visage fin", category: "beauty", ...B("none", { smoothSkin: .65, skinTexture: .68, slimFace: 1, symmetry: .25, darkCircles: .30 }) },
-  { id: "beauty-full-lips", name: "Lèvres", category: "beauty", ...B("none", { smoothSkin: .62, skinTexture: .65, enlargeLips: 1, brightenSkin: .08 }) },
-  { id: "beauty-retouch", name: "Retouche", category: "beauty", ...B("none", { smoothSkin: 1, skinTexture: 1, darkCircles: .85, eyeBrilliance: .70, smileLines: .75, brightenSkin: .16 }) },
-  { id: "beauty-symmetry", name: "Harmonie", category: "beauty", ...B("none", { smoothSkin: .70, skinTexture: .72, symmetry: 1, eyeBrilliance: .35, darkCircles: .40 }) },
+  B("beauty-none", "Naturel", { smoothSkin: .72, skinTexture: .78, brightenSkin: .10, darkCircles: .38, eyeBrilliance: .24, smileLines: .28 }, "Retouche naturelle active par défaut."),
+  B("beauty-natural", "Doux", { smoothSkin: .68, skinTexture: .70, brightenSkin: .10, darkCircles: .35, eyeBrilliance: .28, smileLines: .25 }, "Adoucissement léger et naturel du visage."),
+  B("beauty-foundation", "Fond de teint", { smoothSkin: 1, skinTexture: 1, brightenSkin: .10, darkCircles: .62, smileLines: .55, eyeBrilliance: .20 }, "Peau plus uniforme avec correction renforcée."),
+  B("beauty-porcelain", "Porcelaine", { smoothSkin: 1, skinTexture: 1, brightenSkin: .18, darkCircles: .70, smileLines: .72, eyeBrilliance: .30 }, "Peau lissée avec rendu porcelaine."),
+  B("beauty-glow", "Glow", { smoothSkin: .82, skinTexture: .82, brightenSkin: .60, darkCircles: .42, eyeBrilliance: .70, smileLines: .30 }, "Éclat renforcé et regard lumineux."),
+  B("beauty-big-eyes", "Grands yeux", { smoothSkin: .62, skinTexture: .62, enlargeEyes: 1, eyeBrilliance: .78, darkCircles: .35 }, "Accentuation du regard et des yeux."),
+  B("beauty-slim", "Visage fin", { smoothSkin: .65, skinTexture: .68, slimFace: 1, symmetry: .25, darkCircles: .30 }, "Sculpt du visage avec contour plus fin."),
+  B("beauty-full-lips", "Lèvres", { smoothSkin: .62, skinTexture: .65, enlargeLips: 1, brightenSkin: .08 }, "Accentuation des lèvres."),
+  B("beauty-retouch", "Retouche", { smoothSkin: 1, skinTexture: 1, darkCircles: .85, eyeBrilliance: .70, smileLines: .75, brightenSkin: .16 }, "Retouche complète du visage."),
+  B("beauty-symmetry", "Harmonie", { smoothSkin: .70, skinTexture: .72, symmetry: 1, eyeBrilliance: .35, darkCircles: .40 }, "Harmonisation légère des traits."),
   C("effect-cat", "Chat", "cat", "Oreilles, yeux, nez et moustaches suivent le visage."),
   C("effect-bunny", "Lapin", "bunny", "Oreilles et nez de lapin suivent le mouvement de la tête."),
   C("effect-sunglasses", "Lunettes", "sunglasses", "Lunettes verrouillées sur les yeux et orientées avec la tête."),
@@ -63,3 +63,5 @@ export const CATEGORIES = [
   { id: "beauty", name: "Beauté", icon: "✨" },
   { id: "creative", name: "Effets", icon: "🎭" },
 ];
+
+export const EFFECTS = AR_EFFECTS;
