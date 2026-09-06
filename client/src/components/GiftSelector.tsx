@@ -12,193 +12,53 @@ export function GiftSelector({
   videoId,
   onClose,
 }: GiftSelectorProps) {
+  const [selectedGiftId, setSelectedGiftId] = useState<number | null>(null);
+  const [quantity, setQuantity] = useState(1);
+  const [message, setMessage] = useState<string | null>(null);
 
-  /**
-   * =========================================================
-   * 🎁 CADEAU SÉLECTIONNÉ
-   * =========================================================
-   *
-   * Les IDs sont maintenant des chaînes :
-   *
-   * "rose"
-   * "diamond"
-   * "lion"
-   * etc.
-   */
-
-  const [
-    selectedGiftId,
-    setSelectedGiftId,
-  ] = useState<string | null>(null);
-
-
-  /**
-   * =========================================================
-   * 🔢 QUANTITÉ
-   * =========================================================
-   */
-
-  const [
-    quantity,
-    setQuantity,
-  ] = useState(1);
-
-
-  /**
-   * =========================================================
-   * 💬 MESSAGE
-   * =========================================================
-   */
-
-  const [
-    message,
-    setMessage,
-  ] = useState<string | null>(null);
-
-
-  /**
-   * =========================================================
-   * 🎁 RÉCUPÉRER LE CATALOGUE
-   * =========================================================
-   *
-   * Le serveur récupère maintenant les cadeaux
-   * directement depuis :
-   *
-   * server/coins/gifts.ts
-   */
-
-  const {
-    data: gifts,
-    isLoading,
-    error,
-  } =
+  const { data: gifts, isLoading, error } =
     trpc.coins.getActiveGifts.useQuery();
 
+  const sendGiftMutation = trpc.coins.sendGift.useMutation();
 
-  /**
-   * =========================================================
-   * 🎁 ENVOI
-   * =========================================================
-   */
-
-  const sendGiftMutation =
-    trpc.coins.sendGift.useMutation();
-
-
-  /**
-   * =========================================================
-   * 🔎 CADEAU SÉLECTIONNÉ
-   * =========================================================
-   */
-
-  const selectedGift =
-    gifts?.find(
-      (gift) =>
-        gift.id === selectedGiftId
-    );
-
-
-  /**
-   * =========================================================
-   * 🎁 ENVOYER
-   * =========================================================
-   */
+  const selectedGift = gifts?.find((gift) => gift.id === selectedGiftId);
 
   const handleSendGift = async () => {
-
     if (!selectedGift) {
-      setMessage(
-        "Sélectionne d'abord un cadeau."
-      );
+      setMessage("Sélectionne d'abord un cadeau.");
       return;
     }
-
 
     if (!videoId) {
-      setMessage(
-        "Ce cadeau doit être envoyé depuis une vidéo."
-      );
+      setMessage("Ce cadeau doit être envoyé depuis une vidéo.");
       return;
     }
-
 
     setMessage(null);
 
-
     try {
-
-      const result =
-        await sendGiftMutation.mutateAsync({
-
-          recipientId:
-            receiverId,
-
-          /**
-           * IMPORTANT :
-           *
-           * Exemple :
-           *
-           * "rose"
-           * "diamond"
-           * "afritok-legend"
-           */
-          giftId:
-            selectedGift.id,
-
-          quantity,
-
-          context:
-            "video",
-
-          contextId:
-            String(videoId),
-
-          idempotencyKey:
-            `${Date.now()}-${Math.random()
-              .toString(36)
-              .slice(2)}`,
-        });
-
-
-      /**
-       * =====================================================
-       * 🔁 DOUBLE ENVOI
-       * =====================================================
-       */
+      const result = await sendGiftMutation.mutateAsync({
+        recipientId: receiverId,
+        giftId: String(selectedGift.id),
+        quantity,
+        context: "video",
+        contextId: String(videoId),
+        idempotencyKey: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      });
 
       if (result.duplicate) {
-
-        setMessage(
-          "Ce cadeau a déjà été envoyé."
-        );
-
+        setMessage("Ce cadeau a déjà été envoyé.");
         return;
       }
 
-
-      /**
-       * =====================================================
-       * ✅ SUCCÈS
-       * =====================================================
-       */
-
       setMessage(
-        `🎉 ${selectedGift.icon} ${selectedGift.name} envoyé ! Nouveau solde : ${result.balance.toLocaleString(
-          "fr-FR"
-        )} Coins`
+        `🎉 ${selectedGift.icon} ${selectedGift.name} envoyé ! Nouveau solde : ${result.balance.toLocaleString("fr-FR")} Coins`
       );
-
-
-      /**
-       * Fermer après succès.
-       */
 
       setTimeout(() => {
         onClose();
       }, 1200);
-
     } catch (error) {
-
       setMessage(
         error instanceof Error
           ? error.message
@@ -207,24 +67,11 @@ export function GiftSelector({
     }
   };
 
-
-  /**
-   * =========================================================
-   * ⏳ CHARGEMENT
-   * =========================================================
-   */
-
   if (isLoading) {
-
     return (
       <div className="rounded-2xl border border-white/10 bg-black p-5">
-
         <div className="flex items-center justify-between mb-5">
-
-          <h2 className="text-xl font-bold text-white">
-            🎁 Cadeaux
-          </h2>
-
+          <h2 className="text-xl font-bold text-white">🎁 Cadeaux</h2>
           <button
             type="button"
             onClick={onClose}
@@ -232,35 +79,19 @@ export function GiftSelector({
           >
             ✕
           </button>
-
         </div>
-
         <p className="text-center text-gray-400 py-8">
           Chargement des cadeaux...
         </p>
-
       </div>
     );
   }
 
-
-  /**
-   * =========================================================
-   * ❌ ERREUR
-   * =========================================================
-   */
-
   if (error) {
-
     return (
       <div className="rounded-2xl border border-white/10 bg-black p-5">
-
         <div className="flex items-center justify-between">
-
-          <h2 className="text-xl font-bold text-white">
-            🎁 Cadeaux
-          </h2>
-
+          <h2 className="text-xl font-bold text-white">🎁 Cadeaux</h2>
           <button
             type="button"
             onClick={onClose}
@@ -268,45 +99,23 @@ export function GiftSelector({
           >
             ✕
           </button>
-
         </div>
-
         <p className="text-red-400 text-sm mt-5">
           Impossible de charger les cadeaux.
         </p>
-
       </div>
     );
   }
 
-
-  /**
-   * =========================================================
-   * 🎁 INTERFACE
-   * =========================================================
-   */
-
   return (
     <div className="rounded-2xl border border-white/10 bg-black p-5">
-
-      {/* =====================================================
-          HEADER
-      ===================================================== */}
-
       <div className="flex items-center justify-between mb-5">
-
         <div>
-
-          <h2 className="text-xl font-bold text-white">
-            🎁 Envoyer un cadeau
-          </h2>
-
+          <h2 className="text-xl font-bold text-white">🎁 Envoyer un cadeau</h2>
           <p className="text-sm text-gray-400 mt-1">
             Soutiens ce créateur avec tes Coins.
           </p>
-
         </div>
-
         <button
           type="button"
           onClick={onClose}
@@ -314,36 +123,20 @@ export function GiftSelector({
         >
           ✕
         </button>
-
       </div>
 
-
-      {/* =====================================================
-          CATALOGUE
-      ===================================================== */}
-
       {gifts && gifts.length > 0 ? (
-
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-
           {gifts.map((gift) => {
-
-            const isSelected =
-              selectedGiftId === gift.id;
-
+            const isSelected = selectedGiftId === gift.id;
 
             return (
               <button
                 key={gift.id}
                 type="button"
                 onClick={() => {
-
-                  setSelectedGiftId(
-                    gift.id
-                  );
-
+                  setSelectedGiftId(gift.id);
                   setMessage(null);
-
                   setQuantity(1);
                 }}
                 className={`rounded-2xl border p-4 text-center transition ${
@@ -352,212 +145,88 @@ export function GiftSelector({
                     : "border-white/10 bg-white/5 hover:bg-white/10"
                 }`}
               >
-
-                {/* ICÔNE */}
-
-                <div className="text-4xl">
-                  {gift.icon}
-                </div>
-
-
-                {/* NOM */}
-
-                <p className="text-white font-semibold mt-2">
-                  {gift.name}
-                </p>
-
-
-                {/* PRIX */}
-
+                <div className="text-4xl">{gift.icon}</div>
+                <p className="text-white font-semibold mt-2">{gift.name}</p>
                 <p className="text-yellow-400 text-sm font-bold mt-1">
-                  🪙{" "}
-                  {gift.coins.toLocaleString(
-                    "fr-FR"
-                  )}
+                  🪙 {gift.coins.toLocaleString("fr-FR")}
                 </p>
-
               </button>
             );
           })}
-
         </div>
-
       ) : (
-
         <p className="text-center text-gray-400 py-8">
           Aucun cadeau disponible.
         </p>
-
       )}
 
-
-      {/* =====================================================
-          CADEAU SÉLECTIONNÉ
-      ===================================================== */}
-
       {selectedGift && (
-
         <div className="mt-5 rounded-xl border border-white/10 bg-white/5 p-4">
-
           <div className="flex items-center gap-3">
-
-            <div className="text-4xl">
-              {selectedGift.icon}
-            </div>
-
-
+            <div className="text-4xl">{selectedGift.icon}</div>
             <div className="flex-1">
-
-              <p className="text-white font-bold">
-                {selectedGift.name}
-              </p>
-
+              <p className="text-white font-bold">{selectedGift.name}</p>
               <p className="text-gray-400 text-sm">
-
                 Prix :
-
                 <span className="text-yellow-400 font-semibold ml-1">
-
-                  {selectedGift.coins.toLocaleString(
-                    "fr-FR"
-                  )}
-
-                  {" "}
-                  Coins
-
+                  {selectedGift.coins.toLocaleString("fr-FR")} Coins
                 </span>
-
               </p>
-
             </div>
-
           </div>
 
-
-          {/* =================================================
-              QUANTITÉ
-          ================================================= */}
-
           <div className="flex items-center justify-between mt-4">
-
-            <span className="text-gray-400">
-              Quantité
-            </span>
-
-
+            <span className="text-gray-400">Quantité</span>
             <div className="flex items-center gap-3">
-
               <button
                 type="button"
-                onClick={() =>
-                  setQuantity(
-                    Math.max(
-                      1,
-                      quantity - 1
-                    )
-                  )
-                }
+                onClick={() => setQuantity(Math.max(1, quantity - 1))}
                 className="w-9 h-9 rounded-lg bg-white/10 text-white"
               >
                 −
               </button>
-
-
               <span className="text-white font-bold min-w-[24px] text-center">
                 {quantity}
               </span>
-
-
               <button
                 type="button"
-                onClick={() =>
-                  setQuantity(
-                    Math.min(
-                      100,
-                      quantity + 1
-                    )
-                  )
-                }
+                onClick={() => setQuantity(Math.min(100, quantity + 1))}
                 className="w-9 h-9 rounded-lg bg-white/10 text-white"
               >
                 +
               </button>
-
             </div>
-
           </div>
-
-
-          {/* =================================================
-              TOTAL
-          ================================================= */}
 
           <div className="mt-4 text-center">
-
-            <span className="text-gray-400">
-              Total:{" "}
-            </span>
-
+            <span className="text-gray-400">Total: </span>
             <span className="text-yellow-400 font-bold">
-
-              {(
-                selectedGift.coins *
-                quantity
-              ).toLocaleString(
-                "fr-FR"
-              )}
-
-              {" "}
-              Coins
-
+              {(selectedGift.coins * quantity).toLocaleString("fr-FR")} Coins
             </span>
-
           </div>
-
-
-          {/* =================================================
-              ENVOYER
-          ================================================= */}
 
           <button
             type="button"
-            disabled={
-              sendGiftMutation.isPending
-            }
-            onClick={
-              handleSendGift
-            }
+            disabled={sendGiftMutation.isPending}
+            onClick={handleSendGift}
             className="w-full mt-4 rounded-xl bg-primary py-3 font-bold text-primary-foreground disabled:opacity-50"
           >
-
             {sendGiftMutation.isPending
               ? "Envoi en cours..."
               : `Envoyer ${selectedGift.icon} ${selectedGift.name}`}
-
           </button>
 
-
-          {/* =================================================
-              MESSAGE
-          ================================================= */}
-
           {message && (
-
             <p
               className={`text-sm text-center mt-3 ${
-                message.startsWith("🎉")
-                  ? "text-green-400"
-                  : "text-red-400"
+                message.startsWith("🎉") ? "text-green-400" : "text-red-400"
               }`}
             >
               {message}
             </p>
-
           )}
-
         </div>
       )}
-
     </div>
   );
 }
