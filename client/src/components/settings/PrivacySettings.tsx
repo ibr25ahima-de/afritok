@@ -2,15 +2,17 @@ import { Eye } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { useSettingsText } from "@/hooks/useSettingsText";
 
+interface PrivacySettingsState {
+  profilePublic: boolean;
+  allowMessages: boolean;
+  allowComments: boolean;
+  showFollowers: boolean;
+  showFollowing: boolean;
+}
+
 interface PrivacySettingsProps {
-  privacySettings: {
-    profilePublic: boolean;
-    allowMessages: boolean;
-    allowComments: boolean;
-    showFollowers: boolean;
-    showFollowing: boolean;
-  };
-  handlePrivacyChange: (key: string) => void;
+  privacySettings: PrivacySettingsState;
+  handlePrivacyChange: (key: keyof PrivacySettingsState) => void;
 }
 
 export default function PrivacySettings({ privacySettings, handlePrivacyChange }: PrivacySettingsProps) {
