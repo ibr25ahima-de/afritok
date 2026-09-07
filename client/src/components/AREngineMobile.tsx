@@ -5,7 +5,6 @@ import { smoothLandmarks } from "./faceUtils";
 import { applyBeautyPipeline } from "@/features/beauty/BeautyPipeline";
 import { renderFaceEffect } from "@/features/beauty/FaceEffects";
 
-// The Render build prepares these files locally. The camera never depends on a CDN at runtime.
 const WASM = "/mediapipe/wasm";
 const MODEL = "/mediapipe/face_landmarker.task";
 const DETECTION_INTERVAL_MS = 40;
@@ -53,7 +52,11 @@ function drawCover(ctx: CanvasRenderingContext2D, video: HTMLVideoElement, width
 
 function mapLandmarks(landmarks: NormalizedLandmark[], video: HTMLVideoElement, width: number, height: number, transform: CoverTransform) {
   const { scale, dx, dy } = transform;
-  return landmarks.map((p) => ({ ...p, x: (p.x * video.videoWidth * scale + dx) / width, y: (p.y * video.videoHeight * scale + dy) / height }));
+  return landmarks.map((p) => ({
+    ...p,
+    x: (p.x * video.videoWidth * scale + dx) / width,
+    y: (p.y * video.videoHeight * scale + dy) / height,
+  }));
 }
 
 export const AREngineMobile: React.FC<{
@@ -151,6 +154,9 @@ export const AREngineMobile: React.FC<{
     const ctx = canvas.getContext("2d", { alpha: false });
     if (!ctx) { raf.current = requestAnimationFrame(render); return; }
     const width = canvas.width, height = canvas.height, now = performance.now(), effect = activeEffectRef.current;
+
+    // The canvas is the single visible/recordable AR surface. Mirror the user camera
+    // like TikTok and use the exact same transform for the detected landmarks.
     ctx.save();
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = "source-over";
@@ -160,17 +166,40 @@ export const AREngineMobile: React.FC<{
 
     const landmarks = detect(video, now);
     if (landmarks?.length) {
-      mappedLandmarks.current = mapLandmarks(landmarks, video, width, height, transform);
-      const current = mappedLandmarks.current;
-      if (current) {
-        try { applyBeautyPipeline(ctx, current, width, height, effect?.beautyConfig ?? BASE_BEAUTY_CONFIG); }
-        catch (error) { console.error("[AREngineMobile] beauty pipeline", error); }
-        if (effect) {
-          try { renderFaceEffect(ctx, current, width, height, effect); }
-          catch (error) { console.error("[AREngineMobile] selected AR effect", error); }
-        }
+      const current = mapLandmarks(landmarks, video, width, height, transform);
+      // getImageData/recording always sees the same coordinate system as the preview.
+      current.forEach((p) => { p.x = 1 - p.x; });
+      mappedLandmarks.current = current;
+      ctx.save();
+      ctx.translate(width, 0);
+      ctx.scale(-1, 1);
+      // Redraw the camera mirrored before applying the effect so preview and recording
+      // are identical and the overlay cannot disappear behind the hidden <video>.
+      ctx.clearRect(0, 0, width, height);
+      ctx.filter = grade(effect);
+      drawCover(ctx, video, width, height);
+      ctx.filter = "none";
+      if (effect) {
+        try { renderFaceEffect(ctx, current, width, height, effect); }
+        catch (error) { console.error("[AREngineMobile] selected AR effect", error); }
       }
+      ctx.restore();
+
+      // Beauty processing stays on the final visible surface and therefore is also
+      // included in photo/video capture.
+      try { applyBeautyPipeline(ctx, current, width, height, effect?.beautyConfig ?? BASE_BEAUTY_CONFIG); }
+      catch (error) { console.error("[AREngineMobile] beauty pipeline", error); }
+    } else {
+      // Keep the live camera visible even while the detector is warming up or briefly
+      // loses the face.
+      ctx.save();
+      ctx.translate(width, 0);
+      ctx.scale(-1, 1);
+      ctx.filter = grade(effect);
+      drawCover(ctx, video, width, height);
+      ctx.restore();
     }
+
     raf.current = requestAnimationFrame(render);
   }, [videoRef, detect]);
 
