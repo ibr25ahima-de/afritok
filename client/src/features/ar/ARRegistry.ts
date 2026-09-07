@@ -36,8 +36,24 @@ function svgThumb(renderer: EffectRenderer, beauty = false): string {
 const B = (id: string, name: string, config: BeautyConfig, description: string) => ({ id, name, category: "beauty" as const, renderer: "none" as const, beautyConfig: config, thumbnail: svgThumb("none", true), description });
 const C = (id: string, name: string, renderer: EffectRenderer, description: string) => ({ id, name, category: "creative" as const, renderer, thumbnail: svgThumb(renderer), description });
 
+// "Naturel" is a true no-op. It must never apply a beauty retouch when the
+// user has not explicitly selected a beauty effect.
+const NO_BEAUTY: BeautyConfig = {
+  smoothSkin: 0,
+  skinTexture: 0,
+  brightenSkin: 0,
+  darkCircles: 0,
+  eyeBrilliance: 0,
+  smileLines: 0,
+  enlargeEyes: 0,
+  slimFace: 0,
+  whitenTeeth: 0,
+  enlargeLips: 0,
+  symmetry: 0,
+};
+
 export const AR_EFFECTS: AREffect[] = [
-  B("beauty-none", "Naturel", { smoothSkin: .72, skinTexture: .78, brightenSkin: .10, darkCircles: .38, eyeBrilliance: .24, smileLines: .28 }, "Retouche naturelle active par défaut."),
+  B("beauty-none", "Naturel", NO_BEAUTY, "Aucune retouche : rendu caméra naturel."),
   B("beauty-natural", "Doux", { smoothSkin: .68, skinTexture: .70, brightenSkin: .10, darkCircles: .35, eyeBrilliance: .28, smileLines: .25 }, "Adoucissement léger et naturel du visage."),
   B("beauty-foundation", "Fond de teint", { smoothSkin: 1, skinTexture: 1, brightenSkin: .10, darkCircles: .62, smileLines: .55, eyeBrilliance: .20 }, "Peau plus uniforme avec correction renforcée."),
   B("beauty-porcelain", "Porcelaine", { smoothSkin: 1, skinTexture: 1, brightenSkin: .18, darkCircles: .70, smileLines: .72, eyeBrilliance: .30 }, "Peau lissée avec rendu porcelaine."),
