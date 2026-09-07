@@ -4,7 +4,9 @@ import { toast } from 'sonner';
 import { AudioPlayer } from '@/services/audioService';
 import { EffectsPanel } from './EffectsPanel';
 import type { AREffect } from '@/features/ar/ARRegistry';
+import { AR_EFFECTS } from '@/features/ar/ARRegistry';
 import { AREngineMobile as AREngine } from './AREngineMobile';
+import { renderEffectPreviews, type EffectPreviewFrame } from '@/features/ar/preview/EffectPreviewRenderer';
 import { LiveEntryButton } from '@/features/live/LiveEntryButton';
 
 interface CameraRecorderProps { onVideoRecorded?: (blob: Blob, duration: number) => void; onPhotoTaken?: (blob: Blob) => void; onClose?: () => void; onOpenMusic?: () => void; onOpenEffects?: () => void; onPublish?: () => void; selectedMusic?: { name: string; url: string } | null; }
@@ -21,13 +23,37 @@ export const CameraRecorder:React.FC<CameraRecorderProps>=({onVideoRecorded,onPh
  const audioContextRef=useRef<AudioContext|null>(null);
  const musicElementRef=useRef<HTMLAudioElement|null>(null);
  const recordingStartedAtRef=useRef(0);
- const [isRecording,setIsRecording]=useState(false),[facingMode,setFacingMode]=useState<"user"|"environment">("user"),[selectedDuration,setSelectedDuration]=useState('15 s'),[recordingTime,setRecordingTime]=useState(0),[flashEnabled,setFlashEnabled]=useState(false),[activeSpeed,setActiveSpeed]=useState('1x'),[timerValue,setTimerValue]=useState(0),[timerCountdown,setTimerCountdown]=useState(0),[isTimerActive,setIsTimerActive]=useState(false),[activeAREffect,setActiveAREffect]=useState<AREffect|null>(null),[showAREffectsPanel,setShowAREffectsPanel]=useState(false),[arStatus,setArStatus]=useState<ARStatus>('loading');
+ const latestFrameRef=useRef<EffectPreviewFrame|null>(null);
+ const [isRecording,setIsRecording]=useState(false),[facingMode,setFacingMode]=useState<"user"|"environment">("user"),[selectedDuration,setSelectedDuration]=useState('15 s'),[recordingTime,setRecordingTime]=useState(0),[flashEnabled,setFlashEnabled]=useState(false),[activeSpeed,setActiveSpeed]=useState('1x'),[timerValue,setTimerValue]=useState(0),[timerCountdown,setTimerCountdown]=useState(0),[isTimerActive,setIsTimerActive]=useState(false),[activeAREffect,setActiveAREffect]=useState<AREffect|null>(null),[showAREffectsPanel,setShowAREffectsPanel]=useState(true),[arStatus,setArStatus]=useState<ARStatus>('loading');
+ const [previewImages,setPreviewImages]=useState<Record<string,string>>({});
+ const [previewsLoading,setPreviewsLoading]=useState(false);
  const toggleFlash=async()=>{const n=!flashEnabled;setFlashEnabled(n);const t=streamRef.current?.getVideoTracks()[0];if(!t)return;const c=t.getCapabilities() as any;if(c.torch)try{await t.applyConstraints({advanced:[{torch:n}]} as any)}catch(e){console.error(e)}else toast.info("Le flash n'est pas supporté sur cet appareil")};
  const handleAREffectSelect=(e:AREffect|null)=>{setActiveAREffect(e);setShowAREffectsPanel(true);if(e)toast.info(`Effet AR "${e.name}" sélectionné — détection du visage en cours`) };
  const handleARStatus=useCallback((status:ARStatus,error?:unknown)=>{setArStatus(status);if(status==='error')toast.error("Les effets AR ne peuvent pas démarrer sur cet appareil");if(error)console.error('[CameraRecorder] AR status',status,error)},[]);
+ const handleTrackingFrame=useCallback((frame:EffectPreviewFrame)=>{latestFrameRef.current=frame},[]);
  const startTimer=useCallback((d:number):Promise<void>=>new Promise(r=>{setIsTimerActive(true);setTimerCountdown(d);let n=d;const i=setInterval(()=>{n--;setTimerCountdown(n);if(n<=0){clearInterval(i);setIsTimerActive(false);r()}},1000)}),[]);
  useEffect(()=>{if(!selectedMusic){musicPlayerRef.current?.stop();return}musicPlayerRef.current=new AudioPlayer(selectedMusic.url);return()=>musicPlayerRef.current?.stop()},[selectedMusic]);
- const startCamera=useCallback(async()=>{try{streamRef.current?.getTracks().forEach(t=>t.stop());const s=await navigator.mediaDevices.getUserMedia({video:{facingMode,width:{ideal:1280},height:{ideal:720}},audio:true});streamRef.current=s;if(videoRef.current){videoRef.current.srcObject=s;await videoRef.current.play().catch(()=>{})}}catch{toast.error('Erreur caméra') }},[facingMode]);
+ useEffect(()=>{
+   if(!showAREffectsPanel) return;
+   let cancelled=false;
+   let attempts=0;
+   let timer=0;
+   setPreviewsLoading(true);
+   const generate=()=>{
+     const frame=latestFrameRef.current;
+     if(!frame && attempts<20){
+       attempts+=1;
+       timer=window.setTimeout(generate,100);
+       return;
+     }
+     if(!frame || cancelled){setPreviewsLoading(false);return;}
+     const previews=renderEffectPreviews({ ...frame, width: 144, height: 256 }, AR_EFFECTS);
+     if(!cancelled){setPreviewImages(previews);setPreviewsLoading(false);}
+   };
+   generate();
+   return()=>{cancelled=true;window.clearTimeout(timer);setPreviewsLoading(false)};
+ },[showAREffectsPanel]);
+ const startCamera=useCallback(async()=>{try{latestFrameRef.current=null;setPreviewImages({});streamRef.current?.getTracks().forEach(t=>t.stop());const s=await navigator.mediaDevices.getUserMedia({video:{facingMode,width:{ideal:1280},height:{ideal:720}},audio:true});streamRef.current=s;if(videoRef.current){videoRef.current.srcObject=s;await videoRef.current.play().catch(()=>{})}}catch{toast.error('Erreur caméra') }},[facingMode]);
  useEffect(()=>{startCamera();return()=>streamRef.current?.getTracks().forEach(t=>t.stop())},[startCamera]);
  const takeProcessedPhoto=useCallback(()=>{const source=processedCanvasRef.current;if(!source||source.width<2||source.height<2){toast.error("La caméra n'est pas encore prête");return}source.toBlob(blob=>{if(blob)onPhotoTaken?.(blob)},'image/jpeg',.95)},[onPhotoTaken]);
  const stopRecording=useCallback(()=>{mediaRecorderRef.current?.stop();setIsRecording(false)},[]);
@@ -39,12 +65,12 @@ export const CameraRecorder:React.FC<CameraRecorderProps>=({onVideoRecorded,onPh
  const arLabel=arStatus==='face'?'Visage détecté • AR actif':arStatus==='ready'?'AR prêt • regardez la caméra':arStatus==='no-face'?'Visage non détecté':arStatus==='error'?'AR indisponible':'Chargement des effets…';
  return <div className="h-screen bg-black text-white relative overflow-hidden flex flex-col">
    <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover opacity-0 pointer-events-none"/>
-   <AREngine videoRef={videoRef} activeEffect={activeAREffect} isRecording={isRecording} canvasRef={processedCanvasRef} onStatusChange={handleARStatus}/>
+   <AREngine videoRef={videoRef} activeEffect={activeAREffect} isRecording={isRecording} canvasRef={processedCanvasRef} onStatusChange={handleARStatus} onTrackingFrame={handleTrackingFrame}/>
    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur text-[11px] font-semibold whitespace-nowrap">{activeAREffect?`${activeAREffect.name} • ${arLabel}`:arLabel}</div>
    {isRecording&&<div className="absolute top-0 left-0 w-full h-1.5 bg-white/20 z-30"><div className="h-full bg-yellow-400" style={{width:`${(recordingTime/(selectedDuration==='10 min'?600:selectedDuration==='60 s'?60:15))*100}%`}}/></div>}
    {isTimerActive&&<div className="absolute inset-0 flex items-center justify-center z-40 bg-black/40"><div className="text-8xl font-bold">{timerCountdown}</div></div>}
    <div className={`absolute left-0 right-0 z-20 ${showAREffectsPanel?'bottom-[280px]':'bottom-[60px]'}`}><div className="flex justify-start gap-3 overflow-x-auto px-6 pb-2 snap-x snap-mandatory scrollbar-hide" role="tablist" aria-label="Choisir le type et la durée" style={{scrollbarWidth:'none'}}>{['PHOTO','15 s','60 s','10 min'].map(d=><button key={d} role="tab" aria-selected={selectedDuration===d} onClick={()=>setSelectedDuration(d)} className={`shrink-0 min-w-[88px] snap-center rounded-full border px-4 py-2 text-sm font-semibold transition-colors ${selectedDuration===d?'border-yellow-400 bg-yellow-400 text-black':'border-white/40 bg-black/50 text-white'}`}>{d==='PHOTO'?'Photo':`Vidéo ${d}`}</button>)}</div><div className="flex justify-center mt-3"><div className="w-20 h-20 rounded-full border-[5px] border-white p-1.5"><button onClick={handleCapture} className="w-full h-full bg-red-500 rounded-full"/></div></div></div>
-   {showAREffectsPanel&&<div className="absolute bottom-[50px] left-0 right-0 z-40"><EffectsPanel selectedEffect={activeAREffect} onSelectEffect={handleAREffectSelect}/></div>}
+   {showAREffectsPanel&&<div className="absolute bottom-[50px] left-0 right-0 z-40"><EffectsPanel selectedEffect={activeAREffect} onSelectEffect={handleAREffectSelect} previewImages={previewImages} previewsLoading={previewsLoading}/></div>}
    <div className="absolute bottom-0 left-0 right-0 z-30 bg-black flex items-center px-4 h-[50px]"><div className="w-9 h-9 rounded-lg bg-gradient-to-br from-yellow-500 via-red-500 to-purple-600"/><button onClick={()=>setShowAREffectsPanel(v=>!v)} className="flex-1 mx-4 py-2.5 rounded-full font-bold"><Palette size={16}/>Effets</button><div className="flex gap-3"><LiveEntryButton className="px-3 py-2 text-sm"/><button onClick={()=>onPublish?.()}>PUBLIER</button><button onClick={()=>onOpenMusic?.()}>CRÉER</button></div></div>
  </div>;
 };

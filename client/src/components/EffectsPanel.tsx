@@ -4,12 +4,14 @@ import { AR_EFFECTS, CATEGORIES, type AREffect } from "@/features/ar/ARRegistry"
 interface EffectsPanelProps {
   selectedEffect: AREffect | null;
   onSelectEffect: (effect: AREffect | null) => void;
+  previewImages?: Record<string, string>;
+  previewsLoading?: boolean;
 }
 
 export { AR_EFFECTS, CATEGORIES } from "@/features/ar/ARRegistry";
 export type { AREffect } from "@/features/ar/ARRegistry";
 
-export const EffectsPanel: React.FC<EffectsPanelProps> = ({ selectedEffect, onSelectEffect }) => {
+export const EffectsPanel: React.FC<EffectsPanelProps> = ({ selectedEffect, onSelectEffect, previewImages = {}, previewsLoading = false }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const selectedId = selectedEffect?.id ?? "beauty-none";
 
@@ -46,7 +48,7 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({ selectedEffect, onSe
                 title={effect.description}
               >
                 <div className={`w-[64px] h-[64px] rounded-full overflow-hidden border-[3px] bg-black ${selected ? "border-white shadow-[0_0_0_2px_rgba(255,255,255,0.25)]" : "border-white/25"}`}>
-                  <img src={effect.thumbnail} alt={effect.name} className="w-full h-full object-cover" draggable={false} />
+                  <img src={previewImages[effect.id] || effect.thumbnail} alt={effect.name} className={`w-full h-full object-cover transition-opacity ${previewsLoading && !previewImages[effect.id] ? "opacity-60" : "opacity-100"}`} draggable={false} />
                 </div>
                 <span className={`text-[10px] leading-3 font-semibold truncate max-w-[72px] ${selected ? "text-white" : "text-white/75"}`}>{effect.name}</span>
               </button>

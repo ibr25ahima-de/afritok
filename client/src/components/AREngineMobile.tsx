@@ -72,7 +72,8 @@ export const AREngineMobile: React.FC<{
   isRecording?: boolean;
   canvasRef?: React.RefObject<HTMLCanvasElement | null>;
   onStatusChange?: (status: ARStatus, error?: ARError) => void;
-}> = ({ videoRef, activeEffect, canvasRef: externalCanvasRef, onStatusChange }) => {
+  onTrackingFrame?: (frame: { video: HTMLVideoElement; landmarks: NormalizedLandmark[]; width: number; height: number }) => void;
+}> = ({ videoRef, activeEffect, canvasRef: externalCanvasRef, onStatusChange, onTrackingFrame }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const detector = useRef<FaceLandmarker | null>(null);
   const previousLandmarks = useRef<NormalizedLandmark[] | null>(null);
@@ -188,11 +189,12 @@ export const AREngineMobile: React.FC<{
         try { applyBeautyPipeline(ctx, current, width, height, beautyConfig); }
         catch (error) { console.error("[AREngineMobile] beauty pipeline", error); }
       }
+      onTrackingFrame?.({ video, landmarks: current, width, height });
     }
     ctx.restore();
 
     raf.current = requestAnimationFrame(render);
-  }, [videoRef, detect]);
+  }, [videoRef, detect, onTrackingFrame]);
 
   useEffect(() => { raf.current = requestAnimationFrame(render); return () => { if (raf.current !== null) cancelAnimationFrame(raf.current); }; }, [render]);
   return <canvas ref={setCanvas} className="absolute inset-0 w-full h-full pointer-events-none z-20" />;
