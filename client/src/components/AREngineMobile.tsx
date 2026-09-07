@@ -155,50 +155,28 @@ export const AREngineMobile: React.FC<{
     if (!ctx) { raf.current = requestAnimationFrame(render); return; }
     const width = canvas.width, height = canvas.height, now = performance.now(), effect = activeEffectRef.current;
 
-    // The canvas is the single visible/recordable AR surface. Mirror the user camera
-    // like TikTok and use the exact same transform for the detected landmarks.
+    // One visible/recordable surface: mirror the user camera like TikTok and keep
+    // that transform active for the camera, landmarks, effect and beauty rendering.
     ctx.save();
-    ctx.globalAlpha = 1;
-    ctx.globalCompositeOperation = "source-over";
+    ctx.clearRect(0, 0, width, height);
+    ctx.translate(width, 0);
+    ctx.scale(-1, 1);
     ctx.filter = grade(effect);
     const transform = drawCover(ctx, video, width, height);
-    ctx.restore();
+    ctx.filter = "none";
 
     const landmarks = detect(video, now);
     if (landmarks?.length) {
       const current = mapLandmarks(landmarks, video, width, height, transform);
-      // getImageData/recording always sees the same coordinate system as the preview.
-      current.forEach((p) => { p.x = 1 - p.x; });
       mappedLandmarks.current = current;
-      ctx.save();
-      ctx.translate(width, 0);
-      ctx.scale(-1, 1);
-      // Redraw the camera mirrored before applying the effect so preview and recording
-      // are identical and the overlay cannot disappear behind the hidden <video>.
-      ctx.clearRect(0, 0, width, height);
-      ctx.filter = grade(effect);
-      drawCover(ctx, video, width, height);
-      ctx.filter = "none";
       if (effect) {
         try { renderFaceEffect(ctx, current, width, height, effect); }
         catch (error) { console.error("[AREngineMobile] selected AR effect", error); }
       }
-      ctx.restore();
-
-      // Beauty processing stays on the final visible surface and therefore is also
-      // included in photo/video capture.
       try { applyBeautyPipeline(ctx, current, width, height, effect?.beautyConfig ?? BASE_BEAUTY_CONFIG); }
       catch (error) { console.error("[AREngineMobile] beauty pipeline", error); }
-    } else {
-      // Keep the live camera visible even while the detector is warming up or briefly
-      // loses the face.
-      ctx.save();
-      ctx.translate(width, 0);
-      ctx.scale(-1, 1);
-      ctx.filter = grade(effect);
-      drawCover(ctx, video, width, height);
-      ctx.restore();
     }
+    ctx.restore();
 
     raf.current = requestAnimationFrame(render);
   }, [videoRef, detect]);
