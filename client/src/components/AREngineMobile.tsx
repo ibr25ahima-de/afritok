@@ -11,13 +11,20 @@ const DETECTION_INTERVAL_MS = 40;
 const LANDMARK_SMOOTHING = 0.72;
 const LOST_FACE_TIMEOUT_MS = 350;
 
+// No beauty processing is allowed unless the user explicitly selects a beauty
+// effect. This fallback is intentionally a complete no-op.
 const BASE_BEAUTY_CONFIG = {
-  smoothSkin: 0.72,
-  skinTexture: 0.78,
-  brightenSkin: 0.10,
-  darkCircles: 0.38,
-  eyeBrilliance: 0.24,
-  smileLines: 0.28,
+  smoothSkin: 0,
+  skinTexture: 0,
+  brightenSkin: 0,
+  darkCircles: 0,
+  eyeBrilliance: 0,
+  smileLines: 0,
+  enlargeEyes: 0,
+  slimFace: 0,
+  whitenTeeth: 0,
+  enlargeLips: 0,
+  symmetry: 0,
 };
 
 type ARStatus = "loading" | "ready" | "face" | "no-face" | "error";
@@ -173,8 +180,14 @@ export const AREngineMobile: React.FC<{
         try { renderFaceEffect(ctx, current, width, height, effect); }
         catch (error) { console.error("[AREngineMobile] selected AR effect", error); }
       }
-      try { applyBeautyPipeline(ctx, current, width, height, effect?.beautyConfig ?? BASE_BEAUTY_CONFIG); }
-      catch (error) { console.error("[AREngineMobile] beauty pipeline", error); }
+
+      // Beauty is opt-in. Creative effects do not inherit the default beauty
+      // retouch, and Natural (all-zero config) is a true no-op.
+      const beautyConfig = effect?.beautyConfig;
+      if (beautyConfig) {
+        try { applyBeautyPipeline(ctx, current, width, height, beautyConfig); }
+        catch (error) { console.error("[AREngineMobile] beauty pipeline", error); }
+      }
     }
     ctx.restore();
 
