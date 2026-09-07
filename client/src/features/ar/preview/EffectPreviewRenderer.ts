@@ -19,6 +19,13 @@ function drawCover(ctx: CanvasRenderingContext2D, video: HTMLVideoElement, width
   ctx.drawImage(video, dx, dy, drawWidth, drawHeight);
 }
 
+function grade(effect: AREffect) {
+  const config = effect.beautyConfig;
+  const brighten = Math.max(0, Math.min(1, config?.brightenSkin ?? 0));
+  const smooth = Math.max(0, Math.min(1, Math.max(config?.smoothSkin ?? 0, config?.skinTexture ?? 0)));
+  return `brightness(${(1 + brighten * 0.055).toFixed(3)}) contrast(${(1 - smooth * 0.018).toFixed(3)}) saturate(${(1 + brighten * 0.045).toFixed(3)})`;
+}
+
 export function renderEffectPreview(frame: EffectPreviewFrame, effect: AREffect): string | null {
   if (!frame.video.videoWidth || !frame.video.videoHeight || frame.landmarks.length === 0) return null;
   const canvas = document.createElement("canvas");
@@ -28,11 +35,15 @@ export function renderEffectPreview(frame: EffectPreviewFrame, effect: AREffect)
   if (!ctx) return null;
 
   ctx.save();
+  // Match AREngineMobile exactly: the preview is the mirrored camera surface.
+  ctx.translate(frame.width, 0);
+  ctx.scale(-1, 1);
+  ctx.filter = grade(effect);
   drawCover(ctx, frame.video, frame.width, frame.height);
-  ctx.restore();
-
-  applyBeautyPipeline(ctx, frame.landmarks, frame.width, frame.height, effect.beautyConfig);
+  ctx.filter = "none";
   renderFaceEffect(ctx, frame.landmarks, frame.width, frame.height, effect);
+  if (effect.beautyConfig) applyBeautyPipeline(ctx, frame.landmarks, frame.width, frame.height, effect.beautyConfig);
+  ctx.restore();
   return canvas.toDataURL("image/jpeg", 0.78);
 }
 
