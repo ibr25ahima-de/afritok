@@ -43,27 +43,23 @@ export default function Discover() {
         )}
 
         {users
-          .filter(
-            (user) => user.id !== currentUser?.id
-          )
+          .filter((user) => user.id !== currentUser?.id)
           .map((user) => (
             <div
               key={user.id}
               onClick={() => (window.location.href = `/profile/${user.id}`)}
               className="flex items-center justify-between bg-gray-900 rounded-xl p-4 cursor-pointer hover:bg-gray-800 transition"
             >
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-red-500 flex items-center justify-center">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-12 h-12 rounded-full bg-red-500 flex items-center justify-center shrink-0">
                   <User size={22} />
                 </div>
 
-                <div>
-                  <p className="font-semibold">
+                <div className="min-w-0">
+                  {/* Confidentialité : le numéro de téléphone ne doit jamais
+                      être affiché dans la liste des amis/utilisateurs. */}
+                  <p className="font-semibold truncate">
                     {user.name || `Utilisateur ${user.id}`}
-                  </p>
-
-                  <p className="text-sm text-gray-400">
-                    {user.phone}
                   </p>
                 </div>
               </div>
@@ -76,7 +72,7 @@ export default function Discover() {
                     userId: user.id,
                   });
                 }}
-                className={`px-4 py-2 rounded-lg flex items-center gap-2 ${
+                className={`px-4 py-2 rounded-lg flex items-center gap-2 shrink-0 ${
                   followingUsers.includes(user.id)
                     ? "bg-gray-700"
                     : "bg-red-500"
