@@ -3,8 +3,11 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { videos } from "../../drizzle/schema";
+import { getLiveSessionsManager } from "../live-sessions";
 import { getUserCoins, getCoinBalance, getCoinTransactions } from "./coin-service";
 import { getActiveGifts, sendGift } from "./gifts-service";
+
+const liveSessionsManager = getLiveSessionsManager();
 
 export const coinsRouter = router({
   getWallet: protectedProcedure.query(async ({ ctx }) => {
@@ -60,7 +63,7 @@ export const coinsRouter = router({
     return gifts.map((gift) => ({
       id: gift.id,
       name: gift.name,
-      icon: gift.icon,
+      icon: gift.iconUrl,
       coins: Number(gift.price),
       isActive: gift.isActive,
     }));
@@ -76,12 +79,14 @@ export const coinsRouter = router({
       idempotencyKey: z.string().trim().min(16).max(150),
     }))
     .mutation(async ({ ctx, input }) => {
-      const numericContextId = Number(input.contextId);
-      if (!Number.isSafeInteger(numericContextId) || numericContextId <= 0) {
-        throw new Error("Contexte de cadeau invalide.");
-      }
+      if (!input.idempotencyKey.trim()) throw new Error("Clé d'idempotence invalide.");
 
       if (input.context === "video") {
+        const numericContextId = Number(input.contextId);
+        if (!Number.isSafeInteger(numericContextId) || numericContextId <= 0) {
+          throw new Error("Contexte de cadeau invalide.");
+        }
+
         const video = await db
           .select({ userId: videos.userId })
           .from(videos)
@@ -91,6 +96,38 @@ export const coinsRouter = router({
         if (!video[0] || video[0].userId !== input.recipientId) {
           throw new Error("Le destinataire ne correspond pas au créateur de cette vidéo.");
         }
+
+        const result = await sendGift(
+          ctx.user.id,
+          input.recipientId,
+          input.giftId,
+          input.quantity,
+          numericContextId,
+          null,
+          input.idempotencyKey
+        );
+        const balance = await getCoinBalance(ctx.user.id);
+        return { ...result, balance };
+      }
+
+      const session = liveSessionsManager.getSession(input.contextId);
+      if (!session) throw new Error("Live introuvable ou terminé.");
+      if (!session.isPublic && !session.participants.has(ctx.user.id)) {
+        throw new Error("Accès au Live refusé.");
+      }
+      if (!session.participants.has(ctx.user.id)) {
+        throw new Error("Tu dois rejoindre le Live avant d'envoyer un cadeau.");
+      }
+
+      const recipient = session.participants.get(input.recipientId);
+      if (!recipient) throw new Error("Le destinataire n'est pas dans ce Live.");
+      if (recipient.role === "viewer") {
+        throw new Error("Seuls les participants sur scène peuvent recevoir un cadeau Live.");
+      }
+
+      const numericLiveId = Number(input.contextId);
+      if (!Number.isSafeInteger(numericLiveId) || numericLiveId <= 0) {
+        throw new Error("Identifiant Live invalide.");
       }
 
       const result = await sendGift(
@@ -98,11 +135,10 @@ export const coinsRouter = router({
         input.recipientId,
         input.giftId,
         input.quantity,
-        input.context === "video" ? numericContextId : null,
-        input.context === "live" ? numericContextId : null,
+        null,
+        numericLiveId,
         input.idempotencyKey
       );
-
       const balance = await getCoinBalance(ctx.user.id);
       return { ...result, balance };
     }),
