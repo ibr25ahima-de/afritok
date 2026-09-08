@@ -13,30 +13,25 @@ import { db } from "../db";
  * Gestion sécurisée du portefeuille de coins.
  *
  * Règles importantes :
- *
  * - Le solde est toujours vérifié côté serveur.
  * - Le client ne peut jamais définir directement son solde.
  * - Chaque mouvement est enregistré dans coin_transactions.
- * - Les montants sont manipulés comme des chaînes NUMERIC
- *   côté PostgreSQL pour éviter les erreurs de précision.
+ * - Les opérations sensibles sont atomiques et protégées
+ *   contre les courses concurrentes.
  */
 
-
-/**
- * =========================================================
- * 🔎 OBTENIR LE PORTEFEUILLE
- * =========================================================
- */
 export async function getWallet(userId: number) {
+  if (!Number.isInteger(userId) || userId <= 0) {
+    throw new Error("Invalid user id");
+  }
+
   const result = await db
     .select()
     .from(userCoins)
     .where(eq(userCoins.userId, userId))
     .limit(1);
 
-  if (result.length > 0) {
-    return result[0];
-  }
+  if (result.length > 0) return result[0];
 
   const created = await db
     .insert(userCoins)
@@ -46,114 +41,160 @@ export async function getWallet(userId: number) {
       totalPurchased: "0",
       totalSpent: "0",
     })
+    .onConflictDoNothing({ target: userCoins.userId })
     .returning();
 
-  return created[0];
+  if (created[0]) return created[0];
+
+  const existing = await db
+    .select()
+    .from(userCoins)
+    .where(eq(userCoins.userId, userId))
+    .limit(1);
+
+  if (!existing[0]) throw new Error("Wallet not found");
+  return existing[0];
 }
 
-
-/**
- * =========================================================
- * 💰 OBTENIR UNIQUEMENT LE SOLDE
- * =========================================================
- */
 export async function getBalance(userId: number): Promise<string> {
   const wallet = await getWallet(userId);
-
   return wallet.balance;
 }
 
-
-/**
- * =========================================================
- * 🆕 CRÉER UN PORTEFEUILLE SI NÉCESSAIRE
- * =========================================================
- */
 export async function ensureWallet(userId: number) {
   return getWallet(userId);
 }
 
-
 /**
- * =========================================================
- * ➕ AJOUTER DES COINS
- * =========================================================
- *
- * Utilisé notamment après une recharge validée.
- *
- * ATTENTION :
- * Cette fonction ne doit être appelée qu'après validation
- * réelle du paiement par le serveur.
+ * Ajoute des Coins uniquement depuis une opération serveur
+ * déjà autorisée (paiement confirmé, bonus ou remboursement).
+ * Une referenceId est traitée comme idempotency key lorsqu'elle
+ * est fournie afin d'empêcher un double crédit.
  */
 export async function creditCoins(
   userId: number,
   amount: string,
-  type:
-    | "purchase"
-    | "bonus"
-    | "refund",
+  type: "purchase" | "bonus" | "refund",
   referenceId?: string,
   description?: string
 ) {
-  if (!amount || Number(amount) <= 0) {
+  if (!Number.isInteger(userId) || userId <= 0) {
+    throw new Error("Invalid user id");
+  }
+
+  const numericAmount = Number(amount);
+  if (
+    !amount ||
+    !Number.isFinite(numericAmount) ||
+    numericAmount <= 0 ||
+    numericAmount > 100000000
+  ) {
     throw new Error("Invalid coin amount");
   }
 
-  const wallet = await ensureWallet(userId);
+  const normalizedReference = referenceId?.trim();
+  if (normalizedReference && normalizedReference.length > 100) {
+    throw new Error("Invalid transaction reference");
+  }
 
-  const balanceBefore = wallet.balance;
+  return db.transaction(async (tx) => {
+    if (normalizedReference) {
+      const existing = await tx
+        .select()
+        .from(coinTransactions)
+        .where(eq(coinTransactions.referenceId, normalizedReference))
+        .limit(1);
 
-  const balanceAfter = await db.transaction(async (tx) => {
+      if (existing[0]) {
+        if (
+          existing[0].userId !== userId ||
+          existing[0].type !== type ||
+          Number(existing[0].amount) !== numericAmount
+        ) {
+          throw new Error("Transaction reference already used");
+        }
+
+        return {
+          success: true,
+          duplicate: true,
+          balance: existing[0].balanceAfter,
+          transaction: existing[0],
+        };
+      }
+    }
+
+    await tx
+      .insert(userCoins)
+      .values({
+        userId,
+        balance: "0",
+        totalPurchased: "0",
+        totalSpent: "0",
+      })
+      .onConflictDoNothing({ target: userCoins.userId });
+
+    const walletRows = await tx
+      .select()
+      .from(userCoins)
+      .where(eq(userCoins.userId, userId))
+      .for("update")
+      .limit(1);
+
+    const wallet = walletRows[0];
+    if (!wallet) throw new Error("Wallet not found");
+
+    const balanceBefore = Number(wallet.balance);
+    if (!Number.isFinite(balanceBefore) || balanceBefore < 0) {
+      throw new Error("Invalid wallet balance");
+    }
+
+    const balanceAfter = balanceBefore + numericAmount;
+    const totalPurchased = Number(wallet.totalPurchased ?? 0);
+
+    if (!Number.isFinite(totalPurchased) || totalPurchased < 0) {
+      throw new Error("Invalid wallet totals");
+    }
+
     const updated = await tx
       .update(userCoins)
       .set({
-        balance: sql`${userCoins.balance} + ${amount}`,
+        balance: balanceAfter.toFixed(2),
         totalPurchased:
           type === "purchase"
-            ? sql`${userCoins.totalPurchased} + ${amount}`
-            : userCoins.totalPurchased,
+            ? (totalPurchased + numericAmount).toFixed(2)
+            : wallet.totalPurchased,
         updatedAt: new Date().toISOString(),
       })
       .where(eq(userCoins.userId, userId))
-      .returning({
-        balance: userCoins.balance,
-      });
+      .returning({ balance: userCoins.balance });
 
-    if (updated.length === 0) {
-      throw new Error("Wallet not found");
-    }
+    if (!updated[0]) throw new Error("Wallet update failed");
 
-    const newBalance = updated[0].balance;
+    const [transaction] = await tx
+      .insert(coinTransactions)
+      .values({
+        userId,
+        type,
+        amount: numericAmount.toFixed(2),
+        balanceBefore: balanceBefore.toFixed(2),
+        balanceAfter: updated[0].balance,
+        referenceId: normalizedReference,
+        description,
+      })
+      .returning();
 
-    await tx.insert(coinTransactions).values({
-      userId,
-      type,
-      amount,
-      balanceBefore,
-      balanceAfter: newBalance,
-      referenceId,
-      description,
-    });
-
-    return newBalance;
+    return {
+      success: true,
+      duplicate: false,
+      balance: updated[0].balance,
+      transaction,
+    };
   });
-
-  return {
-    success: true,
-    balance: balanceAfter,
-  };
 }
 
-
 /**
- * =========================================================
- * ➖ DÉBITER DES COINS
- * =========================================================
- *
- * Cette fonction est utilisée pour les cadeaux.
- *
- * Le débit est effectué directement par PostgreSQL
- * uniquement si le solde est suffisant.
+ * Débit atomique : PostgreSQL refuse l'opération si le solde
+ * disponible est insuffisant, même sous requêtes concurrentes.
  */
 export async function debitCoins(
   userId: number,
@@ -162,86 +203,106 @@ export async function debitCoins(
   referenceId?: string,
   description?: string
 ) {
-  if (!amount || Number(amount) <= 0) {
+  if (!Number.isInteger(userId) || userId <= 0) {
+    throw new Error("Invalid user id");
+  }
+
+  const numericAmount = Number(amount);
+  if (
+    !amount ||
+    !Number.isFinite(numericAmount) ||
+    numericAmount <= 0 ||
+    numericAmount > 100000000
+  ) {
     throw new Error("Invalid coin amount");
   }
 
-  await ensureWallet(userId);
+  const normalizedReference = referenceId?.trim();
+  if (normalizedReference && normalizedReference.length > 100) {
+    throw new Error("Invalid transaction reference");
+  }
 
-  const result = await db.transaction(async (tx) => {
-    /**
-     * Le UPDATE contient directement :
-     *
-     * balance >= amount
-     *
-     * Cela empêche le solde de devenir négatif
-     * même si deux requêtes arrivent presque
-     * exactement au même moment.
-     */
+  return db.transaction(async (tx) => {
+    if (normalizedReference) {
+      const existing = await tx
+        .select()
+        .from(coinTransactions)
+        .where(eq(coinTransactions.referenceId, normalizedReference))
+        .limit(1);
+
+      if (existing[0]) {
+        if (
+          existing[0].userId !== userId ||
+          existing[0].type !== type ||
+          Number(existing[0].amount) !== -numericAmount
+        ) {
+          throw new Error("Transaction reference already used");
+        }
+
+        return {
+          success: true,
+          duplicate: true,
+          balance: existing[0].balanceAfter,
+          transaction: existing[0],
+        };
+      }
+    }
+
+    await tx
+      .insert(userCoins)
+      .values({
+        userId,
+        balance: "0",
+        totalPurchased: "0",
+        totalSpent: "0",
+      })
+      .onConflictDoNothing({ target: userCoins.userId });
+
     const updated = await tx
       .update(userCoins)
       .set({
-        balance: sql`${userCoins.balance} - ${amount}`,
-        totalSpent: sql`${userCoins.totalSpent} + ${amount}`,
+        balance: sql`${userCoins.balance} - ${numericAmount.toFixed(2)}`,
+        totalSpent: sql`${userCoins.totalSpent} + ${numericAmount.toFixed(2)}`,
         updatedAt: new Date().toISOString(),
       })
       .where(
-        sql`
-          ${userCoins.userId} = ${userId}
-          AND ${userCoins.balance} >= ${amount}
-        `
+        sql`${userCoins.userId} = ${userId} AND ${userCoins.balance} >= ${numericAmount.toFixed(2)}`
       )
-      .returning({
-        balance: userCoins.balance,
-      });
+      .returning({ balance: userCoins.balance });
 
-    if (updated.length === 0) {
-      throw new Error("INSUFFICIENT_BALANCE");
-    }
+    if (!updated[0]) throw new Error("INSUFFICIENT_BALANCE");
 
     const balanceAfter = updated[0].balance;
+    const balanceBefore = (Number(balanceAfter) + numericAmount).toFixed(2);
 
-    /**
-     * Pour récupérer le solde précédent,
-     * on le calcule à partir du nouveau solde.
-     */
-    const balanceBefore = (
-      Number(balanceAfter) + Number(amount)
-    ).toFixed(2);
+    const [transaction] = await tx
+      .insert(coinTransactions)
+      .values({
+        userId,
+        type,
+        amount: `-${numericAmount.toFixed(2)}`,
+        balanceBefore,
+        balanceAfter,
+        referenceId: normalizedReference,
+        description,
+      })
+      .returning();
 
-    await tx.insert(coinTransactions).values({
-      userId,
-      type,
-      amount: `-${amount}`,
-      balanceBefore,
-      balanceAfter,
-      referenceId,
-      description,
-    });
-
-    return balanceAfter;
+    return {
+      success: true,
+      duplicate: false,
+      balance: balanceAfter,
+      transaction,
+    };
   });
-
-  return {
-    success: true,
-    balance: result,
-  };
 }
 
+export async function getCoinTransactions(userId: number, limit = 50) {
+  if (!Number.isInteger(userId) || userId <= 0) {
+    throw new Error("Invalid user id");
+  }
 
-/**
- * =========================================================
- * 📋 HISTORIQUE DES TRANSACTIONS
- * =========================================================
- */
-export async function getCoinTransactions(
-  userId: number,
-  limit = 50
-) {
-  const safeLimit = Math.min(
-    Math.max(limit, 1),
-    100
-  );
+  const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 100);
 
   return db
     .select()
