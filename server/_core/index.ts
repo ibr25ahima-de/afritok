@@ -17,7 +17,7 @@ import { uploadAdvertisingMedia } from "../advertising/ad-media-upload-service";
 import { registerLiveSocket } from "../live-socket";
 import paymentWebhookRouter from "../payments/payment-webhook-router";
 import paymentTestRouter from "../payments/payment-test-router";
-import { createRateLimiter, helmetConfig, uploadRateLimiter } from "../security";
+import { createRateLimiter, csrfProtection, helmetConfig, uploadRateLimiter } from "../security";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -54,6 +54,7 @@ async function startServer() {
   // below with a raw body parser so its signature verification remains intact.
   app.use(helmetConfig);
   app.use(createRateLimiter(15 * 60 * 1000, 300));
+  app.use(csrfProtection);
 
   const corsOptions = {
     credentials: true,
