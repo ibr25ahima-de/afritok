@@ -1,5 +1,7 @@
+import { randomInt } from "node:crypto";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { SECURITY_LIMITS } from "./_core/security-constants";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router, protectedProcedure } from "./_core/trpc";
 import { sdk } from "./_core/sdk";
@@ -23,7 +25,7 @@ import { platformFinanceRouter } from "./platform-finance-router";
 import { advertisingRouter } from "./routers-advertising";
 import { subscriptionRouter } from "./subscriptions/subscription-router";
 import { applyPremiumVideoOptions } from "./subscriptions/premium-video-publishing";
-import { getUserVideos, getVideoById, getFeedVideos, getFollowerCount, getFollowingCount, isFollowing, getUserEarnings, getUserWithdrawals, getDisplaySettings, updateDisplaySettings, db, createOTP, getValidOTP, deleteOTP, getUserByPhone, upsertUser, updateUserProfile, updateUserAvatar } from "./db";
+import { getUserVideos, getVideoById, getFeedVideos, getFollowerCount, getFollowingCount, isFollowing, getUserEarnings, getUserWithdrawals, getDisplaySettings, updateDisplaySettings, db, createOTP, getLatestOTP, consumeOTPAttempt, deleteOTP, getUserByPhone, upsertUser, updateUserProfile, updateUserAvatar } from "./db";
 import { storagePut, storageDeleteVideo } from "./storage";
 import { videos, followers, users, warnings, comments, likes, favorites, shares } from "../drizzle/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
@@ -53,24 +55,34 @@ export const appRouter = router({
   auth: router({
     me: publicProcedure.query(({ ctx }) => ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => { const cookieOptions = getSessionCookieOptions(ctx.req); ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 }); return { success: true }; }),
-    requestOtp: publicProcedure.input(z.object({ phone: z.string().trim().regex(/^\+?[1-9]\d{7,19}$/) })).mutation(async ({ input }) => {
-      if (!allowOtpAttempt(otpRequestWindow, input.phone, OTP_REQUEST_LIMIT, OTP_REQUEST_COOLDOWN_MS)) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Veuillez patienter avant de demander un nouveau code." });
-      const code = String(Math.floor(100000 + Math.random() * 900000));
-      await createOTP(input.phone, code);
-      return { success: true };
+    requestOtp: publicProcedure.input(z.object({ phone: z.string().trim().min(10).max(25) })).mutation(async ({ input }) => {
+      const phone = input.phone.replace(/\D/g, "");
+      if (phone.length < 10 || phone.length > 20) throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid phone number" });
+      if (!allowOtpAttempt(otpRequestWindow, phone, OTP_REQUEST_LIMIT, OTP_REQUEST_COOLDOWN_MS)) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Veuillez patienter avant de demander un nouveau code." });
+      const latest = await getLatestOTP(phone);
+      if (latest && Date.now() - new Date(latest.createdAt).getTime() < SECURITY_LIMITS.otpWindowMs) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Veuillez patienter avant de demander un nouveau code." });
+      const code = randomInt(100000, 1000000).toString();
+      await createOTP(phone, code, SECURITY_LIMITS.otpExpiryMs / 60000);
+      return process.env.NODE_ENV === "development" ? { success: true, phone, code } : { success: true, phone };
     }),
-    verifyOtp: publicProcedure.input(z.object({ phone: z.string().trim().regex(/^\+?[1-9]\d{7,19}$/), code: z.string().regex(/^\d{6}$/) })).mutation(async ({ input, ctx }) => {
-      if (!allowOtpAttempt(otpVerifyWindow, input.phone, OTP_VERIFY_LIMIT)) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Trop de tentatives. Réessayez plus tard." });
-      const validOtp = await getValidOTP(input.phone, input.code);
-      if (!validOtp) throw new TRPCError({ code: "UNAUTHORIZED", message: "Code invalide ou expiré." });
-      let user = await getUserByPhone(input.phone);
+    verifyOtp: publicProcedure.input(z.object({ phone: z.string().trim().min(10).max(25), code: z.string().regex(/^\d{6}$/) })).mutation(async ({ input, ctx }) => {
+      const phone = input.phone.replace(/\D/g, "");
+      if (phone.length < 10 || phone.length > 20) throw new TRPCError({ code: "UNAUTHORIZED", message: "Code invalide ou expiré." });
+      if (!allowOtpAttempt(otpVerifyWindow, phone, OTP_VERIFY_LIMIT)) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Trop de tentatives. Réessayez plus tard." });
+      const otp = await getLatestOTP(phone);
+      if (!otp || new Date(otp.expiresAt).getTime() <= Date.now()) throw new TRPCError({ code: "UNAUTHORIZED", message: "Code invalide ou expiré." });
+      if (otp.attempts >= SECURITY_LIMITS.otpMaxAttempts) { await deleteOTP(otp.id); throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Trop de tentatives." }); }
+      const attempt = await consumeOTPAttempt(otp.id, SECURITY_LIMITS.otpMaxAttempts);
+      if (!attempt) { await deleteOTP(otp.id); throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Trop de tentatives." }); }
+      if (attempt.code !== input.code) { if (attempt.attempts >= SECURITY_LIMITS.otpMaxAttempts) await deleteOTP(otp.id); throw new TRPCError({ code: "UNAUTHORIZED", message: "Code invalide ou expiré." }); }
+      let user = await getUserByPhone(phone);
       let isNewUser = false;
-      if (!user) { isNewUser = true; await upsertUser({ phone: input.phone, name: "", loginMethod: "phone_otp", role: "user", lastSignedIn: new Date() }); user = await getUserByPhone(input.phone); }
+      if (!user) { isNewUser = true; await upsertUser({ phone, name: "", loginMethod: "phone_otp", role: "user", lastSignedIn: new Date() }); user = await getUserByPhone(phone); }
       if (!user) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Impossible de créer la session." });
-      await deleteOTP(validOtp.id);
-      const token = await sdk.createSessionToken(user.id, user.phone);
+      await deleteOTP(otp.id);
+      const token = await sdk.createSessionToken(user.id, user.phone, { expiresInMs: SECURITY_LIMITS.sessionMaxAgeSeconds * 1000 });
       const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.cookie(COOKIE_NAME, token, cookieOptions);
+      ctx.res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge: SECURITY_LIMITS.sessionMaxAgeSeconds * 1000 });
       return { success: true, user, isNewUser };
     }),
   }),
