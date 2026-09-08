@@ -1,14 +1,9 @@
-import {
-  router,
-  protectedProcedure,
-  publicProcedure,
-} from "../_core/trpc";
+import { router, protectedProcedure, publicProcedure } from "../_core/trpc";
 import { z } from "zod";
-import {
-  getUserCoins,
-  getCoinBalance,
-  getCoinTransactions,
-} from "./coin-service";
+import { eq } from "drizzle-orm";
+import { db } from "../db";
+import { videos } from "../../drizzle/schema";
+import { getUserCoins, getCoinBalance, getCoinTransactions } from "./coin-service";
 import { getActiveGifts, sendGift } from "./gifts-service";
 
 export const coinsRouter = router({
@@ -41,17 +36,11 @@ export const coinsRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const { purchaseCoins } = await import("./purchase-service");
-      return purchaseCoins({
-        userId: ctx.user.id,
-        packageId: input.packageId,
-        paymentReference: input.paymentReference,
-      });
+      return purchaseCoins({ userId: ctx.user.id, packageId: input.packageId, paymentReference: input.paymentReference });
     }),
 
   getTransactions: protectedProcedure
-    .input(z.object({
-      limit: z.number().int().min(1).max(100).default(50),
-    }))
+    .input(z.object({ limit: z.number().int().min(1).max(100).default(50) }))
     .query(async ({ ctx, input }) => {
       const transactions = await getCoinTransactions(ctx.user.id, input.limit);
       return transactions.map((transaction) => ({
@@ -90,6 +79,18 @@ export const coinsRouter = router({
       const numericContextId = Number(input.contextId);
       if (!Number.isSafeInteger(numericContextId) || numericContextId <= 0) {
         throw new Error("Contexte de cadeau invalide.");
+      }
+
+      if (input.context === "video") {
+        const video = await db
+          .select({ userId: videos.userId })
+          .from(videos)
+          .where(eq(videos.id, numericContextId))
+          .limit(1);
+
+        if (!video[0] || video[0].userId !== input.recipientId) {
+          throw new Error("Le destinataire ne correspond pas au créateur de cette vidéo.");
+        }
       }
 
       const result = await sendGift(
