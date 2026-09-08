@@ -6,19 +6,13 @@ import { and, eq, gt, sql } from "drizzle-orm";
 import { videos as videosTable } from "../drizzle/schema";
 import { db, getUserById, getUserVideos, getUserEarnings, createWithdrawalRecord, getFollowerCount } from "./db";
 
-/**
- * ============================================
- * MONETIZATION ROUTER (FINAL VERSION STABLE)
- * ============================================
- */
+const withdrawalInput = z.object({
+  amount: z.number().finite().positive().max(1000),
+  paymentMethod: z.enum(["MTN", "ORANGE", "WAVE"]),
+});
 
 export const monetizationRouter = router({
-  /**
-   * 📊 Dashboard utilisateur
-   */
   dashboard: protectedProcedure.query(async ({ ctx }) => {
-    if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
-
     const user = await getUserById(ctx.user.id);
     const userVideos = await getUserVideos(ctx.user.id);
 
@@ -29,183 +23,137 @@ export const monetizationRouter = router({
     };
   }),
 
-  /**
-   * 📈 Earnings list
-   */
   myEarnings: protectedProcedure.query(async ({ ctx }) => {
-    if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
-
     return getUserEarnings(ctx.user.id);
   }),
 
-  /**
-   * 💸 Withdraw money (AUTO)
-   */
   withdraw: protectedProcedure
-    .input(
-      z.object({
-        amount: z.number().min(0.1),
-        paymentMethod: z.string(),
-      })
-    )
+    .input(withdrawalInput)
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const user = await getUserById(ctx.user.id);
+      if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
 
-      await createWithdrawalRecord(
-        ctx.user.id,
-        input.amount,
-        input.paymentMethod
-      );
+      const balance =
+        Number(user.totalEarnings || 0) - Number(user.totalWithdrawals || 0);
+      const minimum = Math.max(0.1, Number(MONETIZATION.withdrawal?.minAmount ?? 0.1));
 
-      return { success: true };
+      if (!Number.isFinite(balance) || input.amount < minimum) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Montant minimum de retrait : ${minimum}`,
+        });
+      }
+
+      if (input.amount > balance) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Solde insuffisant" });
+      }
+
+      try {
+        await createWithdrawalRecord(
+          ctx.user.id,
+          input.amount,
+          input.paymentMethod,
+        );
+      } catch (error) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            error instanceof Error && error.message === "Insufficient balance"
+              ? "Solde insuffisant"
+              : "Impossible d'enregistrer le retrait",
+        });
+      }
+
+      return {
+        success: true,
+        message: "Demande de retrait enregistrée et en attente de confirmation.",
+      };
     }),
 
-  /**
-   * 📢 Config global (affichage UI)
-   */
-  getConfig: publicProcedure.query(() => {
-    return MONETIZATION;
-  }),
+  getConfig: publicProcedure.query(() => MONETIZATION),
 
-  /**
-   * 📊 Full monetization status (UI)
-   */
   getFullMonetizationStatus: protectedProcedure.query(async ({ ctx }) => {
-    if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
-
     const userId = ctx.user.id;
-
     const user = await getUserById(userId);
     const videos = await getUserVideos(userId);
     const followers = await getFollowerCount(userId);
 
-    // vues 30 jours
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     const viewsResult = await db
-      .select({
-        total: sql<number>`SUM(${videosTable.views})`,
-      })
+      .select({ total: sql<number>`SUM(${videosTable.views})` })
       .from(videosTable)
       .where(
         and(
           eq(videosTable.userId, userId),
-          gt(videosTable.createdAt, thirtyDaysAgo)
-        )
+          gt(videosTable.createdAt, thirtyDaysAgo),
+        ),
       );
 
     const views30Days = Number(viewsResult[0]?.total || 0);
-
-    // éligibilité
     const eligible =
       followers >= (MONETIZATION.creator as any).minFollowers &&
       views30Days >= (MONETIZATION.creator as any).minViews30Days;
 
     return {
       balance: user?.totalEarnings || "0",
-
       userEarnings: MONETIZATION.rewards,
       dailyLimits: MONETIZATION.dailyLimits,
-
       creator: {
         eligible,
         requirements: MONETIZATION.creator,
-        stats: {
-          followers,
-          views30Days,
-          totalVideos: videos.length,
-        },
+        stats: { followers, views30Days, totalVideos: videos.length },
       },
-
       withdrawal: MONETIZATION.withdrawal,
       methods: MONETIZATION.methods,
       rules: MONETIZATION.rules,
     };
   }),
 
-  /**
-   * 📊 Infos complètes de monétisation (PROFIL)
-   */
   getMonetizationInfo: protectedProcedure.query(async ({ ctx }) => {
-    if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
-
     const userId = ctx.user.id;
-
-    // 👤 user
     const user = await getUserById(userId);
-
-    // 🎥 vidéos
     const userVideos = await getUserVideos(userId);
-
-    // 👥 followers réels
     const followers = await getFollowerCount(userId);
 
-    // 👁️ vues sur 30 jours (toutes ses vidéos)
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     const viewsResult = await db
-      .select({
-        total: sql<number>`SUM(${videosTable.views})`,
-      })
+      .select({ total: sql<number>`SUM(${videosTable.views})` })
       .from(videosTable)
       .where(
         and(
           eq(videosTable.userId, userId),
-          gt(videosTable.createdAt, thirtyDaysAgo)
-        )
+          gt(videosTable.createdAt, thirtyDaysAgo),
+        ),
       );
 
     const views30Days = Number(viewsResult[0]?.total || 0);
-
-    // 🎯 conditions
     const eligible =
       followers >= (MONETIZATION.creator as any).minFollowers &&
       views30Days >= (MONETIZATION.creator as any).minViews30Days;
 
     return {
       balance: user?.totalEarnings || "0",
-
-      stats: {
-        followers,
-        views30Days,
-        totalVideos: userVideos.length,
-      },
-
-      creator: {
-        eligible,
-        requirements: MONETIZATION.creator,
-      },
-
+      stats: { followers, views30Days, totalVideos: userVideos.length },
+      creator: { eligible, requirements: MONETIZATION.creator },
       config: MONETIZATION,
     };
   }),
 
-  /**
-   * 🧠 Vérification simple (anti abus)
-   */
   checkEligibility: protectedProcedure.query(async ({ ctx }) => {
-    if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
-
     const userId = ctx.user.id;
-
     const user = await getUserById(userId);
     const userVideos = await getUserVideos(userId);
-
     const hasVideos = userVideos.length >= 1;
 
-    let canEarn = true;
-    let reason = "OK";
-
-    if (!hasVideos) {
-      canEarn = false;
-      reason = "Tu dois publier au moins 1 vidéo pour débloquer les gains.";
-    }
-
     return {
-      canEarn,
-      reason,
+      canEarn: hasVideos,
+      reason: hasVideos
+        ? "OK"
+        : "Tu dois publier au moins 1 vidéo pour débloquer les gains.",
       stats: {
         totalVideos: userVideos.length,
         balance: user?.totalEarnings || "0",
