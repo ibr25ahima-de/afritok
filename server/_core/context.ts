@@ -1,7 +1,7 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import type { User } from "../../drizzle/schema";
 import jwt from "jsonwebtoken";
-import { getUserById } from "../db"; // 🔥 IMPORTANT
+import { getUserById } from "../db";
 
 export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
@@ -9,34 +9,34 @@ export type TrpcContext = {
   user: User | null;
 };
 
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET?.trim();
+  if (!secret || secret.length < 32) {
+    throw new Error("JWT_SECRET is not configured with sufficient entropy");
+  }
+  return secret;
+}
+
 export async function createContext(
   opts: CreateExpressContextOptions
 ): Promise<TrpcContext> {
   let user: User | null = null;
 
   try {
-    const cookieHeader = opts.req.headers.cookie;
+    const token = opts.req.cookies?.app_session_id;
 
-    if (cookieHeader) {
-      const match = cookieHeader.match(/app_session_id=([^;]+)/);
+    if (token) {
+      const decoded = jwt.verify(token, getJwtSecret(), {
+        algorithms: ["HS256"],
+      }) as jwt.JwtPayload & { userId?: number };
 
-      if (match) {
-        const token = match[1];
-
-        const decoded: any = jwt.verify(
-          token,
-          process.env.JWT_SECRET || "secret"
-        );
-
-        // ✅ 🔥 VÉRIFICATION EN BASE
+      if (typeof decoded.userId === "number" && Number.isInteger(decoded.userId) && decoded.userId > 0) {
         const dbUser = await getUserById(decoded.userId);
-
-        if (dbUser) {
-          user = dbUser;
-        }
+        if (dbUser) user = dbUser;
       }
     }
-  } catch (error) {
+  } catch {
+    // Invalid, expired, or missing sessions are treated as unauthenticated.
     user = null;
   }
 
