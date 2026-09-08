@@ -32,7 +32,12 @@ export const coinsRouter = router({
     return gifts.map((gift) => ({ id: gift.id, name: gift.name, icon: gift.iconUrl, coins: Number(gift.price), isActive: gift.isActive }));
   }),
   sendGift: protectedProcedure.input(z.object({
-    recipientId: z.number().int().positive(), giftId: z.number().int().positive(), quantity: z.number().int().min(1).max(100), context: z.enum(["video", "live"]), contextId: z.string().trim().min(1).max(100), idempotencyKey: z.string().trim().min(16).max(150),
+    recipientId: z.number().int().positive(),
+    giftId: z.number().int().positive(),
+    quantity: z.number().int().min(1).max(100),
+    context: z.enum(["video", "live"]),
+    contextId: z.string().trim().min(1).max(100),
+    idempotencyKey: z.string().trim().min(16).max(150),
   })).mutation(async ({ ctx, input }) => {
     if (!input.idempotencyKey.trim()) throw new Error("Clé d'idempotence invalide.");
 
@@ -48,16 +53,23 @@ export const coinsRouter = router({
     const session = liveSessionsManager.getSession(input.contextId);
     if (!session) throw new Error("Live introuvable ou terminé.");
     if (!session.participants.has(ctx.user.id)) throw new Error("Tu dois rejoindre le Live avant d'envoyer un cadeau.");
+
     const recipient = session.participants.get(input.recipientId);
     if (!recipient) throw new Error("Le destinataire n'est pas dans ce Live.");
     if (recipient.role === "viewer") throw new Error("Seuls les participants sur scène peuvent recevoir un cadeau Live.");
 
-    const numericLiveId = Number(input.contextId);
-    if (!Number.isSafeInteger(numericLiveId) || numericLiveId <= 0) {
-      throw new Error("Identifiant Live incompatible avec le service de cadeaux actuel.");
-    }
+    // Le service de cadeaux utilise maintenant le même identifiant chaîne
+    // que le gestionnaire de Live. Aucun cast numérique dangereux.
+    const result = await sendGift(
+      ctx.user.id,
+      input.recipientId,
+      input.giftId,
+      input.quantity,
+      null,
+      input.contextId,
+      input.idempotencyKey,
+    );
 
-    const result = await sendGift(ctx.user.id, input.recipientId, input.giftId, input.quantity, null, numericLiveId, input.idempotencyKey);
     return { ...result, balance: await getCoinBalance(ctx.user.id) };
   }),
 });
