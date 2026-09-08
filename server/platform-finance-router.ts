@@ -1,6 +1,5 @@
 import {
   router,
-  protectedProcedure,
   adminProcedure,
 } from "./_core/trpc";
 
@@ -14,10 +13,10 @@ import {
 export const platformFinanceRouter = router({
   /**
    * =========================================================
-   * 💰 SOLDE RÉEL AFRITOK
+   * 💰 SOLDE RÉEL AFRITOK — ADMIN UNIQUEMENT
    * =========================================================
    */
-  getWallet: protectedProcedure.query(async () => {
+  getWallet: adminProcedure.query(async () => {
     const wallet = await getPlatformWallet();
 
     return {
@@ -36,10 +35,8 @@ export const platformFinanceRouter = router({
    * =========================================================
    * 💵 ENTRÉE D'ARGENT RÉEL — ADMIN UNIQUEMENT
    * =========================================================
-   *
-   * Les paiements utilisateurs ne doivent pas appeler cette
-   * route directement. Ils passent par le settlement sécurisé
-   * après confirmation réelle du prestataire.
+   * Les paiements utilisateurs doivent passer par le
+   * settlement sécurisé après confirmation du prestataire.
    */
   recordRevenue: adminProcedure
     .input(
