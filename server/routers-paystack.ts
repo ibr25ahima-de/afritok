@@ -1,42 +1,68 @@
 /**
  * Paystack Payment Router
- * tRPC endpoints for Paystack payment processing
+ * Secure payment initialization/verification for AfriTok.
  */
 
 import { z } from 'zod';
+import { and, eq } from 'drizzle-orm';
 import { protectedProcedure, publicProcedure, router } from './_core/trpc';
 import PaystackClient from './paystack-connector';
 import { ENV } from './_core/env';
+import { db } from './db';
+import { payments } from '../drizzle/schema-payments';
+import { COIN_PACKAGES } from './coins/purchase-service';
+import crypto from 'crypto';
 
-// Initialize Paystack client
 const paystack = new PaystackClient({
   secretKey: ENV.paystackSecretKey || '',
   publicKey: ENV.paystackPublicKey || '',
   webhookSecret: ENV.paystackWebhookSecret || '',
 });
 
+const PAYSTACK_REFERENCE_RE = /^[A-Za-z0-9._-]{5,150}$/;
+
+function requirePaystackConfigured() {
+  if (!ENV.paystackSecretKey || !ENV.paystackPublicKey) {
+    throw new Error('Paiement Paystack indisponible.');
+  }
+}
+
 export const paystackRouter = router({
-  /**
-   * Initialize a payment
-   * User clicks "Pay" → Gets payment URL
-   */
+  /** Initialize a Coins payment. Price and product come only from the server. */
   initializePayment: protectedProcedure
-    .input(
-      z.object({
-        amount: z.number().positive('Amount must be positive'),
-        email: z.string().email('Invalid email'),
-        metadata: z.record(z.any()).optional(),
-      })
-    )
+    .input(z.object({ packageId: z.string().trim().min(1).max(50) }))
     .mutation(async ({ input, ctx }) => {
+      requirePaystackConfigured();
+
+      const coinPackage = COIN_PACKAGES.find((item) => item.id === input.packageId);
+      if (!coinPackage) throw new Error('Package Coins introuvable.');
+
+      const email = String(ctx.user.email || '').trim();
+      if (!email) throw new Error('Adresse e-mail du compte manquante.');
+
+      const reference = `AFRITOK-${crypto.randomUUID()}`;
+
       try {
+        await db.insert(payments).values({
+          userId: ctx.user.id,
+          amount: coinPackage.price.toFixed(2),
+          confirmedAmount: '0',
+          currency: coinPackage.currency,
+          operator: 'PAYSTACK',
+          purpose: 'coin_purchase',
+          productId: coinPackage.id,
+          referenceId: reference,
+          status: 'pending',
+        });
+
         const response = await paystack.initializePayment({
-          email: input.email,
-          amount: Math.round(input.amount * 100), // Convert to cents
+          email,
+          amount: coinPackage.price,
+          reference,
           metadata: {
             userId: ctx.user.id,
-            username: ctx.user.name,
-            ...input.metadata,
+            purpose: 'coin_purchase',
+            productId: coinPackage.id,
           },
         });
 
@@ -45,267 +71,134 @@ export const paystackRouter = router({
           authorizationUrl: response.data.authorization_url,
           accessCode: response.data.access_code,
           reference: response.data.reference,
+          package: coinPackage,
         };
       } catch (error) {
         console.error('[tRPC] Initialize payment failed:', error);
-        throw new Error('Failed to initialize payment');
+        throw new Error('Impossible d’initialiser le paiement.');
       }
     }),
 
-  /**
-   * Verify a payment
-   * After user completes payment on Paystack
-   */
+  /** Verify with Paystack, then persist the confirmed payment. Coins are credited separately. */
   verifyPayment: protectedProcedure
-    .input(
-      z.object({
-        reference: z.string().min(1, 'Reference is required'),
-      })
-    )
+    .input(z.object({ reference: z.string().trim().regex(PAYSTACK_REFERENCE_RE) }))
     .mutation(async ({ input, ctx }) => {
+      requirePaystackConfigured();
+
+      const localPayment = await db
+        .select()
+        .from(payments)
+        .where(and(eq(payments.referenceId, input.reference), eq(payments.userId, ctx.user.id)))
+        .limit(1);
+
+      const payment = localPayment[0];
+      if (!payment) throw new Error('Paiement introuvable.');
+      if (payment.purpose !== 'coin_purchase' || !payment.productId) {
+        throw new Error('Paiement Coins invalide.');
+      }
+
+      const coinPackage = COIN_PACKAGES.find((item) => item.id === payment.productId);
+      if (!coinPackage) throw new Error('Package Coins introuvable.');
+
+      if (payment.status === 'success') {
+        return { success: true, status: 'success', amount: Number(payment.confirmedAmount), reference: payment.referenceId };
+      }
+
       try {
         const response = await paystack.verifyPayment(input.reference);
+        const data = response.data;
 
-        if (response.data.status === 'success') {
-          // Payment successful
-          // TODO: Update user's wallet/balance in database
-          console.log(`[Paystack] Payment verified for user ${ctx.user.id}`);
+        const paidAmount = Number(data.amount);
+        const expectedAmount = coinPackage.price;
+        const paidReference = String(data.reference || '');
+        const customerEmail = String(data.customer?.email || '').trim().toLowerCase();
+        const accountEmail = String(ctx.user.email || '').trim().toLowerCase();
 
-          return {
-            success: true,
-            status: 'success',
-            amount: response.data.amount / 100, // Convert from cents
-            reference: response.data.reference,
-            message: 'Payment successful!',
-          };
-        } else {
-          return {
-            success: false,
-            status: response.data.status,
-            message: 'Payment not completed',
-          };
+        if (data.status !== 'success') {
+          return { success: false, status: data.status, message: 'Paiement non confirmé.' };
         }
-      } catch (error) {
-        console.error('[tRPC] Verify payment failed:', error);
-        throw new Error('Failed to verify payment');
-      }
-    }),
+        if (paidReference !== payment.referenceId) {
+          throw new Error('Référence de paiement non correspondante.');
+        }
+        if (paidAmount !== expectedAmount) {
+          throw new Error('Montant du paiement incorrect.');
+        }
+        if (!customerEmail || !accountEmail || customerEmail !== accountEmail) {
+          throw new Error('Le compte Paystack ne correspond pas au compte AfriTok.');
+        }
 
-  /**
-   * Create a transfer recipient
-   * Before transferring money to user, create recipient
-   */
-  createTransferRecipient: protectedProcedure
-    .input(
-      z.object({
-        type: z.enum(['nuban', 'mobile_money', 'ghipss']),
-        name: z.string().min(1, 'Name is required'),
-        accountNumber: z.string().optional(),
-        bankCode: z.string().optional(),
-        mobileMoneyNumber: z.string().optional(),
-        mobileMoneyProvider: z.string().optional(),
-      })
-    )
-    .mutation(async ({ input, ctx }) => {
-      try {
-        const response = await paystack.createTransferRecipient({
-          type: input.type,
-          name: input.name,
-          account_number: input.accountNumber,
-          bank_code: input.bankCode,
-          mobile_money_number: input.mobileMoneyNumber,
-          mobile_money_provider: input.mobileMoneyProvider,
-        });
+        const updated = await db
+          .update(payments)
+          .set({
+            confirmedAmount: expectedAmount.toFixed(2),
+            providerReference: paidReference,
+            status: 'success',
+            confirmedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          })
+          .where(
+            and(
+              eq(payments.id, payment.id),
+              eq(payments.userId, ctx.user.id),
+              eq(payments.status, 'pending'),
+            ),
+          )
+          .returning({ id: payments.id });
 
-        // TODO: Save recipient_code to user's profile
-        console.log(`[Paystack] Recipient created for user ${ctx.user.id}`);
+        if (updated.length === 0) {
+          const current = await db.select({ status: payments.status }).from(payments).where(eq(payments.id, payment.id)).limit(1);
+          if (current[0]?.status === 'success') {
+            return { success: true, status: 'success', amount: expectedAmount, reference: payment.referenceId };
+          }
+          throw new Error('État du paiement modifié.');
+        }
 
         return {
           success: true,
-          recipientCode: response.data.recipient_code,
-          message: 'Recipient created successfully',
+          status: 'success',
+          amount: expectedAmount,
+          reference: payment.referenceId,
+          message: 'Paiement confirmé. Les Coins peuvent maintenant être crédités.',
         };
       } catch (error) {
-        console.error('[tRPC] Create transfer recipient failed:', error);
-        throw new Error('Failed to create transfer recipient');
+        console.error('[tRPC] Verify payment failed:', error);
+        throw new Error('Impossible de vérifier le paiement.');
       }
     }),
 
   /**
-   * Initiate a transfer (withdrawal)
-   * Send money to user's Mobile Money or bank account
+   * Transfer-recipient creation is intentionally disabled here.
+   * Withdrawals must go through the secured withdrawal workflow, not a client-selected recipient.
    */
-  initiateTransfer: protectedProcedure
-    .input(
-      z.object({
-        recipientCode: z.string().min(1, 'Recipient code is required'),
-        amount: z.number().positive('Amount must be positive'),
-        reason: z.string().optional(),
-      })
-    )
-    .mutation(async ({ input, ctx }) => {
-      try {
-        // Check user has enough balance
-        // TODO: Verify user balance before transfer
+  createTransferRecipient: protectedProcedure.mutation(async () => {
+    throw new Error('Création de bénéficiaire désactivée pour des raisons de sécurité.');
+  }),
 
-        const response = await paystack.initiateTransfer({
-          source: 'balance',
-          reason: input.reason || `Withdrawal for user ${ctx.user.id}`,
-          amount: Math.round(input.amount * 100), // Convert to cents
-          recipient: input.recipientCode,
-        });
+  initiateTransfer: protectedProcedure.mutation(async () => {
+    throw new Error('Les transferts Paystack directs sont désactivés.');
+  }),
 
-        if (response.status) {
-          // TODO: Update user's wallet, create transaction record
-          console.log(`[Paystack] Transfer initiated for user ${ctx.user.id}`);
+  getTransferStatus: protectedProcedure.mutation(async () => {
+    throw new Error('Consultation des transferts directs désactivée.');
+  }),
 
-          return {
-            success: true,
-            transferCode: response.data.transfer_code,
-            reference: response.data.reference,
-            amount: response.data.amount / 100,
-            status: response.data.status,
-            message: 'Transfer initiated successfully',
-          };
-        } else {
-          return {
-            success: false,
-            message: 'Failed to initiate transfer',
-          };
-        }
-      } catch (error) {
-        console.error('[tRPC] Initiate transfer failed:', error);
-        throw new Error('Failed to initiate transfer');
-      }
-    }),
-
-  /**
-   * Get transfer status
-   */
-  getTransferStatus: protectedProcedure
-    .input(
-      z.object({
-        transferCode: z.string().min(1, 'Transfer code is required'),
-      })
-    )
-    .query(async ({ input }) => {
-      try {
-        const response = await paystack.getTransferStatus(input.transferCode);
-
-        return {
-          success: response.status,
-          status: response.data?.status,
-          amount: response.data?.amount ? response.data.amount / 100 : 0,
-          recipient: response.data?.recipient,
-        };
-      } catch (error) {
-        console.error('[tRPC] Get transfer status failed:', error);
-        throw new Error('Failed to get transfer status');
-      }
-    }),
-
-  /**
-   * Get payment history
-   */
   getPaymentHistory: protectedProcedure.query(async ({ ctx }) => {
-    try {
-      // TODO: Query database for user's payment history
-      // For now, return empty array
-      return {
-        success: true,
-        payments: [],
-        message: 'Payment history retrieved',
-      };
-    } catch (error) {
-      console.error('[tRPC] Get payment history failed:', error);
-      throw new Error('Failed to get payment history');
-    }
+    const rows = await db
+      .select({ id: payments.id, amount: payments.amount, confirmedAmount: payments.confirmedAmount, currency: payments.currency, purpose: payments.purpose, productId: payments.productId, status: payments.status, createdAt: payments.createdAt, confirmedAt: payments.confirmedAt })
+      .from(payments)
+      .where(eq(payments.userId, ctx.user.id));
+    return { success: true, payments: rows };
+  }),
+
+  getWithdrawalHistory: protectedProcedure.query(async () => {
+    return { success: true, withdrawals: [], message: 'Les retraits sont gérés par le système de retraits sécurisé.' };
   }),
 
   /**
-   * Get withdrawal history
+   * Never trust a parsed public webhook payload. A valid Paystack webhook requires
+   * the raw HTTP body + x-paystack-signature and must be handled by a raw-body route.
    */
-  getWithdrawalHistory: protectedProcedure.query(async ({ ctx }) => {
-    try {
-      // TODO: Query database for user's withdrawal history
-      // For now, return empty array
-      return {
-        success: true,
-        withdrawals: [],
-        message: 'Withdrawal history retrieved',
-      };
-    } catch (error) {
-      console.error('[tRPC] Get withdrawal history failed:', error);
-      throw new Error('Failed to get withdrawal history');
-    }
+  handleWebhook: publicProcedure.mutation(async () => {
+    throw new Error('Webhook Paystack non disponible via cette route. Utiliser un endpoint raw signé.');
   }),
-
-  /**
-   * Webhook handler for Paystack events
-   * Called by Paystack when payment/transfer events occur
-   */
-  handleWebhook: publicProcedure
-    .input(
-      z.object({
-        event: z.string(),
-        data: z.record(z.any()),
-      })
-    )
-    .mutation(async ({ input }) => {
-      try {
-        const event = input.event;
-        const data = input.data;
-
-        console.log(`[Paystack Webhook] Event: ${event}`);
-
-        switch (event) {
-          case 'charge.success':
-            // Payment successful
-            console.log(`[Webhook] Payment successful: ${data.reference}`);
-            // TODO: Update user's wallet
-            break;
-
-          case 'transfer.success':
-            // Transfer successful
-            console.log(`[Webhook] Transfer successful: ${data.transfer_code}`);
-            // TODO: Update user's withdrawal status
-            break;
-
-          case 'transfer.failed':
-            // Transfer failed
-            console.log(`[Webhook] Transfer failed: ${data.transfer_code}`);
-            // TODO: Notify user, retry transfer
-            break;
-
-          default:
-            console.log(`[Webhook] Unknown event: ${event}`);
-        }
-
-        return { success: true };
-      } catch (error) {
-        console.error('[tRPC] Webhook handler failed:', error);
-        throw new Error('Failed to handle webhook');
-      }
-    }),
 });
-
-/**
- * SUMMARY: Paystack Payment Router
- *
- * Available Endpoints:
- * - paystack.initializePayment() - Start payment process
- * - paystack.verifyPayment() - Verify payment completion
- * - paystack.createTransferRecipient() - Register withdrawal account
- * - paystack.initiateTransfer() - Send money to user
- * - paystack.getTransferStatus() - Check transfer status
- * - paystack.getPaymentHistory() - Get user's payment history
- * - paystack.getWithdrawalHistory() - Get user's withdrawal history
- * - paystack.handleWebhook() - Process Paystack webhooks
- *
- * Integration with Afritok:
- * 1. User earns money → Wallet balance increases
- * 2. User clicks "Withdraw" → createTransferRecipient() + initiateTransfer()
- * 3. Paystack processes transfer → handleWebhook() receives confirmation
- * 4. User receives money in Mobile Money account
- * 5. User sees notification + transaction history
- */
