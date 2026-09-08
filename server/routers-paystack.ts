@@ -87,6 +87,8 @@ export const paystackRouter = router({
 
       const coinPackage = COIN_PACKAGES.find((item) => item.id === payment.productId);
       if (!coinPackage) throw new Error('Package Coins introuvable.');
+      if (payment.currency !== coinPackage.currency) throw new Error('Devise du paiement invalide.');
+      if (Number(payment.amount) !== coinPackage.price) throw new Error('Montant initial du paiement invalide.');
       if (payment.status === 'success') {
         return { success: true, status: 'success', amount: Number(payment.confirmedAmount), reference: payment.referenceId };
       }
@@ -97,12 +99,14 @@ export const paystackRouter = router({
         const paidAmount = Number(data.amount);
         const expectedAmount = coinPackage.price;
         const paidReference = String(data.reference || '');
+        const paidCurrency = String(data.currency || '').trim().toUpperCase();
         const customerEmail = String(data.customer?.email || '').trim().toLowerCase();
         const accountEmail = String(ctx.user.email || '').trim().toLowerCase();
 
         if (data.status !== 'success') return { success: false, status: data.status, message: 'Paiement non confirmé.' };
         if (paidReference !== payment.referenceId) throw new Error('Référence de paiement non correspondante.');
-        if (paidAmount !== expectedAmount) throw new Error('Montant du paiement incorrect.');
+        if (!Number.isFinite(paidAmount) || paidAmount !== expectedAmount) throw new Error('Montant du paiement incorrect.');
+        if (paidCurrency !== coinPackage.currency) throw new Error('Devise du paiement incorrecte.');
         if (!customerEmail || !accountEmail || customerEmail !== accountEmail) throw new Error('Le compte Paystack ne correspond pas au compte AfriTok.');
 
         const updated = await db
