@@ -7,8 +7,8 @@ import { SignJWT, jwtVerify } from "jose";
 import type { User } from "../../drizzle/schema";
 import * as db from "../db";
 import { ENV } from "./env";
+import { SECURITY_LIMITS } from "./security-constants";
 
-// Utility function
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0;
 
@@ -23,23 +23,12 @@ class SDKServer {
     return new TextEncoder().encode(secret);
   }
 
-  /**
-   * Create a session token for a user
-   * @example
-   * const sessionToken = await sdk.createSessionToken(userId, phone);
-   */
   async createSessionToken(
     userId: number,
     phone: string,
     options: { expiresInMs?: number } = {}
   ): Promise<string> {
-    return this.signSession(
-      {
-        userId,
-        phone,
-      },
-      options
-    );
+    return this.signSession({ userId, phone }, options);
   }
 
   async signSession(
@@ -47,83 +36,50 @@ class SDKServer {
     options: { expiresInMs?: number } = {}
   ): Promise<string> {
     const issuedAt = Date.now();
-    const expiresInMs = options.expiresInMs ?? ONE_YEAR_MS;
+    const defaultLifetimeMs = SECURITY_LIMITS.sessionMaxAgeSeconds * 1000;
+    const requestedLifetimeMs = options.expiresInMs ?? defaultLifetimeMs;
+    const expiresInMs = Math.min(Math.max(requestedLifetimeMs, 1), defaultLifetimeMs);
     const expirationSeconds = Math.floor((issuedAt + expiresInMs) / 1000);
     const secretKey = this.getSessionSecret();
 
-    return new SignJWT({
-      userId: payload.userId,
-      phone: payload.phone,
-    })
+    return new SignJWT({ userId: payload.userId, phone: payload.phone })
       .setProtectedHeader({ alg: "HS256", typ: "JWT" })
       .setExpirationTime(expirationSeconds)
       .sign(secretKey);
   }
 
-  async verifySession(
-    cookieValue: string | undefined | null
-  ): Promise<{ userId: number; phone: string } | null> {
-    if (!cookieValue) {
-      console.warn("[Auth] Missing session cookie");
-      return null;
-    }
-
+  async verifySession(cookieValue: string | undefined | null): Promise<{ userId: number; phone: string } | null> {
+    if (!cookieValue) return null;
     try {
       const secretKey = this.getSessionSecret();
-      const { payload } = await jwtVerify(cookieValue, secretKey, {
-        algorithms: ["HS256"],
-      });
+      const { payload } = await jwtVerify(cookieValue, secretKey, { algorithms: ["HS256"] });
       const { userId, phone } = payload as Record<string, unknown>;
-
-      if (
-        typeof userId !== "number" ||
-        !isNonEmptyString(phone)
-      ) {
-        console.warn("[Auth] Session payload missing required fields");
+      if (typeof userId !== "number" || !Number.isSafeInteger(userId) || userId <= 0 || !isNonEmptyString(phone)) {
         return null;
       }
-
-      return {
-        userId,
-        phone,
-      };
-    } catch (error) {
-      console.warn("[Auth] Session verification failed", String(error));
+      return { userId, phone };
+    } catch {
       return null;
     }
   }
 
   private parseCookies(cookieHeader: string | undefined) {
-    if (!cookieHeader) {
-      return new Map<string, string>();
-    }
-
+    if (!cookieHeader) return new Map<string, string>();
     const parsed = parseCookieHeader(cookieHeader);
     return new Map(Object.entries(parsed));
   }
 
   async authenticateRequest(req: Request): Promise<User> {
-    // Regular authentication flow
     const cookies = this.parseCookies(req.headers.cookie);
     const sessionCookie = cookies.get(COOKIE_NAME);
     const session = await this.verifySession(sessionCookie);
-
-    if (!session) {
-      throw ForbiddenError("Invalid session cookie");
-    }
+    if (!session) throw ForbiddenError("Invalid session cookie");
 
     const signedInAt = new Date();
-    let user = await db.getUserById(session.userId);
+    const user = await db.getUserById(session.userId);
+    if (!user) throw ForbiddenError("User not found");
 
-    if (!user) {
-      throw ForbiddenError("User not found");
-    }
-
-    await db.upsertUser({
-      id: user.id,
-      lastSignedIn: signedInAt,
-    });
-
+    await db.upsertUser({ id: user.id, lastSignedIn: signedInAt });
     return user;
   }
 }
