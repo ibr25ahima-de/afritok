@@ -3,7 +3,7 @@
  *
  * Security rules:
  * - reward amounts are defined server-side only
- * - user identity always comes from the caller of these server functions
+ * - user identity always comes from the authenticated server caller
  * - earning + platform fee + balance sync are atomic
  * - banned/suspended accounts cannot receive new rewards
  * - balance updates are performed in SQL to avoid lost updates
@@ -14,23 +14,9 @@ import { microEarnings, earnings, users } from "../drizzle/schema";
 import { eq, and, sql } from "drizzle-orm";
 import crypto from "crypto";
 
-export type EarningType =
-  | "watch"
-  | "like"
-  | "comment"
-  | "share"
-  | "invite"
-  | "live_watch"
-  | "poll_vote"
-  | "challenge"
-  | "platform_fee";
+export type EarningType = "watch" | "like" | "comment" | "share" | "invite" | "live_watch" | "poll_vote" | "challenge" | "platform_fee";
 
-export interface UserBalance {
-  userId: number;
-  totalEarned: number;
-  totalWithdrawn: number;
-  currentBalance: number;
-}
+export interface UserBalance { userId: number; totalEarned: number; totalWithdrawn: number; currentBalance: number; }
 
 export const EARNING_RATES = {
   watch: 0.02,
@@ -73,7 +59,7 @@ async function saveEarning(params: {
       const user = userRows[0];
       if (!user || user.isBanned || user.isSuspended) return null;
 
-      // Prevent duplicate rewards for actions that have a concrete video target.
+      // A concrete video action is rewarded only once for the same user/type/video.
       if (params.videoId !== undefined) {
         const duplicate = await tx
           .select({ id: microEarnings.id })
@@ -106,8 +92,6 @@ async function saveEarning(params: {
         videoId: params.videoId ?? null,
       });
 
-      // Keep the digital platform share in the existing digital earnings system.
-      // Never trust a client-provided platform/user id.
       const adminRows = await tx
         .select({ id: users.id })
         .from(users)
@@ -142,15 +126,6 @@ async function saveEarning(params: {
     console.error("[MicroEarnings ERROR] transaction failed");
     return null;
   }
-}
-
-async function alreadyEarned(userId: number, type: EarningType, videoId?: number) {
-  if (!db) return false;
-  const results = await db
-    .select({ id: microEarnings.id })
-    .from(microEarnings)
-    .where(eq(microEarnings.userId, userId));
-  return results.some((e) => e.id && type === type && (videoId ? true : true));
 }
 
 export async function recordWatchEarning(userId: number, videoId: number, duration: number) {
@@ -202,9 +177,12 @@ export async function getUserBalance(userId: number): Promise<UserBalance> {
 
     const totalEarned = Number(user.totalEarnings ?? 0);
     const totalWithdrawn = Number(user.totalWithdrawals ?? 0);
-    const currentBalance = Math.max(0, totalEarned - totalWithdrawn);
-
-    return { userId, totalEarned, totalWithdrawn, currentBalance };
+    return {
+      userId,
+      totalEarned,
+      totalWithdrawn,
+      currentBalance: Math.max(0, totalEarned - totalWithdrawn),
+    };
   } catch (err) {
     console.error("[MicroEarnings BALANCE ERROR]");
     return { userId, totalEarned: 0, totalWithdrawn: 0, currentBalance: 0 };
