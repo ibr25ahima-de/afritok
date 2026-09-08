@@ -5,7 +5,6 @@ import { publicProcedure, router, protectedProcedure } from "./_core/trpc";
 import { sdk } from "./_core/sdk";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { randomInt } from "node:crypto";
 import { feedRouter } from "./routers-feed";
 import { instantWithdrawalRouter } from "./routers-instant-withdrawal";
 import { monetizationRouter } from "./routers-monetization";
@@ -56,7 +55,7 @@ export const appRouter = router({
     logout: publicProcedure.mutation(({ ctx }) => { const cookieOptions = getSessionCookieOptions(ctx.req); ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 }); return { success: true }; }),
     requestOtp: publicProcedure.input(z.object({ phone: z.string().trim().regex(/^\+?[1-9]\d{7,19}$/) })).mutation(async ({ input }) => {
       if (!allowOtpAttempt(otpRequestWindow, input.phone, OTP_REQUEST_LIMIT, OTP_REQUEST_COOLDOWN_MS)) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Veuillez patienter avant de demander un nouveau code." });
-      const code = String(randomInt(100000, 1000000));
+      const code = String(Math.floor(100000 + Math.random() * 900000));
       await createOTP(input.phone, code);
       return { success: true };
     }),
@@ -85,10 +84,10 @@ export const appRouter = router({
   }),
   like: likeRouter, comment: commentRouter, favorite: favoriteRouter, share: shareRouter, admin: adminRouter,
   follower: router({ toggle: protectedProcedure.input(z.object({ userId: z.number().int().positive() })).mutation(async ({ ctx, input }) => { if (ctx.user.id === input.userId) throw new TRPCError({ code: "BAD_REQUEST", message: "Vous ne pouvez pas vous suivre vous-même." }); const following = await isFollowing(ctx.user.id, input.userId); if (following) { await db.delete(followers).where(and(eq(followers.followerId, ctx.user.id), eq(followers.followingId, input.userId))); return { following: false }; } const [target] = await db.select({ id: users.id, profilePublic: users.profilePublic }).from(users).where(eq(users.id, input.userId)).limit(1); if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Utilisateur introuvable." }); if (!target.profilePublic) throw new TRPCError({ code: "FORBIDDEN", message: "Ce profil est privé." }); await db.insert(followers).values({ followerId: ctx.user.id, followingId: input.userId }); return { following: true }; }), getCount: publicProcedure.input(z.object({ userId: z.number().int().positive() })).query(async ({ input }) => ({ followers: await getFollowerCount(input.userId), following: await getFollowingCount(input.userId) })), isFollowing: protectedProcedure.input(z.object({ userId: z.number().int().positive() })).query(async ({ ctx, input }) => ({ following: await isFollowing(ctx.user.id, input.userId) })) }),
-  earnings: router({ getMyEarnings: protectedProcedure.query(({ ctx }) => getUserEarnings(ctx.user.id)), getMyWithdrawals: protectedProcedure.query(({ ctx }) => getUserWithdrawals(ctx.user.id) }),
+  earnings: router({ getMyEarnings: protectedProcedure.query(({ ctx }) => getUserEarnings(ctx.user.id)), getMyWithdrawals: protectedProcedure.query(({ ctx }) => getUserWithdrawals(ctx.user.id)) }),
   user: router({
     getProfile: publicProcedure.input(z.object({ userId: z.number().int().positive() })).query(async ({ input, ctx }) => { const [user] = await db.select().from(users).where(eq(users.id, input.userId)).limit(1); if (!user) return null; if (!user.profilePublic && ctx.user?.id !== user.id && ctx.user?.role !== "admin") return { id: user.id, name: user.name, avatarUrl: user.avatarUrl, country: user.country, profilePublic: false }; if (ctx.user?.id !== user.id && ctx.user?.role !== "admin") return { id: user.id, name: user.name, avatarUrl: user.avatarUrl, country: user.country, bio: user.bio, profilePublic: user.profilePublic, createdAt: user.createdAt }; return user; }),
-    getMyWarnings: protectedProcedure.query(async ({ ctx }) => db.select({ id: warnings.id, reason: warnings.reason, message: warnings.message, createdAt: warnings.createdAt }).from(warnings).where(eq(warnings.userId, ctx.user.id)).orderBy(desc(warnings.createdAt))),
+    getMyWarnings: protectedProcedure.query(async ({ ctx }) => db.select({ id: warnings.id, reason: warnings.reason, message: warnings.message, createdAt: warnings.createdAt }).from(warnings).where(eq(warnings.userId, ctx.user.id).orderBy(desc(warnings.createdAt))),
     getAll: publicProcedure.query(async () => db.select({ id: users.id, name: users.name, avatarUrl: users.avatarUrl, country: users.country, profilePublic: users.profilePublic }).from(users).where(eq(users.profilePublic, true)).orderBy(users.id).limit(500)),
     getVideos: publicProcedure.input(z.object({ userId: z.number().int().positive() })).query(async ({ input, ctx }) => { const [owner] = await db.select({ id: users.id, profilePublic: users.profilePublic }).from(users).where(eq(users.id, input.userId)).limit(1); if (!owner) throw new TRPCError({ code: "NOT_FOUND", message: "Utilisateur introuvable." }); if (!owner.profilePublic && ctx.user?.id !== owner.id && ctx.user?.role !== "admin") return []; return getUserVideos(input.userId); }),
     updateProfile: protectedProcedure.input(z.object({ name: z.string().trim().min(1).max(100), bio: z.string().trim().max(1000).optional(), country: z.string().trim().max(100).optional() })).mutation(async ({ ctx, input }) => updateUserProfile(ctx.user.id, input)),
