@@ -17,6 +17,7 @@ import { uploadAdvertisingMedia } from "../advertising/ad-media-upload-service";
 import { registerLiveSocket } from "../live-socket";
 import paymentWebhookRouter from "../payments/payment-webhook-router";
 import paymentTestRouter from "../payments/payment-test-router";
+import { createRateLimiter, helmetConfig, uploadRateLimiter } from "../security";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -49,6 +50,11 @@ async function startServer() {
   app.set("trust proxy", 1);
   const server = createServer(app);
 
+  // Apply HTTP hardening before application routes. The payment webhook is registered
+  // below with a raw body parser so its signature verification remains intact.
+  app.use(helmetConfig);
+  app.use(createRateLimiter(15 * 60 * 1000, 300));
+
   const corsOptions = {
     credentials: true,
     origin: (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => {
@@ -70,7 +76,7 @@ async function startServer() {
     app.use("/api/payments/test", paymentTestRouter);
   }
 
-  app.post("/api/upload-avatar", upload.single("file"), async (req: Request, res: Response) => {
+  app.post("/api/upload-avatar", uploadRateLimiter, upload.single("file"), async (req: Request, res: Response) => {
     try {
       const user = await getAuthenticatedUser(req, res);
       if (!user) return res.status(401).json({ error: "Utilisateur non authentifié." });
@@ -86,7 +92,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/upload-video", upload.single("file"), async (req: Request, res: Response) => {
+  app.post("/api/upload-video", uploadRateLimiter, upload.single("file"), async (req: Request, res: Response) => {
     try {
       const user = await getAuthenticatedUser(req, res);
       if (!user) return res.status(401).json({ error: "Utilisateur non authentifié." });
@@ -101,7 +107,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/upload-ad-media", upload.single("file"), async (req: Request, res: Response) => {
+  app.post("/api/upload-ad-media", uploadRateLimiter, upload.single("file"), async (req: Request, res: Response) => {
     try {
       const user = await getAuthenticatedUser(req, res);
       if (!user) return res.status(401).json({ error: "Utilisateur non authentifié." });
