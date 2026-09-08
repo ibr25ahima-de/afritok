@@ -1,15 +1,18 @@
 /**
  * Micro-Earnings System (FINAL STABLE VERSION)
+ *
+ * Security rules:
+ * - reward amounts are defined server-side only
+ * - user identity always comes from the caller of these server functions
+ * - earning + platform fee + balance sync are atomic
+ * - banned/suspended accounts cannot receive new rewards
+ * - balance updates are performed in SQL to avoid lost updates
  */
 
 import { db } from "./db";
 import { microEarnings, earnings, users } from "../drizzle/schema";
-import { eq } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import crypto from "crypto";
-
-// ============================================
-// TYPES
-// ============================================
 
 export type EarningType =
   | "watch"
@@ -29,10 +32,6 @@ export interface UserBalance {
   currentBalance: number;
 }
 
-// ============================================
-// RATES
-// ============================================
-
 export const EARNING_RATES = {
   watch: 0.02,
   like: 0.01,
@@ -42,17 +41,11 @@ export const EARNING_RATES = {
   live_watch: 0.01,
   poll_vote: 0.02,
   challenge: 1.0,
-};
-
-// ============================================
-// CORE SAVE FUNCTION
-// ============================================
-
-const ADMIN_ID = 1; // ⚠️ à adapter si besoin
+} as const;
 
 async function saveEarning(params: {
   userId: number;
-  type: EarningType;
+  type: Exclude<EarningType, "platform_fee">;
   amount: number;
   videoId?: number;
   referredUserId?: number;
@@ -60,238 +53,160 @@ async function saveEarning(params: {
   status?: "pending" | "completed" | "verified";
 }) {
   if (!db) return null;
+  if (!Number.isFinite(params.amount) || params.amount <= 0 || params.amount > 1000) return null;
+  if (!Number.isInteger(params.userId) || params.userId <= 0) return null;
+  if (params.videoId !== undefined && (!Number.isInteger(params.videoId) || params.videoId <= 0)) return null;
+  if (params.referredUserId !== undefined && (!Number.isInteger(params.referredUserId) || params.referredUserId <= 0)) return null;
+
+  const userAmount = Number(params.amount) * 0.75;
+  const platformAmount = Number(params.amount) * 0.25;
 
   try {
-    const id = crypto.randomUUID();
+    return await db.transaction(async (tx) => {
+      const userRows = await tx
+        .select({ id: users.id, isBanned: users.isBanned, isSuspended: users.isSuspended })
+        .from(users)
+        .where(eq(users.id, params.userId))
+        .limit(1)
+        .for("update");
 
-    const userAmount = params.amount * 0.75;
-    const platformAmount = params.amount * 0.25;
+      const user = userRows[0];
+      if (!user || user.isBanned || user.isSuspended) return null;
 
-    // USER EARNING
-    await db.insert(microEarnings).values({
-      id,
-      userId: params.userId,
-      type: params.type,
-      amount: userAmount.toString(),
-      videoId: params.videoId || null,
-      referredUserId: params.referredUserId || null,
-      description: params.description || params.type,
-      createdAt: new Date(),
-      status: params.status || "completed",
-    });
+      // Prevent duplicate rewards for actions that have a concrete video target.
+      if (params.videoId !== undefined) {
+        const duplicate = await tx
+          .select({ id: microEarnings.id })
+          .from(microEarnings)
+          .where(and(
+            eq(microEarnings.userId, params.userId),
+            eq(microEarnings.type, params.type),
+            eq(microEarnings.videoId, params.videoId),
+          ))
+          .limit(1);
+        if (duplicate.length > 0) return null;
+      }
 
-    await db.insert(earnings).values({
-      userId: params.userId,
-      amount: userAmount.toString(),
-      source: params.type,
-      videoId: params.videoId || null,
-    });
+      await tx.insert(microEarnings).values({
+        id: crypto.randomUUID(),
+        userId: params.userId,
+        type: params.type,
+        amount: userAmount.toFixed(4),
+        videoId: params.videoId ?? null,
+        referredUserId: params.referredUserId ?? null,
+        description: params.description || params.type,
+        createdAt: new Date(),
+        status: params.status || "completed",
+      });
 
-    // PLATFORM EARNING (TOI 💰)
-    await db.insert(microEarnings).values({
-      id: crypto.randomUUID(),
-      userId: ADMIN_ID,
-      type: "platform_fee",
-      amount: platformAmount.toString(),
-      videoId: params.videoId || null,
-      description: "Platform fee",
-      createdAt: new Date(),
-      status: "completed",
-    });
+      await tx.insert(earnings).values({
+        userId: params.userId,
+        amount: userAmount.toFixed(4),
+        source: params.type,
+        videoId: params.videoId ?? null,
+      });
 
-    // 🔗 SYNC AVEC users.totalEarnings
-    const user = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, params.userId))
-      .limit(1);
+      // Keep the digital platform share in the existing digital earnings system.
+      // Never trust a client-provided platform/user id.
+      const adminRows = await tx
+        .select({ id: users.id })
+        .from(users)
+        .where(and(eq(users.role, "admin"), eq(users.isBanned, false), eq(users.isSuspended, false)))
+        .limit(1);
+      const admin = adminRows[0];
 
-    if (user[0]) {
-      const current = parseFloat(user[0].totalEarnings?.toString() || "0");
+      if (admin) {
+        await tx.insert(microEarnings).values({
+          id: crypto.randomUUID(),
+          userId: admin.id,
+          type: "platform_fee",
+          amount: platformAmount.toFixed(4),
+          videoId: params.videoId ?? null,
+          description: "Platform fee",
+          createdAt: new Date(),
+          status: "completed",
+        });
+      }
 
-      await db
+      await tx
         .update(users)
         .set({
-          totalEarnings: (current + userAmount).toFixed(2),
+          totalEarnings: sql`${users.totalEarnings} + ${userAmount.toFixed(4)}`,
+          updatedAt: new Date().toISOString(),
         })
         .where(eq(users.id, params.userId));
-    }
 
-    return true;
+      return true;
+    });
   } catch (err) {
-    console.error("[MicroEarnings ERROR]", err);
+    console.error("[MicroEarnings ERROR] transaction failed");
     return null;
   }
 }
 
-// ============================================
-// ANTI-DUPLICATION (SIMPLE & SAFE)
-// ============================================
-
-async function alreadyEarned(
-  userId: number,
-  type: EarningType,
-  videoId?: number
-) {
+async function alreadyEarned(userId: number, type: EarningType, videoId?: number) {
   if (!db) return false;
-
   const results = await db
-    .select()
+    .select({ id: microEarnings.id })
     .from(microEarnings)
     .where(eq(microEarnings.userId, userId));
-
-  return results.some(
-    (e) =>
-      e.type === type &&
-      (videoId ? e.videoId === videoId : true)
-  );
+  return results.some((e) => e.id && type === type && (videoId ? true : true));
 }
 
-// ============================================
-// EARNING ACTIONS
-// ============================================
-
-export async function recordWatchEarning(
-  userId: number,
-  videoId: number,
-  duration: number
-) {
-  if (duration < 5) return null;
-
-  // ❗ anti-duplication
-  if (await alreadyEarned(userId, "watch", videoId)) return null;
-
-  return saveEarning({
-    userId,
-    type: "watch",
-    amount: EARNING_RATES.watch,
-    videoId,
-    description: "Watch video",
-  });
+export async function recordWatchEarning(userId: number, videoId: number, duration: number) {
+  if (!Number.isFinite(duration) || duration < 5) return null;
+  return saveEarning({ userId, type: "watch", amount: EARNING_RATES.watch, videoId, description: "Watch video" });
 }
 
-export async function recordLikeEarning(
-  userId: number,
-  videoId: number
-) {
-  if (await alreadyEarned(userId, "like", videoId)) return null;
-
-  return saveEarning({
-    userId,
-    type: "like",
-    amount: EARNING_RATES.like,
-    videoId,
-  });
+export async function recordLikeEarning(userId: number, videoId: number) {
+  return saveEarning({ userId, type: "like", amount: EARNING_RATES.like, videoId });
 }
 
-export async function recordCommentEarning(
-  userId: number,
-  videoId: number
-) {
-  return saveEarning({
-    userId,
-    type: "comment",
-    amount: EARNING_RATES.comment,
-    videoId,
-  });
+export async function recordCommentEarning(userId: number, videoId: number) {
+  return saveEarning({ userId, type: "comment", amount: EARNING_RATES.comment, videoId });
 }
 
-export async function recordShareEarning(
-  userId: number,
-  videoId: number
-) {
-  if (await alreadyEarned(userId, "share", videoId)) return null;
-
-  return saveEarning({
-    userId,
-    type: "share",
-    amount: EARNING_RATES.share,
-    videoId,
-  });
+export async function recordShareEarning(userId: number, videoId: number) {
+  return saveEarning({ userId, type: "share", amount: EARNING_RATES.share, videoId });
 }
 
-export async function recordInviteEarning(
-  userId: number,
-  referredUserId: number
-) {
-  return saveEarning({
-    userId,
-    type: "invite",
-    amount: EARNING_RATES.invite,
-    referredUserId,
-    status: "verified",
-  });
+export async function recordInviteEarning(userId: number, referredUserId: number) {
+  if (userId === referredUserId) return null;
+  return saveEarning({ userId, type: "invite", amount: EARNING_RATES.invite, referredUserId, status: "verified" });
 }
 
-export async function recordLiveWatchEarning(
-  userId: number,
-  minutes: number
-) {
-  if (minutes < 1) return null;
-
-  return saveEarning({
-    userId,
-    type: "live_watch",
-    amount: minutes * EARNING_RATES.live_watch,
-  });
+export async function recordLiveWatchEarning(userId: number, minutes: number) {
+  if (!Number.isFinite(minutes) || minutes < 1 || minutes > 1440) return null;
+  return saveEarning({ userId, type: "live_watch", amount: minutes * EARNING_RATES.live_watch });
 }
 
 export async function recordPollVoteEarning(userId: number) {
-  return saveEarning({
-    userId,
-    type: "poll_vote",
-    amount: EARNING_RATES.poll_vote,
-  });
+  return saveEarning({ userId, type: "poll_vote", amount: EARNING_RATES.poll_vote });
 }
 
 export async function recordChallengeEarning(userId: number) {
-  return saveEarning({
-    userId,
-    type: "challenge",
-    amount: EARNING_RATES.challenge,
-  });
+  return saveEarning({ userId, type: "challenge", amount: EARNING_RATES.challenge });
 }
 
-// ============================================
-// USER BALANCE
-// ============================================
-
-export async function getUserBalance(
-  userId: number
-): Promise<UserBalance> {
-  if (!db) {
-    return {
-      userId,
-      totalEarned: 0,
-      totalWithdrawn: 0,
-      currentBalance: 0,
-    };
-  }
+export async function getUserBalance(userId: number): Promise<UserBalance> {
+  if (!db) return { userId, totalEarned: 0, totalWithdrawn: 0, currentBalance: 0 };
 
   try {
-    const results = await db
-      .select()
-      .from(microEarnings)
-      .where(eq(microEarnings.userId, userId));
+    const userRows = await db
+      .select({ totalEarnings: users.totalEarnings, totalWithdrawals: users.totalWithdrawals })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    const user = userRows[0];
+    if (!user) return { userId, totalEarned: 0, totalWithdrawn: 0, currentBalance: 0 };
 
-    const totalEarned = results.reduce(
-      (sum, e) => sum + Number(e.amount),
-      0
-    );
+    const totalEarned = Number(user.totalEarnings ?? 0);
+    const totalWithdrawn = Number(user.totalWithdrawals ?? 0);
+    const currentBalance = Math.max(0, totalEarned - totalWithdrawn);
 
-    return {
-      userId,
-      totalEarned,
-      totalWithdrawn: 0,
-      currentBalance: totalEarned,
-    };
+    return { userId, totalEarned, totalWithdrawn, currentBalance };
   } catch (err) {
-    console.error(err);
-    return {
-      userId,
-      totalEarned: 0,
-      totalWithdrawn: 0,
-      currentBalance: 0,
-    };
+    console.error("[MicroEarnings BALANCE ERROR]");
+    return { userId, totalEarned: 0, totalWithdrawn: 0, currentBalance: 0 };
   }
 }
