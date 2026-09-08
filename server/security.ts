@@ -7,7 +7,7 @@ import cors from "cors";
  * Configuration du rate limiting
  */
 export const createRateLimiter = (
-  windowMs: number = 15 * 60 * 1000, // 15 minutes
+  windowMs: number = 15 * 60 * 1000,
   maxRequests: number = 100
 ) => {
   return rateLimit({
@@ -17,37 +17,25 @@ export const createRateLimiter = (
     standardHeaders: true,
     legacyHeaders: false,
     skip: (req) => {
-      // Ne pas limiter les requêtes GET pour les assets statiques
       return req.method === "GET" && req.path.startsWith("/public");
     },
   });
 };
 
-/**
- * Configuration du rate limiting pour l'authentification
- */
 export const authRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 tentatives
+  windowMs: 15 * 60 * 1000,
+  max: 5,
   message: "Too many login attempts, please try again later.",
   skipSuccessfulRequests: true,
-  keyGenerator: (req) => {
-    return req.ip || req.socket.remoteAddress || "unknown";
-  },
+  keyGenerator: (req) => req.ip || req.socket.remoteAddress || "unknown",
 });
 
-/**
- * Configuration du rate limiting pour l'upload
- */
 export const uploadRateLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 heure
-  max: 10, // 10 uploads par heure
+  windowMs: 60 * 60 * 1000,
+  max: 10,
   message: "Upload limit exceeded, please try again later.",
 });
 
-/**
- * Configuration Helmet pour la sécurité HTTP
- */
 export const helmetConfig = helmet({
   contentSecurityPolicy: {
     directives: {
@@ -60,15 +48,12 @@ export const helmetConfig = helmet({
     },
   },
   hsts: {
-    maxAge: 31536000, // 1 an
+    maxAge: 31536000,
     includeSubDomains: true,
     preload: true,
   },
 });
 
-/**
- * Configuration CORS
- */
 export const corsConfig = cors({
   origin: process.env.ALLOWED_ORIGINS?.split(",") || [
     "http://localhost:3000",
@@ -80,11 +65,47 @@ export const corsConfig = cors({
 });
 
 /**
- * Middleware de validation des entrées
+ * Protection CSRF/origin pour les requêtes qui utilisent le cookie de session.
+ * Les requêtes cross-site ne doivent jamais pouvoir déclencher une mutation
+ * authentifiée simplement parce que le navigateur joint automatiquement le cookie.
+ * Les clients natifs/server-to-server sans Origin/Referer restent autorisés.
  */
+export const csrfProtection = (req: Request, res: Response, next: NextFunction) => {
+  const method = req.method.toUpperCase();
+  if (["GET", "HEAD", "OPTIONS"].includes(method)) return next();
+
+  const configuredOrigins = (process.env.ALLOWED_ORIGINS || process.env.FRONTEND_URL || process.env.APP_URL || "")
+    .split(",")
+    .map(value => value.trim())
+    .filter(Boolean);
+
+  const origin = req.headers.origin?.trim();
+  const referer = req.headers.referer?.trim();
+  let requestOrigin: string | undefined = origin;
+
+  if (!requestOrigin && referer) {
+    try {
+      requestOrigin = new URL(referer).origin;
+    } catch {
+      return res.status(403).json({ error: "Invalid request origin." });
+    }
+  }
+
+  if (!requestOrigin) return next();
+
+  const isDevelopmentLocalhost =
+    process.env.NODE_ENV === "development" &&
+    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(requestOrigin);
+
+  if (isDevelopmentLocalhost || configuredOrigins.includes(requestOrigin)) {
+    return next();
+  }
+
+  return res.status(403).json({ error: "Cross-origin request blocked." });
+};
+
 export const validateInput = (req: Request, res: Response, next: NextFunction) => {
-  // Vérifier la taille du corps de la requête
-  const maxBodySize = 10 * 1024 * 1024; // 10 MB
+  const maxBodySize = 10 * 1024 * 1024;
   if (req.headers["content-length"]) {
     const contentLength = parseInt(req.headers["content-length"], 10);
     if (contentLength > maxBodySize) {
@@ -95,27 +116,16 @@ export const validateInput = (req: Request, res: Response, next: NextFunction) =
     }
   }
 
-  // Nettoyer les entrées
-  if (req.body && typeof req.body === "object") {
-    sanitizeObject(req.body);
-  }
-
+  if (req.body && typeof req.body === "object") sanitizeObject(req.body);
   next();
 };
 
-/**
- * Nettoie un objet des caractères malveillants
- */
 function sanitizeObject(obj: any): void {
   for (const key in obj) {
     if (Object.prototype.hasOwnProperty.call(obj, key)) {
       const value = obj[key];
-
       if (typeof value === "string") {
-        // Supprimer les caractères de contrôle et les espaces excessifs
-        obj[key] = value
-          .replace(/[\x00-\x1F\x7F]/g, "") // Caractères de contrôle
-          .trim();
+        obj[key] = value.replace(/[\x00-\x1F\x7F]/g, "").trim();
       } else if (typeof value === "object" && value !== null) {
         sanitizeObject(value);
       }
@@ -123,9 +133,6 @@ function sanitizeObject(obj: any): void {
   }
 }
 
-/**
- * Middleware de gestion d'erreurs
- */
 export const errorHandler = (
   err: any,
   req: Request,
@@ -141,7 +148,6 @@ export const errorHandler = (
     stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
   });
 
-  // Erreurs de validation
   if (err.name === "ValidationError") {
     return res.status(400).json({
       error: "Validation Error",
@@ -150,28 +156,16 @@ export const errorHandler = (
     });
   }
 
-  // Erreurs d'authentification
   if (err.name === "UnauthorizedError") {
-    return res.status(401).json({
-      error: "Unauthorized",
-      message: "Authentication required",
-    });
+    return res.status(401).json({ error: "Unauthorized", message: "Authentication required" });
   }
 
-  // Erreurs de permission
   if (err.statusCode === 403) {
-    return res.status(403).json({
-      error: "Forbidden",
-      message: "You do not have permission to access this resource",
-    });
+    return res.status(403).json({ error: "Forbidden", message: "You do not have permission to access this resource" });
   }
 
-  // Erreurs par défaut
   const statusCode = err.statusCode || 500;
-  const message =
-    statusCode === 500
-      ? "Internal Server Error"
-      : err.message || "An error occurred";
+  const message = statusCode === 500 ? "Internal Server Error" : err.message || "An error occurred";
 
   res.status(statusCode).json({
     error: message,
@@ -179,16 +173,11 @@ export const errorHandler = (
   });
 };
 
-/**
- * Middleware de logging de sécurité
- */
 export const securityLogger = (req: Request, res: Response, next: NextFunction) => {
   const startTime = Date.now();
-
   res.on("finish", () => {
     const duration = Date.now() - startTime;
     const isError = res.statusCode >= 400;
-
     if (isError || req.path.includes("/api")) {
       console.log("[Security Log]", {
         timestamp: new Date().toISOString(),
@@ -202,58 +191,28 @@ export const securityLogger = (req: Request, res: Response, next: NextFunction) 
       });
     }
   });
-
   next();
 };
 
-/**
- * Middleware pour vérifier les en-têtes de sécurité
- */
-export const checkSecurityHeaders = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  // Ajouter les en-têtes de sécurité supplémentaires
+export const checkSecurityHeaders = (req: Request, res: Response, next: NextFunction) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("X-XSS-Protection", "1; mode=block");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-
   next();
 };
 
-/**
- * Middleware pour valider les tokens JWT
- */
 export const validateJWT = (req: Request, res: Response, next: NextFunction) => {
   const token = req.headers.authorization?.split(" ")[1];
-
-  if (!token) {
-    return res.status(401).json({
-      error: "Unauthorized",
-      message: "No token provided",
-    });
-  }
-
-  // La validation réelle est faite par tRPC/le contexte
-  // Ce middleware est juste un exemple
+  if (!token) return res.status(401).json({ error: "Unauthorized", message: "No token provided" });
   next();
 };
 
-/**
- * Middleware pour limiter les requêtes POST/PUT/DELETE
- */
-export const restrictMethods = (
-  allowedMethods: string[] = ["GET"]
-) => {
+export const restrictMethods = (allowedMethods: string[] = ["GET"]) => {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!allowedMethods.includes(req.method)) {
-      return res.status(405).json({
-        error: "Method Not Allowed",
-        message: `${req.method} is not allowed on this endpoint`,
-      });
+      return res.status(405).json({ error: "Method Not Allowed", message: `${req.method} is not allowed on this endpoint` });
     }
     next();
   };
