@@ -1,0 +1,31 @@
+# Secrets and local environment files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+.vite/
+
+# Logs and local runtime data
+*.log
+logs/
+coverage/
+
+# Local uploads / generated media
+uploads/
+.tmp/
+tmp/
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
