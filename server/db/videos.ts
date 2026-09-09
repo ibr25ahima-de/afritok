@@ -11,8 +11,6 @@ export async function getVideoById(videoId: number) {
 }
 
 export async function getFeedVideos(limit: number, offset: number) {
-  await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "scheduledAt" timestamp`);
-  await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "hdVideoUrl" text`);
   return await db
     .select({
       id: videos.id,
