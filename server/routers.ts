@@ -50,10 +50,41 @@ function allowOtpAttempt(store: Map<string, number[]>, key: string, limit: numbe
   return true;
 }
 
+function toSafeAuthUser(user: typeof users.$inferSelect) {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    avatarUrl: user.avatarUrl,
+    country: user.country,
+    currency: user.currency,
+    profilePublic: user.profilePublic,
+    allowMessages: user.allowMessages,
+    allowComments: user.allowComments,
+    showFollowers: user.showFollowers,
+    showFollowing: user.showFollowing,
+    language: user.language,
+    darkMode: user.darkMode,
+    dataSaver: user.dataSaver,
+    autoPlay: user.autoPlay,
+    textSize: user.textSize,
+    animations: user.animations,
+    twoFactorEnabled: user.twoFactorEnabled,
+    loginAlerts: user.loginAlerts,
+    notifyFollowers: user.notifyFollowers,
+    notifyLikes: user.notifyLikes,
+    notifyComments: user.notifyComments,
+    notifyShares: user.notifyShares,
+    notifyMessages: user.notifyMessages,
+    notifyPromotions: user.notifyPromotions,
+  };
+}
+
 export const appRouter = router({
   system: systemRouter, feed: feedRouter, music: musicRouter, adminMusic: adminMusicRouter, coins: coinsRouter, gifts: giftRouter, wallet: walletRouter, payment: paymentRouter, platformFinance: platformFinanceRouter, advertising: advertisingRouter, subscription: subscriptionRouter, live: liveRouter, liveChat: liveChatRouter, directMessages: directMessagesRouter, instantWithdrawal: instantWithdrawalRouter, monetization: monetizationRouter,
   auth: router({
-    me: publicProcedure.query(({ ctx }) => ctx.user),
+    me: publicProcedure.query(({ ctx }) => ctx.user ? toSafeAuthUser(ctx.user) : null),
     logout: publicProcedure.mutation(({ ctx }) => { const cookieOptions = getSessionCookieOptions(ctx.req); ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 }); return { success: true }; }),
     requestOtp: publicProcedure.input(z.object({ phone: z.string().trim().min(10).max(25) })).mutation(async ({ input }) => {
       const phone = input.phone.replace(/\D/g, "");
@@ -83,7 +114,7 @@ export const appRouter = router({
       const token = await sdk.createSessionToken(user.id, user.phone, { expiresInMs: SECURITY_LIMITS.sessionMaxAgeSeconds * 1000 });
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge: SECURITY_LIMITS.sessionMaxAgeSeconds * 1000 });
-      return { success: true, user, isNewUser };
+      return { success: true, user: toSafeAuthUser(user), isNewUser };
     }),
   }),
   video: router({
