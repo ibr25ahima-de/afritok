@@ -288,6 +288,38 @@ async function createTables(pool: Pool) {
       );
     `);
 
+    // Create direct-message tables before HTTP requests are served.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "conversations" (
+        "id" SERIAL PRIMARY KEY,
+        "participant1Id" INTEGER NOT NULL,
+        "participant2Id" INTEGER NOT NULL,
+        "lastMessageAt" TIMESTAMP,
+        "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+        "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+        UNIQUE ("participant1Id", "participant2Id")
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "directMessages" (
+        "id" SERIAL PRIMARY KEY,
+        "conversationId" INTEGER NOT NULL,
+        "senderId" INTEGER NOT NULL,
+        "content" TEXT NOT NULL,
+        "mediaUrl" VARCHAR(500),
+        "mediaType" VARCHAR(20) NOT NULL DEFAULT 'none',
+        "isRead" BOOLEAN NOT NULL DEFAULT FALSE,
+        "readAt" TIMESTAMP,
+        "isEdited" BOOLEAN NOT NULL DEFAULT FALSE,
+        "editedAt" TIMESTAMP,
+        "sentAt" TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    await pool.query(`CREATE INDEX IF NOT EXISTS "directMessages_conversation_idx" ON "directMessages" ("conversationId");`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS "directMessages_sender_idx" ON "directMessages" ("senderId");`);
+
     console.log("✅ Database tables created successfully");
   } catch (error) {
     console.error("❌ Migration error:", error);
