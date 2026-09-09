@@ -1,43 +1,22 @@
-import { router, protectedProcedure } from "../../_core/trpc";
+import { router, adminProcedure } from "../../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { db } from "../../db";
 import { reports } from "../../../drizzle/schema";
 import { eq, desc } from "drizzle-orm";
+import { z } from "zod";
+
+const positiveId = z.number().int().positive();
 
 export const reportsRouter = router({
-  /**
-   * 🚨 Voir tous les signalements
-   */
-  getReports: protectedProcedure.query(async ({ ctx }) => {
-    if (!ctx.user || ctx.user.role !== "admin") {
-      throw new TRPCError({ code: "FORBIDDEN" });
-    }
-
-    return db
-      .select()
-      .from(reports)
-      .orderBy(desc(reports.createdAt));
+  getReports: adminProcedure.query(async () => {
+    return db.select().from(reports).orderBy(desc(reports.createdAt));
   }),
 
-  /**
-   * ✅ Traiter un signalement
-   */
-  resolveReport: protectedProcedure
-    .input((val: { reportId: number }) => val)
-    .mutation(async ({ ctx, input }) => {
-      if (!ctx.user || ctx.user.role !== "admin") {
-        throw new TRPCError({ code: "FORBIDDEN" });
-      }
-
-      await db
-        .update(reports)
-        .set({
-          status: "resolved",
-        })
-        .where(eq(reports.id, input.reportId));
-
-      return {
-        success: true,
-      };
+  resolveReport: adminProcedure
+    .input(z.object({ reportId: positiveId }))
+    .mutation(async ({ input }) => {
+      const result = await db.update(reports).set({ status: "resolved" }).where(eq(reports.id, input.reportId));
+      if (!result) throw new TRPCError({ code: "NOT_FOUND", message: "Signalement introuvable." });
+      return { success: true };
     }),
 });
