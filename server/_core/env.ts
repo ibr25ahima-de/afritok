@@ -4,4 +4,6 @@ export const ENV = {
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
+  // Shared secret for the generic payment webhook. No payment provider key is required yet.
+  paymentWebhookSecret: process.env.PAYMENT_WEBHOOK_SECRET ?? "",
 };
