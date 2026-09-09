@@ -2,9 +2,56 @@ import { mkdir, writeFile, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { processPremiumHdVideo } from "./hd-pipeline";
 
+const MAX_SOURCE_BYTES = 100 * 1024 * 1024;
+const SOURCE_FETCH_TIMEOUT_MS = 30_000;
+
+function isSafeSourceUrl(value: string): boolean {
+  if (!value || value.length > 2048) return false;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:") return false;
+  const configuredStorage = process.env.SUPABASE_URL;
+  if (!configuredStorage) return false;
+  try {
+    const allowed = new URL(configuredStorage);
+    return url.hostname === allowed.hostname && url.port === allowed.port;
+  } catch {
+    return false;
+  }
+}
+
+async function downloadSource(url: string): Promise<Buffer> {
+  if (!isSafeSourceUrl(url)) throw new Error("Source vidéo non autorisée.");
+  const response = await fetch(url, { signal: AbortSignal.timeout(SOURCE_FETCH_TIMEOUT_MS) });
+  if (!response.ok) throw new Error(`Impossible de récupérer la vidéo source (${response.status}).`);
+  const contentLength = Number(response.headers.get("content-length") ?? 0);
+  if (contentLength > MAX_SOURCE_BYTES) throw new Error("Vidéo source trop volumineuse.");
+  if (!response.body) throw new Error("Réponse vidéo vide.");
+
+  const reader = response.body.getReader();
+  const chunks: Buffer[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_SOURCE_BYTES) throw new Error("Vidéo source trop volumineuse.");
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks, total);
+}
+
 /**
  * Sends Premium HD work to the isolated worker when configured.
- * A local fallback keeps development/test environments usable.
+ * A bounded local fallback keeps development/test environments usable.
  */
 export function queuePremiumHdVideo(input: {
   videoId: number;
@@ -22,6 +69,7 @@ export function queuePremiumHdVideo(input: {
         "x-afritok-worker-token": workerToken,
       },
       body: JSON.stringify(input),
+      signal: AbortSignal.timeout(10_000),
     }).then(async (response) => {
       if (!response.ok) throw new Error(`Worker HD indisponible (${response.status}).`);
     }).catch((error) => {
@@ -39,9 +87,8 @@ async function runLocalFallback(input: { videoId: number; userId: number; videoU
 
   try {
     await mkdir(dirname(sourcePath), { recursive: true });
-    const response = await fetch(input.videoUrl);
-    if (!response.ok) throw new Error(`Impossible de récupérer la vidéo source (${response.status}).`);
-    await writeFile(sourcePath, Buffer.from(await response.arrayBuffer()));
+    const source = await downloadSource(input.videoUrl);
+    await writeFile(sourcePath, source, { flag: "wx" });
     await processPremiumHdVideo({ videoId: input.videoId, userId: input.userId, sourcePath });
   } catch (error) {
     console.error("[Premium HD] Processing failed:", error);
