@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { payments } from "../../drizzle/schema-payments";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { settleConfirmedPayment } from "./payment-settlement-service";
 import { syncPremiumSubscriptionAfterConfirmedPayment } from "../subscriptions/subscription-service";
 
@@ -27,7 +27,26 @@ export async function confirmPayment({ referenceId, providerReference, confirmed
 
 export async function failPayment({ referenceId }: { referenceId: string }) {
   if (!referenceId) throw new Error("Référence de paiement manquante.");
-  const result = await db.update(payments).set({ status: "failed", updatedAt: new Date().toISOString() }).where(eq(payments.referenceId, referenceId)).returning();
-  if (result.length === 0) throw new Error("Transaction de paiement introuvable.");
-  return result[0];
+
+  // Payments are a state machine: only pending payments may transition to
+  // failed. A confirmed success must never be reversible through a webhook.
+  const result = await db
+    .update(payments)
+    .set({ status: "failed", updatedAt: new Date().toISOString() })
+    .where(and(eq(payments.referenceId, referenceId), eq(payments.status, "pending")))
+    .returning();
+
+  if (result.length > 0) return result[0];
+
+  // Idempotent retry: an already-failed payment is safe to report as failed.
+  const current = await db
+    .select()
+    .from(payments)
+    .where(eq(payments.referenceId, referenceId))
+    .limit(1);
+
+  if (current.length === 0) throw new Error("Transaction de paiement introuvable.");
+  if (current[0].status === "failed") return current[0];
+  if (current[0].status === "success") throw new Error("Un paiement confirmé ne peut pas être annulé.");
+  throw new Error("Transition de paiement non autorisée.");
 }
