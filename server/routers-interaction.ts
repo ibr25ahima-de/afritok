@@ -7,8 +7,11 @@ import { eq, sql, inArray, and } from "drizzle-orm";
 import { getUserLike, getUserFavorite, getVideoComments, getVideoById, likeVideo, unlikeVideo, favoriteVideo, unfavoriteVideo, addComment, deleteComment, shareVideo, isFollowing } from "./db";
 import { recordLikeEarning, recordCommentEarning, recordShareEarning } from "./micro-earnings";
 
+const positiveId = z.number().int().positive();
+const videoIdInput = z.object({ videoId: positiveId });
+
 export const likeRouter = router({
-  toggle: protectedProcedure.input(z.object({ videoId: z.number() })).mutation(async ({ ctx, input }) => {
+  toggle: protectedProcedure.input(videoIdInput).mutation(async ({ ctx, input }) => {
     const user = ctx.user;
     const video = await getVideoById(input.videoId);
     if (!video) throw new TRPCError({ code: "NOT_FOUND" });
@@ -22,7 +25,7 @@ export const likeRouter = router({
     await db.update(videos).set({ likes: sql`COALESCE(${videos.likes}, 0) + 1` }).where(eq(videos.id, input.videoId));
     return { liked: true, likes: (video.likes || 0) + 1, earning: await recordLikeEarning(user.id, input.videoId) };
   }),
-  getMyForVideos: protectedProcedure.input(z.object({ videoIds: z.array(z.number()).max(100) })).query(async ({ ctx, input }) => {
+  getMyForVideos: protectedProcedure.input(z.object({ videoIds: z.array(positiveId).max(100) })).query(async ({ ctx, input }) => {
     if (!input.videoIds.length) return { likedVideoIds: [], favoritedVideoIds: [] };
     const [liked, favorited] = await Promise.all([
       db.select({ videoId: likes.videoId }).from(likes).where(and(eq(likes.userId, ctx.user.id), inArray(likes.videoId, input.videoIds))),
@@ -36,14 +39,14 @@ export const likeRouter = router({
 });
 
 export const commentRouter = router({
-  getByVideo: publicProcedure.input(z.object({ videoId: z.number() })).query(async ({ input }) => {
+  getByVideo: publicProcedure.input(videoIdInput).query(async ({ input }) => {
     const video = await getVideoById(input.videoId);
     if (!video) throw new TRPCError({ code: "NOT_FOUND" });
     const [owner] = await db.select({ allowComments: users.allowComments }).from(users).where(eq(users.id, video.userId)).limit(1);
     if (!owner || !owner.allowComments) return [];
     return getVideoComments(input.videoId);
   }),
-  create: protectedProcedure.input(z.object({ videoId: z.number(), text: z.string().min(1).max(500) })).mutation(async ({ ctx, input }) => {
+  create: protectedProcedure.input(z.object({ videoId: positiveId, text: z.string().trim().min(1).max(500) })).mutation(async ({ ctx, input }) => {
     const user = ctx.user;
     const video = await getVideoById(input.videoId);
     if (!video) throw new TRPCError({ code: "NOT_FOUND" });
@@ -59,7 +62,7 @@ export const commentRouter = router({
     await db.update(videos).set({ comments: sql`COALESCE(${videos.comments}, 0) + 1` }).where(eq(videos.id, input.videoId));
     return { success: true, comments: (video.comments || 0) + 1, earning: await recordCommentEarning(user.id, input.videoId) };
   }),
-  delete: protectedProcedure.input(z.object({ commentId: z.number() })).mutation(async ({ ctx, input }) => {
+  delete: protectedProcedure.input(z.object({ commentId: positiveId })).mutation(async ({ ctx, input }) => {
     const comment = (await db.select().from(comments).where(eq(comments.id, input.commentId)).limit(1))[0];
     if (!comment) throw new TRPCError({ code: "NOT_FOUND", message: "Commentaire introuvable." });
     if (comment.userId !== ctx.user.id && ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "Vous ne pouvez supprimer que vos propres commentaires." });
@@ -70,7 +73,7 @@ export const commentRouter = router({
 });
 
 export const favoriteRouter = router({
-  toggle: protectedProcedure.input(z.object({ videoId: z.number() })).mutation(async ({ ctx, input }) => {
+  toggle: protectedProcedure.input(videoIdInput).mutation(async ({ ctx, input }) => {
     const video = await getVideoById(input.videoId);
     if (!video) throw new TRPCError({ code: "NOT_FOUND" });
     const existing = await getUserFavorite(ctx.user.id, input.videoId);
@@ -89,7 +92,7 @@ export const favoriteRouter = router({
 });
 
 export const shareRouter = router({
-  create: protectedProcedure.input(z.object({ videoId: z.number(), platform: z.string().min(1).max(50) })).mutation(async ({ ctx, input }) => {
+  create: protectedProcedure.input(z.object({ videoId: positiveId, platform: z.string().trim().min(1).max(50) })).mutation(async ({ ctx, input }) => {
     const video = await getVideoById(input.videoId);
     if (!video) throw new TRPCError({ code: "NOT_FOUND" });
     await shareVideo(ctx.user.id, input.videoId, input.platform);
