@@ -26,10 +26,6 @@ export async function applyPremiumVideoOptions(userId: number, videoId: number, 
   const [video] = await db.select().from(videos).where(eq(videos.id, videoId)).limit(1);
   if (!video || video.userId !== userId) throw new TRPCError({ code: "NOT_FOUND", message: "Vidéo introuvable." });
 
-  await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "premiumQuality" text`);
-  await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "scheduledAt" timestamp`);
-  await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "commentsMode" text`);
-  await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "hdVideoUrl" text`);
   await db.execute(sql`UPDATE "videos" SET "premiumQuality" = ${options.quality ?? "standard"}, "scheduledAt" = ${scheduledAt?.toISOString() ?? null}, "commentsMode" = ${options.commentsMode ?? "all"} WHERE "id" = ${videoId}`);
 
   if (options.quality === "hd") {
