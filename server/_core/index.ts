@@ -17,7 +17,14 @@ import { uploadAdvertisingMedia } from "../advertising/ad-media-upload-service";
 import { registerLiveSocket } from "../live-socket";
 import paymentWebhookRouter from "../payments/payment-webhook-router";
 import paymentTestRouter from "../payments/payment-test-router";
-import { createRateLimiter, csrfProtection, helmetConfig, uploadRateLimiter } from "../security";
+import {
+  createRateLimiter,
+  csrfProtection,
+  helmetConfig,
+  securityLogger,
+  validateInput,
+  uploadRateLimiter,
+} from "../security";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -55,6 +62,7 @@ async function startServer() {
   app.use(helmetConfig);
   app.use(createRateLimiter(15 * 60 * 1000, 300));
   app.use(csrfProtection);
+  app.use(securityLogger);
 
   const corsOptions = {
     credentials: true,
@@ -72,6 +80,7 @@ async function startServer() {
   app.post("/api/webhooks/stripe", express.raw({ type: "application/json" }), handleStripeWebhook);
   app.use(express.json({ limit: "1mb" }));
   app.use(express.urlencoded({ limit: "1mb", extended: true, parameterLimit: 100 }));
+  app.use(validateInput);
   app.use("/api/payments", paymentWebhookRouter);
   if (process.env.NODE_ENV === "development") {
     app.use("/api/payments/test", paymentTestRouter);
