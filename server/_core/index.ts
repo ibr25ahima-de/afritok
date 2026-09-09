@@ -64,7 +64,10 @@ async function getAuthenticatedUser(req: Request, res: Response) {
 }
 
 async function startServer() {
-  runMigrations().catch((err) => console.error("Migration failed:", err));
+  // Database migrations must finish before the HTTP server starts accepting requests.
+  // This prevents request-time schema creation from becoming a race/DoS condition.
+  await runMigrations();
+
   const app = express();
   app.set("trust proxy", 1);
   const server = createServer(app);
@@ -169,4 +172,7 @@ async function startServer() {
   });
 }
 
-startServer().catch(console.error);
+startServer().catch((error) => {
+  console.error("Server startup failed:", error);
+  process.exitCode = 1;
+});
