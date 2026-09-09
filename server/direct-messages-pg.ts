@@ -48,6 +48,14 @@ export interface DirectMessageData {
 }
 
 export class DirectMessagesManager {
+  async isConversationMember(conversationId: number, userId: number): Promise<boolean> {
+    try {
+      await ensureTables();
+      const result = await db.execute(sql`SELECT 1 FROM "conversations" WHERE "id" = ${conversationId} AND ("participant1Id" = ${userId} OR "participant2Id" = ${userId}) LIMIT 1`);
+      return Boolean((result as any).rows?.length);
+    } catch { return false; }
+  }
+
   async getOrCreateConversation(userId1: number, userId2: number): Promise<number | null> {
     try {
       await ensureTables();
@@ -68,6 +76,8 @@ export class DirectMessagesManager {
     try {
       await ensureTables();
       if (!data.content?.trim() || data.content.length > 5000) return null;
+      const allowed = await db.execute(sql`SELECT 1 FROM "conversations" WHERE "id" = ${data.conversationId} AND (("participant1Id" = ${data.senderId} AND "participant2Id" = ${data.recipientId}) OR ("participant1Id" = ${data.recipientId} AND "participant2Id" = ${data.senderId})) LIMIT 1`);
+      if (!(allowed as any).rows?.length) return null;
       const result = await db.execute(sql`INSERT INTO "directMessages" ("conversationId", "senderId", "content", "mediaUrl", "mediaType") VALUES (${data.conversationId}, ${data.senderId}, ${data.content.trim()}, ${data.attachmentUrl || null}, ${data.attachmentType || "none"}) RETURNING "id"`);
       await db.execute(sql`UPDATE "conversations" SET "lastMessageAt" = NOW(), "updatedAt" = NOW() WHERE "id" = ${data.conversationId}`);
       const rows = (result as any).rows || [];
