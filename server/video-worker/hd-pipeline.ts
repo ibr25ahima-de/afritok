@@ -34,7 +34,6 @@ export async function processPremiumHdVideo(input: {
       videoId: input.videoId,
     });
 
-    await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "hdVideoUrl" text`);
     await db.update(videos)
       .set({ updatedAt: new Date().toISOString() })
       .where(eq(videos.id, input.videoId));
