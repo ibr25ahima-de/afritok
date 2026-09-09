@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { storagePut } from "../storage";
 import "dotenv/config";
 import express, { Request, Response } from "express";
@@ -103,7 +104,7 @@ async function startServer() {
         return res.status(400).json({ error: "Format d'image non autorisé ou fichier invalide." });
       }
       const extension = mimeType === "image/jpeg" ? "jpg" : mimeType.split("/")[1];
-      const fileKey = `avatars/${user.id}/${crypto.randomUUID()}.${extension}`;
+      const fileKey = `avatars/${user.id}/${randomUUID()}.${extension}`;
       const { url } = await storagePut(fileKey, req.file.buffer, mimeType);
       return res.json({ avatarUrl: url });
     } catch (error) {
@@ -122,7 +123,7 @@ async function startServer() {
         return res.status(400).json({ error: "Format vidéo non autorisé ou fichier invalide." });
       }
       const extension = mimeType === "video/quicktime" ? "mov" : mimeType.split("/")[1];
-      const fileName = `${crypto.randomUUID()}.${extension}`;
+      const fileName = `${randomUUID()}.${extension}`;
       const videoUrl = await uploadVideoToSupabase(req.file.buffer, fileName, user.id);
       return res.json({ videoUrl });
     } catch (error) {
