@@ -12,10 +12,51 @@ const manager = getLiveSessionsManager();
 const stageRequests = getLiveStageRequestManager();
 const LIVE_LAYOUTS = new Set(["spotlight", "split", "grid", "focus", "host-center"]);
 
+const EVENT_LIMITS: Record<string, { max: number; windowMs: number }> = {
+  "live:join": { max: 10, windowMs: 60_000 },
+  "live:layout": { max: 30, windowMs: 60_000 },
+  "live:stage-request": { max: 5, windowMs: 60_000 },
+  "live:stage-decision": { max: 30, windowMs: 60_000 },
+  "live:stage-media-ready": { max: 30, windowMs: 60_000 },
+  "live:signal": { max: 120, windowMs: 60_000 },
+  "live:chat": { max: 30, windowMs: 60_000 },
+  "live:gift": { max: 60, windowMs: 60_000 },
+  "live:status": { max: 60, windowMs: 60_000 },
+  "live:moderate": { max: 30, windowMs: 60_000 },
+};
+const eventCounters = new Map<string, { count: number; resetAt: number }>();
+const MAX_EVENT_COUNTERS = 10_000;
+const MAX_SIGNAL_BYTES = 32 * 1024;
+const MAX_GIFT_BYTES = 8 * 1024;
+
 function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET?.trim();
   if (!secret || secret.length < 32) throw new Error("JWT_SECRET is not configured with sufficient entropy");
   return secret;
+}
+
+function allowEvent(socketId: string, eventName: string): boolean {
+  const limit = EVENT_LIMITS[eventName];
+  if (!limit) return true;
+  const now = Date.now();
+  const key = `${socketId}:${eventName}`;
+  const current = eventCounters.get(key);
+  if (!current || current.resetAt <= now) {
+    if (!current && eventCounters.size >= MAX_EVENT_COUNTERS) return false;
+    eventCounters.set(key, { count: 1, resetAt: now + limit.windowMs });
+    return true;
+  }
+  if (current.count >= limit.max) return false;
+  current.count += 1;
+  return true;
+}
+
+function safeJsonBytes(value: unknown, maxBytes: number): boolean {
+  try {
+    return Buffer.byteLength(JSON.stringify(value), "utf8") <= maxBytes;
+  } catch {
+    return false;
+  }
 }
 
 async function authenticateSocket(socket: Socket) {
@@ -55,6 +96,7 @@ export function registerLiveSocket(io: Server) {
     }).catch(() => socket.disconnect(true));
 
     socket.on("live:join", (payload: LiveSocketJoinPayload) => {
+      if (!allowEvent(socket.id, "live:join")) return;
       if (!ready || !authenticatedUser || !payload?.sessionId || typeof payload.sessionId !== "string" || payload.sessionId.length > 128) return;
       const session = manager.getSession(payload.sessionId);
       if (!session || session.state === "ended") return;
@@ -84,21 +126,23 @@ export function registerLiveSocket(io: Server) {
     });
 
     socket.on("live:layout", ({ sessionId, layout, centerParticipantId }) => {
+      if (!allowEvent(socket.id, "live:layout")) return;
       const sender = socketUsers.get(socket.id);
-      if (!sender || sender.sessionId !== sessionId || !LIVE_LAYOUTS.has(layout)) return;
+      if (!sender || typeof sessionId !== "string" || sessionId.length > 128 || sender.sessionId !== sessionId || !LIVE_LAYOUTS.has(layout)) return;
       const session = manager.getSession(sessionId);
       if (!session || session.hostId !== sender.userId) return;
       session.layout = layout;
       if (centerParticipantId !== undefined) {
         const centerId = Number(centerParticipantId);
-        if (Number.isInteger(centerId)) manager.setCenterParticipant(sessionId, centerId);
+        if (Number.isSafeInteger(centerId) && centerId > 0) manager.setCenterParticipant(sessionId, centerId);
       }
       io.to(`live:${sessionId}`).emit("live:layout", { layout: session.layout, centerParticipantId: session.centerParticipantId || session.hostId });
     });
 
     socket.on("live:stage-request", ({ sessionId }) => {
+      if (!allowEvent(socket.id, "live:stage-request")) return;
       const sender = socketUsers.get(socket.id);
-      if (!sender || sender.sessionId !== sessionId) return;
+      if (!sender || typeof sessionId !== "string" || sessionId.length > 128 || sender.sessionId !== sessionId) return;
       const session = manager.getSession(sessionId);
       if (!session || session.hostId === sender.userId) return;
       if (!session.participants.has(sender.userId)) manager.addParticipant(sessionId, sender.userId, sender.username, "viewer");
@@ -107,8 +151,9 @@ export function registerLiveSocket(io: Server) {
     });
 
     socket.on("live:stage-decision", ({ sessionId, requestId, decision }) => {
+      if (!allowEvent(socket.id, "live:stage-decision")) return;
       const sender = socketUsers.get(socket.id);
-      if (!sender || sender.sessionId !== sessionId || !["accept", "reject"].includes(decision)) return;
+      if (!sender || typeof sessionId !== "string" || sessionId.length > 128 || sender.sessionId !== sessionId || !["accept", "reject"].includes(decision)) return;
       const session = manager.getSession(sessionId);
       if (!session) return;
       const senderParticipant = session.participants.get(sender.userId);
@@ -130,8 +175,9 @@ export function registerLiveSocket(io: Server) {
     });
 
     socket.on("live:stage-media-ready", ({ sessionId }) => {
+      if (!allowEvent(socket.id, "live:stage-media-ready")) return;
       const sender = socketUsers.get(socket.id);
-      if (!sender || sender.sessionId !== sessionId) return;
+      if (!sender || typeof sessionId !== "string" || sessionId.length > 128 || sender.sessionId !== sessionId) return;
       const session = manager.getSession(sessionId);
       const participant = session?.participants.get(sender.userId);
       if (!session || !participant || (participant.role !== "guest" && participant.role !== "admin" && participant.role !== "host")) return;
@@ -141,7 +187,8 @@ export function registerLiveSocket(io: Server) {
     });
 
     socket.on("live:signal", ({ to, signal }) => {
-      if (!to || !signal) return;
+      if (!allowEvent(socket.id, "live:signal")) return;
+      if (typeof to !== "string" || to.length < 1 || to.length > 128 || !signal || !safeJsonBytes(signal, MAX_SIGNAL_BYTES)) return;
       const sender = socketUsers.get(socket.id);
       const target = socketUsers.get(to);
       if (!sender || !target || sender.sessionId !== target.sessionId) return;
@@ -149,20 +196,23 @@ export function registerLiveSocket(io: Server) {
     });
 
     socket.on("live:chat", ({ sessionId, message }) => {
+      if (!allowEvent(socket.id, "live:chat")) return;
       const sender = socketUsers.get(socket.id);
-      if (!sender || sender.sessionId !== sessionId || !message?.trim()) return;
+      if (!sender || typeof sessionId !== "string" || sessionId.length > 128 || sender.sessionId !== sessionId || typeof message !== "string" || !message.trim()) return;
       io.to(`live:${sessionId}`).emit("live:chat", { id: `${Date.now()}_${socket.id}`, userId: sender.userId, username: sender.username, message: message.trim().slice(0, 300) });
     });
 
     socket.on("live:gift", ({ sessionId, gift }) => {
+      if (!allowEvent(socket.id, "live:gift")) return;
       const sender = socketUsers.get(socket.id);
-      if (!sender || sender.sessionId !== sessionId || !gift) return;
+      if (!sender || typeof sessionId !== "string" || sessionId.length > 128 || sender.sessionId !== sessionId || !gift || typeof gift !== "object" || !safeJsonBytes(gift, MAX_GIFT_BYTES)) return;
       io.to(`live:${sessionId}`).emit("live:gift", { ...gift, senderId: sender.userId, senderUsername: sender.username });
     });
 
     socket.on("live:status", ({ sessionId, isMuted, isVideoOff }) => {
+      if (!allowEvent(socket.id, "live:status")) return;
       const sender = socketUsers.get(socket.id);
-      if (!sender || sender.sessionId !== sessionId) return;
+      if (!sender || typeof sessionId !== "string" || sessionId.length > 128 || sender.sessionId !== sessionId) return;
       const safeMuted = Boolean(isMuted);
       const safeVideoOff = Boolean(isVideoOff);
       if (!manager.updateParticipantStatus(sessionId, sender.userId, safeMuted, safeVideoOff)) return;
@@ -170,13 +220,14 @@ export function registerLiveSocket(io: Server) {
     });
 
     socket.on("live:moderate", ({ sessionId, action, targetUserId, muted, role }) => {
+      if (!allowEvent(socket.id, "live:moderate")) return;
       const sender = socketUsers.get(socket.id);
-      if (!sender || sender.sessionId !== sessionId) return;
+      if (!sender || typeof sessionId !== "string" || sessionId.length > 128 || sender.sessionId !== sessionId) return;
       const session = manager.getSession(sessionId);
       if (!session) return;
       const senderParticipant = session.participants.get(sender.userId);
       const canModerate = session.hostId === sender.userId || senderParticipant?.role === "admin";
-      if (!canModerate || !Number.isInteger(Number(targetUserId)) || Number(targetUserId) === session.hostId) return;
+      if (!canModerate || !Number.isSafeInteger(Number(targetUserId)) || Number(targetUserId) <= 0 || Number(targetUserId) === session.hostId) return;
       const targetId = Number(targetUserId);
       let ok = false;
       if (action === "mute") ok = manager.updateParticipantStatus(sessionId, targetId, Boolean(muted), undefined);
@@ -190,6 +241,9 @@ export function registerLiveSocket(io: Server) {
 
     socket.on("disconnect", () => {
       const user = socketUsers.get(socket.id);
+      for (const key of eventCounters.keys()) {
+        if (key.startsWith(`${socket.id}:`)) eventCounters.delete(key);
+      }
       if (!user) return;
       if (user.role === "viewer") io.to(`live:${user.sessionId}`).emit("live:viewer-count", { delta: -1, userId: user.userId, username: user.username });
       io.to(`live:${user.sessionId}`).emit("live:user-left", { socketId: socket.id, userId: user.userId });
