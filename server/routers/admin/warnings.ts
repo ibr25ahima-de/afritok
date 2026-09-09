@@ -1,6 +1,6 @@
 import { router, adminProcedure } from "../../_core/trpc";
 import { db } from "../../db";
-import { warnings } from "../../../drizzle/schema";
+import { users, warnings } from "../../../drizzle/schema";
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
@@ -15,9 +15,11 @@ export const warningsRouter = router({
       if (input.userId === ctx.user.id) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Un administrateur ne peut pas s'avertir lui-même." });
       }
-      const target = await db.select({ id: warnings.userId }).from(warnings).where(eq(warnings.userId, input.userId)).limit(1);
-      // The warnings table is not a user-existence source; validation of the target is done below via users.
-      if (target.length < 0) throw new TRPCError({ code: "NOT_FOUND" });
+      const target = await db.select({ id: users.id, role: users.role }).from(users).where(eq(users.id, input.userId)).limit(1);
+      if (!target[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Utilisateur introuvable." });
+      if (target[0].role === "admin") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Un administrateur ne peut pas avertir un autre administrateur." });
+      }
       await db.insert(warnings).values({ userId: input.userId, adminId: ctx.user.id, reason: input.reason, message: input.message });
       return { success: true };
     }),
