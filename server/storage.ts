@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { ALLOWED_AVATAR_TYPES, ALLOWED_VIDEO_TYPES, hasValidMediaSignature } from "./security-upload";
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabasePublicKey = process.env.SUPABASE_ANON_KEY;
@@ -22,12 +23,35 @@ const supabaseAdmin = supabaseAdminKey
     })
   : null;
 
+const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
+const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
+
+function validateStorageUpload(fileKey: string, fileBuffer: Buffer | Uint8Array, contentType: string): void {
+  if (!fileKey || fileKey.length > 512 || fileKey.includes("..") || fileKey.startsWith("/") || fileKey.includes("\\")) {
+    throw new Error("Invalid storage key");
+  }
+
+  const buffer = Buffer.isBuffer(fileBuffer) ? fileBuffer : Buffer.from(fileBuffer);
+  if (buffer.length === 0) throw new Error("Empty upload");
+
+  if (fileKey.startsWith("videos/")) {
+    if (buffer.length > MAX_VIDEO_BYTES || !ALLOWED_VIDEO_TYPES.has(contentType) || !hasValidMediaSignature(buffer, contentType)) {
+      throw new Error("Invalid video upload");
+    }
+  } else if (fileKey.startsWith("avatars/")) {
+    if (buffer.length > MAX_AVATAR_BYTES || !ALLOWED_AVATAR_TYPES.has(contentType) || !hasValidMediaSignature(buffer, contentType)) {
+      throw new Error("Invalid avatar upload");
+    }
+  }
+}
+
 export async function storagePut(
   fileKey: string,
   fileBuffer: Buffer | Uint8Array,
   contentType: string
 ): Promise<{ key: string; url: string }> {
   try {
+    validateStorageUpload(fileKey, fileBuffer, contentType);
     console.log("📤 Uploading:", fileKey);
 
     const { error } = await supabase.storage
