@@ -19,8 +19,21 @@ export async function createEarning(
   videoId?: number
 ) {
   try {
+    if (!Number.isSafeInteger(userId) || userId <= 0) {
+      return { success: false, reason: "invalid_user" };
+    }
+    if (!Number.isFinite(amount) || amount < 0 || amount > 1000) {
+      return { success: false, reason: "invalid_amount" };
+    }
+    if (typeof source !== "string" || source.trim().length < 1 || source.length > 64) {
+      return { success: false, reason: "invalid_source" };
+    }
+    if (videoId !== undefined && (!Number.isSafeInteger(videoId) || videoId <= 0)) {
+      return { success: false, reason: "invalid_video" };
+    }
+
     // 🔥 1. LIMITE GLOBALE (anti faillite)
-    const GLOBAL_DAILY_LIMIT = 20; // ≈ 12 000 FCFA
+    const GLOBAL_DAILY_LIMIT = 20;
 
     const todayGlobal = new Date();
     todayGlobal.setHours(0, 0, 0, 0);
@@ -38,8 +51,8 @@ export async function createEarning(
       return { success: false, reason: "global_limit" };
     }
 
-    // 🔥 2. PLAFOND PAR UTILISATEUR (réel - argent total)
-    const USER_DAILY_LIMIT = 2;   // ≈ 1200 FCFA
+    // 🔥 2. PLAFOND PAR UTILISATEUR
+    const USER_DAILY_LIMIT = 2;
 
     const todayUser = new Date();
     todayUser.setHours(0, 0, 0, 0);
@@ -62,7 +75,7 @@ export async function createEarning(
       return { success: false, reason: "user_limit" };
     }
 
-    // 🚨 3. LIMITES PAR TYPE (nombre d'actions)
+    // 🚨 3. LIMITES PAR TYPE
     const limits = MONETIZATION.dailyLimits;
 
     const todayEarnings = await db
@@ -76,12 +89,10 @@ export async function createEarning(
         )
       );
 
-    // ✅ DÉTAIL PROPRE (Typage Record<string, number>)
     if (todayEarnings.length >= ((limits as Record<string, number>)[source] || 20)) {
       return { success: false, shadow: true };
     }
 
-    // ✅ FIX PROPRE (cleanSource pour éviter les undefined sur les suffixes _app)
     const cleanSource = source.replace("_app", "");
     const delay =
       MONETIZATION.antiSpam[
@@ -103,37 +114,35 @@ export async function createEarning(
 
       if (last[0]) {
         const lastTime = new Date(last[0].createdAt).getTime();
-        const now = Date.now();
-
-        if (now - lastTime < delay) {
+        if (Date.now() - lastTime < delay) {
           return { success: false, reason: "too_fast" };
         }
       }
     }
 
-    // 🚨 4. Anti duplicate (même action même vidéo)
-    const existing = await db
-      .select()
-      .from(earnings)
-      .where(
-        and(
-          eq(earnings.userId, userId),
-          eq(earnings.source, source),
-          eq(earnings.videoId, videoId || null)
+    // 🚨 4. Anti-replay: une même action ne peut pas être récompensée deux fois.
+    if (videoId !== undefined) {
+      const existing = await db
+        .select({ id: earnings.id })
+        .from(earnings)
+        .where(
+          and(
+            eq(earnings.userId, userId),
+            eq(earnings.source, source),
+            eq(earnings.videoId, videoId)
+          )
         )
-      )
-      .limit(1);
+        .limit(1);
 
-    /*
-    if (existing.length > 0) {
-      return { success: false, reason: "duplicate" };
+      if (existing.length > 0) {
+        return { success: false, reason: "duplicate" };
+      }
     }
-    */
 
     // 🚨 5. Vérifier vidéo
     let isCreator = false;
 
-    if (videoId) {
+    if (videoId !== undefined) {
       const video = await db
         .select()
         .from(videos)
@@ -194,8 +203,9 @@ export async function createEarning(
         ] || amount;
     }
 
-    // LOG (garde ça)
-    console.log("EARNING:", { userId, source, reward });
+    if (!Number.isFinite(reward) || reward < 0 || reward > 1000) {
+      return { success: false, reason: "invalid_reward" };
+    }
 
     const userAmount = (reward * 0.7).toFixed(4);
     const appAmount = (reward * 0.3).toFixed(4);
@@ -205,16 +215,24 @@ export async function createEarning(
       userId,
       amount: userAmount,
       source,
-      videoId: videoId || null,
+      videoId: videoId ?? null,
     });
 
-    // 💾 9. Save app
-    await db.insert(earnings).values({
-      userId: 1,
-      amount: appAmount,
-      source: `${source}_app`,
-      videoId: videoId || null,
-    });
+    // 💾 9. Save platform share against a real admin account, never a hardcoded user ID.
+    const [platformAdmin] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.role, "admin"))
+      .limit(1);
+
+    if (platformAdmin && parseFloat(appAmount) > 0) {
+      await db.insert(earnings).values({
+        userId: platformAdmin.id,
+        amount: appAmount,
+        source: `${source}_app`,
+        videoId: videoId ?? null,
+      });
+    }
 
     // 📊 10. Update total user
     const user = (
@@ -232,20 +250,22 @@ export async function createEarning(
         .where(eq(users.id, userId));
     }
 
-    // 📊 11. Update total app
-    const app = (
-      await db.select().from(users).where(eq(users.id, 1)).limit(1)
-    )[0];
-    if (app) {
-      const newTotal = (
-        parseFloat(app.totalEarnings?.toString() || "0") +
-        parseFloat(appAmount)
-      ).toFixed(2);
+    // 📊 11. Update platform admin total only when an admin account exists.
+    if (platformAdmin && parseFloat(appAmount) > 0) {
+      const app = (
+        await db.select().from(users).where(eq(users.id, platformAdmin.id)).limit(1)
+      )[0];
+      if (app) {
+        const newTotal = (
+          parseFloat(app.totalEarnings?.toString() || "0") +
+          parseFloat(appAmount)
+        ).toFixed(2);
 
-      await db
-        .update(users)
-        .set({ totalEarnings: newTotal })
-        .where(eq(users.id, 1));
+        await db
+          .update(users)
+          .set({ totalEarnings: newTotal })
+          .where(eq(users.id, platformAdmin.id));
+      }
     }
 
     return { success: true };
@@ -257,6 +277,7 @@ export async function createEarning(
 
 export async function getUserEarnings(userId: number) {
   try {
+    if (!Number.isSafeInteger(userId) || userId <= 0) return null;
     const user = (
       await db.select().from(users).where(eq(users.id, userId)).limit(1)
     )[0];
