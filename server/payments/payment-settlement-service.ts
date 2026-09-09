@@ -30,11 +30,13 @@ export async function settleConfirmedPayment(params: {
   }
 
   return db.transaction(async (tx) => {
+    // Lock the payment so two webhook deliveries cannot settle it concurrently.
     const paymentRows = await tx
       .select()
       .from(payments)
       .where(eq(payments.referenceId, params.referenceId))
-      .limit(1);
+      .limit(1)
+      .for("update");
 
     if (paymentRows.length === 0) {
       throw new Error("Transaction de paiement introuvable.");
@@ -51,6 +53,12 @@ export async function settleConfirmedPayment(params: {
       throw new Error("Le montant confirmé ne correspond pas au montant demandé.");
     }
 
+    // A payment may only move from pending to success through this settlement path.
+    // A failed/cancelled/unknown state must never be resurrected by a callback.
+    if (payment.status !== "pending" && payment.status !== "success") {
+      throw new Error("État du paiement incompatible avec une confirmation.");
+    }
+
     if (payment.status !== "success") {
       const updated = await tx
         .update(payments)
@@ -64,13 +72,21 @@ export async function settleConfirmedPayment(params: {
         .where(
           and(
             eq(payments.id, payment.id),
-            eq(payments.status, payment.status),
+            eq(payments.status, "pending"),
           )
         )
         .returning();
 
       if (updated.length === 0) {
         throw new Error("Le paiement n'a pas pu être confirmé.");
+      }
+    } else {
+      // Repeated provider callbacks must refer to the same provider transaction.
+      if (
+        payment.providerReference &&
+        payment.providerReference !== params.providerReference.trim()
+      ) {
+        throw new Error("Référence du prestataire différente pour ce paiement.");
       }
     }
 
@@ -101,10 +117,12 @@ export async function settleConfirmedPayment(params: {
       };
     }
 
+    // Lock the single platform wallet before calculating its new balance.
     let walletRows = await tx
       .select()
       .from(platformWallet)
-      .limit(1);
+      .limit(1)
+      .for("update");
 
     if (walletRows.length === 0) {
       walletRows = await tx
@@ -126,8 +144,13 @@ export async function settleConfirmedPayment(params: {
     }
 
     const balanceBefore = Number(wallet.balance);
+    const revenueBefore = Number(wallet.totalRevenue);
+    if (!Number.isFinite(balanceBefore) || !Number.isFinite(revenueBefore)) {
+      throw new Error("Solde du portefeuille réel invalide.");
+    }
+
     const balanceAfter = balanceBefore + finalAmount;
-    const totalRevenue = Number(wallet.totalRevenue) + finalAmount;
+    const totalRevenue = revenueBefore + finalAmount;
 
     const updatedWalletRows = await tx
       .update(platformWallet)
