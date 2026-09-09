@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { db } from "../db";
 import { payments } from "../../drizzle/schema-payments";
 import { eq, and, sql } from "drizzle-orm";
@@ -6,7 +7,7 @@ import { getPremiumPlan } from "./subscription-plans";
 export async function createPremiumSubscriptionPayment({ userId, planId, operator, phone }: { userId: number; planId: string; operator: string; phone: string }) {
   const plan = getPremiumPlan(planId); if (!plan) throw new Error("Formule Premium invalide.");
   if (!phone.trim()) throw new Error("Le numéro Mobile Money est obligatoire.");
-  const referenceId = `afritok_premium_${userId}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  const referenceId = `afritok_premium_${randomUUID()}`;
   const payment = await db.insert(payments).values({ userId, amount: plan.price.toFixed(2), confirmedAmount: "0", currency: "XOF", operator, phone: phone.trim(), purpose: "subscription", referenceId, providerReference: null, status: "pending", confirmedAt: null }).returning();
   await db.execute(sql`INSERT INTO afritok_premium_subscriptions (user_id, plan_id, payment_reference, status) VALUES (${userId}, ${plan.id}, ${referenceId}, 'pending')`);
   return { paymentId: payment[0].id, referenceId, amount: plan.price, currency: "XOF", status: "pending" as const, message: "Demande de paiement créée. L'abonnement sera activé uniquement après confirmation réelle du paiement." };
