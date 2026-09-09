@@ -50,7 +50,6 @@ export const commentRouter = router({
     const user = ctx.user;
     const video = await getVideoById(input.videoId);
     if (!video) throw new TRPCError({ code: "NOT_FOUND" });
-    await db.execute(sql`ALTER TABLE "videos" ADD COLUMN IF NOT EXISTS "commentsMode" text`);
     const [owner] = await db.select({ allowComments: users.allowComments }).from(users).where(eq(users.id, video.userId)).limit(1);
     if (!owner) throw new TRPCError({ code: "NOT_FOUND", message: "Propriétaire du contenu introuvable." });
     if (!owner.allowComments) throw new TRPCError({ code: "FORBIDDEN", message: "Cette personne a désactivé les commentaires." });
