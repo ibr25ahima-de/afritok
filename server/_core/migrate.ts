@@ -1,5 +1,4 @@
 import { Pool } from "pg";
-import { sql } from "drizzle-orm";
 
 if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL is not defined");
@@ -120,16 +119,16 @@ async function createTables(pool: Pool) {
       );
     `);
 
-    // Add favorites and musicId columns if they don't exist (for existing databases)
-    try {
-      await pool.query(`
-        ALTER TABLE videos
-        ADD COLUMN IF NOT EXISTS favorites INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS "musicId" INTEGER;
-      `);
-    } catch (e) {
-      // Column might already exist
-    }
+    // Add video columns required by Premium publishing before requests are served.
+    await pool.query(`
+      ALTER TABLE videos
+      ADD COLUMN IF NOT EXISTS favorites INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS "musicId" INTEGER,
+      ADD COLUMN IF NOT EXISTS "premiumQuality" TEXT,
+      ADD COLUMN IF NOT EXISTS "scheduledAt" TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS "commentsMode" TEXT,
+      ADD COLUMN IF NOT EXISTS "hdVideoUrl" TEXT;
+    `);
 
     // Create likes table
     await pool.query(`
@@ -287,12 +286,13 @@ export async function runMigrations() {
   });
 
   try {
-    // Run migrations in background - don't wait for them
-    createTables(pool).catch(err => console.error("[Migrations] Background error:", err));
-    
-    // Return immediately so server can start
-    console.log("[Migrations] Scheduled background table creation");
+    // Complete schema preparation before the application starts serving requests.
+    await createTables(pool);
+    console.log("[Migrations] Startup schema preparation completed");
   } catch (error) {
-    console.error("[Migrations] Failed to schedule:", error);
+    console.error("[Migrations] Failed to prepare schema:", error);
+    throw error;
+  } finally {
+    await pool.end().catch(() => undefined);
   }
 }
