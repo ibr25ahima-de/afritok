@@ -8,6 +8,7 @@ const token = process.env.AFRITOK_VIDEO_WORKER_TOKEN;
 const maxRequestsPerMinute = 30;
 const requestWindowMs = 60_000;
 const requestCounts = new Map<string, { startedAt: number; count: number }>();
+const MAX_RATE_LIMIT_KEYS = 10_000;
 
 app.disable("x-powered-by");
 app.use(express.json({ limit: "64kb" }));
@@ -22,7 +23,14 @@ function safeTokenEquals(received: string | undefined): boolean {
 function allowRequest(ip: string): boolean {
   const now = Date.now();
   const current = requestCounts.get(ip);
+
   if (!current || now - current.startedAt >= requestWindowMs) {
+    if (!current && requestCounts.size >= MAX_RATE_LIMIT_KEYS) {
+      for (const [key, value] of requestCounts) {
+        if (now - value.startedAt >= requestWindowMs) requestCounts.delete(key);
+      }
+      if (requestCounts.size >= MAX_RATE_LIMIT_KEYS) return false;
+    }
     requestCounts.set(ip, { startedAt: now, count: 1 });
     return true;
   }
