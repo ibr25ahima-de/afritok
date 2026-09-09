@@ -25,6 +25,7 @@ import {
   securityLogger,
   validateInput,
   uploadRateLimiter,
+  errorHandler,
 } from "../security";
 import {
   ALLOWED_AVATAR_TYPES,
@@ -159,6 +160,8 @@ async function startServer() {
 
   if (process.env.NODE_ENV === "development") await setupVite(app, server);
   else serveStatic(app);
+
+  app.use(errorHandler);
 
   const port = parseInt(process.env.PORT || "3000", 10);
   server.listen(port, () => {
