@@ -25,8 +25,18 @@ import {
   validateInput,
   uploadRateLimiter,
 } from "../security";
+import {
+  ALLOWED_AVATAR_TYPES,
+  ALLOWED_VIDEO_TYPES,
+  hasValidMediaSignature,
+} from "../security-upload";
 
-const upload = multer({
+const avatarUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 10 },
+});
+
+const mediaUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 100 * 1024 * 1024, files: 1, fields: 20 },
 });
@@ -57,8 +67,6 @@ async function startServer() {
   app.set("trust proxy", 1);
   const server = createServer(app);
 
-  // Apply HTTP hardening before application routes. The payment webhook is registered
-  // below with a raw body parser so its signature verification remains intact.
   app.use(helmetConfig);
   app.use(createRateLimiter(15 * 60 * 1000, 300));
   app.use(csrfProtection);
@@ -76,7 +84,6 @@ async function startServer() {
   app.use(cors(corsOptions));
   app.use(cookieParser());
 
-  // Payment provider webhooks must remain publicly reachable, but test endpoints are development-only.
   app.post("/api/webhooks/stripe", express.raw({ type: "application/json" }), handleStripeWebhook);
   app.use(express.json({ limit: "1mb" }));
   app.use(express.urlencoded({ limit: "1mb", extended: true, parameterLimit: 100 }));
@@ -86,15 +93,18 @@ async function startServer() {
     app.use("/api/payments/test", paymentTestRouter);
   }
 
-  app.post("/api/upload-avatar", uploadRateLimiter, upload.single("file"), async (req: Request, res: Response) => {
+  app.post("/api/upload-avatar", uploadRateLimiter, avatarUpload.single("file"), async (req: Request, res: Response) => {
     try {
       const user = await getAuthenticatedUser(req, res);
       if (!user) return res.status(401).json({ error: "Utilisateur non authentifié." });
       if (!req.file) return res.status(400).json({ error: "Aucun fichier fourni." });
-      if (!req.file.mimetype.startsWith("image/")) return res.status(400).json({ error: "Le fichier doit être une image." });
-      const safeName = (req.file.originalname || "avatar").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
-      const fileKey = `avatars/${user.id}-${Date.now()}-${safeName}`;
-      const { url } = await storagePut(fileKey, req.file.buffer, req.file.mimetype);
+      const mimeType = req.file.mimetype.toLowerCase();
+      if (!ALLOWED_AVATAR_TYPES.has(mimeType) || !hasValidMediaSignature(req.file.buffer, mimeType)) {
+        return res.status(400).json({ error: "Format d'image non autorisé ou fichier invalide." });
+      }
+      const extension = mimeType === "image/jpeg" ? "jpg" : mimeType.split("/")[1];
+      const fileKey = `avatars/${user.id}/${crypto.randomUUID()}.${extension}`;
+      const { url } = await storagePut(fileKey, req.file.buffer, mimeType);
       return res.json({ avatarUrl: url });
     } catch (error) {
       console.error("Avatar upload error:", error);
@@ -102,14 +112,18 @@ async function startServer() {
     }
   });
 
-  app.post("/api/upload-video", uploadRateLimiter, upload.single("file"), async (req: Request, res: Response) => {
+  app.post("/api/upload-video", uploadRateLimiter, mediaUpload.single("file"), async (req: Request, res: Response) => {
     try {
       const user = await getAuthenticatedUser(req, res);
       if (!user) return res.status(401).json({ error: "Utilisateur non authentifié." });
       if (!req.file) return res.status(400).json({ error: "Aucun fichier fourni." });
-      if (!req.file.mimetype.startsWith("video/")) return res.status(400).json({ error: "Le fichier doit être une vidéo." });
-      const safeName = (req.file.originalname || "video.mp4").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-100);
-      const videoUrl = await uploadVideoToSupabase(req.file.buffer, safeName, user.id);
+      const mimeType = req.file.mimetype.toLowerCase();
+      if (!ALLOWED_VIDEO_TYPES.has(mimeType) || !hasValidMediaSignature(req.file.buffer, mimeType)) {
+        return res.status(400).json({ error: "Format vidéo non autorisé ou fichier invalide." });
+      }
+      const extension = mimeType === "video/quicktime" ? "mov" : mimeType.split("/")[1];
+      const fileName = `${crypto.randomUUID()}.${extension}`;
+      const videoUrl = await uploadVideoToSupabase(req.file.buffer, fileName, user.id);
       return res.json({ videoUrl });
     } catch (error) {
       console.error("[Upload] Error:", error);
@@ -117,19 +131,20 @@ async function startServer() {
     }
   });
 
-  app.post("/api/upload-ad-media", uploadRateLimiter, upload.single("file"), async (req: Request, res: Response) => {
+  app.post("/api/upload-ad-media", uploadRateLimiter, mediaUpload.single("file"), async (req: Request, res: Response) => {
     try {
       const user = await getAuthenticatedUser(req, res);
       if (!user) return res.status(401).json({ error: "Utilisateur non authentifié." });
       if (user.role !== "admin") return res.status(403).json({ error: "Accès refusé." });
       if (!req.file) return res.status(400).json({ error: "Aucun fichier fourni." });
-      if (!(req.file.mimetype.startsWith("image/") || req.file.mimetype.startsWith("video/"))) {
-        return res.status(400).json({ error: "Type de média non autorisé." });
+      const mimeType = req.file.mimetype.toLowerCase();
+      if (!(ALLOWED_AVATAR_TYPES.has(mimeType) || ALLOWED_VIDEO_TYPES.has(mimeType)) || !hasValidMediaSignature(req.file.buffer, mimeType)) {
+        return res.status(400).json({ error: "Format de média non autorisé ou fichier invalide." });
       }
       const result = await uploadAdvertisingMedia({
         buffer: req.file.buffer,
-        originalName: (req.file.originalname || "advertisement").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-100),
-        mimeType: req.file.mimetype,
+        originalName: req.file.originalname || "advertisement",
+        mimeType,
         userId: user.id,
       });
       return res.json(result);
