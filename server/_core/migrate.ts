@@ -273,6 +273,21 @@ async function createTables(pool: Pool) {
     );
     `);
 
+    // Create Premium subscription table before HTTP requests are served.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS afritok_premium_subscriptions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        plan_id VARCHAR(32) NOT NULL,
+        payment_reference VARCHAR(255) NOT NULL UNIQUE,
+        status VARCHAR(32) NOT NULL DEFAULT 'pending',
+        starts_at TIMESTAMP NULL,
+        expires_at TIMESTAMP NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+    `);
+
     console.log("✅ Database tables created successfully");
   } catch (error) {
     console.error("❌ Migration error:", error);
