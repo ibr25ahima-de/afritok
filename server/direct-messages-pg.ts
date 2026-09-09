@@ -1,43 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db";
 
-let ready: Promise<void> | null = null;
-
-async function ensureTables() {
-  if (!ready) {
-    ready = (async () => {
-      await db.execute(sql`CREATE TABLE IF NOT EXISTS "conversations" (
-        "id" SERIAL PRIMARY KEY,
-        "participant1Id" INTEGER NOT NULL,
-        "participant2Id" INTEGER NOT NULL,
-        "lastMessageAt" TIMESTAMP,
-        "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
-        "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW(),
-        UNIQUE ("participant1Id", "participant2Id")
-      )`);
-      await db.execute(sql`CREATE TABLE IF NOT EXISTS "directMessages" (
-        "id" SERIAL PRIMARY KEY,
-        "conversationId" INTEGER NOT NULL,
-        "senderId" INTEGER NOT NULL,
-        "content" TEXT NOT NULL,
-        "mediaUrl" VARCHAR(500),
-        "mediaType" VARCHAR(20) NOT NULL DEFAULT 'none',
-        "isRead" BOOLEAN NOT NULL DEFAULT FALSE,
-        "readAt" TIMESTAMP,
-        "isEdited" BOOLEAN NOT NULL DEFAULT FALSE,
-        "editedAt" TIMESTAMP,
-        "sentAt" TIMESTAMP NOT NULL DEFAULT NOW()
-      )`);
-      await db.execute(sql`CREATE INDEX IF NOT EXISTS "directMessages_conversation_idx" ON "directMessages" ("conversationId")`);
-      await db.execute(sql`CREATE INDEX IF NOT EXISTS "directMessages_sender_idx" ON "directMessages" ("senderId")`);
-    })().catch((error) => {
-      ready = null;
-      throw error;
-    });
-  }
-  await ready;
-}
-
 export interface DirectMessageData {
   conversationId: number;
   senderId: number;
@@ -50,7 +13,6 @@ export interface DirectMessageData {
 export class DirectMessagesManager {
   async isConversationMember(conversationId: number, userId: number): Promise<boolean> {
     try {
-      await ensureTables();
       const result = await db.execute(sql`SELECT 1 FROM "conversations" WHERE "id" = ${conversationId} AND ("participant1Id" = ${userId} OR "participant2Id" = ${userId}) LIMIT 1`);
       return Boolean((result as any).rows?.length);
     } catch { return false; }
@@ -58,7 +20,6 @@ export class DirectMessagesManager {
 
   async getOrCreateConversation(userId1: number, userId2: number): Promise<number | null> {
     try {
-      await ensureTables();
       const [a, b] = userId1 < userId2 ? [userId1, userId2] : [userId2, userId1];
       const existing = await db.execute(sql`SELECT "id" FROM "conversations" WHERE "participant1Id" = ${a} AND "participant2Id" = ${b} LIMIT 1`);
       const rows = (existing as any).rows || [];
@@ -74,7 +35,6 @@ export class DirectMessagesManager {
 
   async sendDirectMessage(data: DirectMessageData): Promise<number | null> {
     try {
-      await ensureTables();
       if (!data.content?.trim() || data.content.length > 5000) return null;
       const allowed = await db.execute(sql`SELECT 1 FROM "conversations" WHERE "id" = ${data.conversationId} AND (("participant1Id" = ${data.senderId} AND "participant2Id" = ${data.recipientId}) OR ("participant1Id" = ${data.recipientId} AND "participant2Id" = ${data.senderId})) LIMIT 1`);
       if (!(allowed as any).rows?.length) return null;
@@ -90,7 +50,6 @@ export class DirectMessagesManager {
 
   async getConversationMessages(conversationId: number, limit = 50, offset = 0): Promise<any[]> {
     try {
-      await ensureTables();
       const result = await db.execute(sql`SELECT * FROM "directMessages" WHERE "conversationId" = ${conversationId} ORDER BY "sentAt" ASC LIMIT ${Math.min(limit, 100)} OFFSET ${Math.max(offset, 0)}`);
       return (result as any).rows || [];
     } catch (error) {
@@ -101,7 +60,6 @@ export class DirectMessagesManager {
 
   async getUserConversations(userId: number, limit = 20, offset = 0): Promise<any[]> {
     try {
-      await ensureTables();
       const result = await db.execute(sql`SELECT * FROM "conversations" WHERE "participant1Id" = ${userId} OR "participant2Id" = ${userId} ORDER BY "updatedAt" DESC LIMIT ${Math.min(limit, 100)} OFFSET ${Math.max(offset, 0)}`);
       return (result as any).rows || [];
     } catch (error) {
@@ -112,7 +70,6 @@ export class DirectMessagesManager {
 
   async markMessagesAsRead(conversationId: number, userId: number): Promise<boolean> {
     try {
-      await ensureTables();
       await db.execute(sql`UPDATE "directMessages" SET "isRead" = TRUE, "readAt" = NOW() WHERE "conversationId" = ${conversationId} AND "senderId" <> ${userId}`);
       return true;
     } catch { return false; }
@@ -120,7 +77,6 @@ export class DirectMessagesManager {
 
   async getUnreadMessageCount(userId: number): Promise<number> {
     try {
-      await ensureTables();
       const result = await db.execute(sql`SELECT COUNT(*)::int AS count FROM "directMessages" m JOIN "conversations" c ON c."id" = m."conversationId" WHERE m."isRead" = FALSE AND m."senderId" <> ${userId} AND (c."participant1Id" = ${userId} OR c."participant2Id" = ${userId})`);
       return Number(((result as any).rows || [])[0]?.count || 0);
     } catch { return 0; }
@@ -128,7 +84,6 @@ export class DirectMessagesManager {
 
   async deleteMessage(messageId: number, userId: number): Promise<boolean> {
     try {
-      await ensureTables();
       const result = await db.execute(sql`DELETE FROM "directMessages" WHERE "id" = ${messageId} AND "senderId" = ${userId}`);
       return Number((result as any).rowCount || 0) > 0;
     } catch { return false; }
@@ -136,7 +91,6 @@ export class DirectMessagesManager {
 
   async editMessage(messageId: number, userId: number, content: string): Promise<boolean> {
     try {
-      await ensureTables();
       if (!content?.trim() || content.length > 5000) return false;
       const result = await db.execute(sql`UPDATE "directMessages" SET "content" = ${content.trim()}, "isEdited" = TRUE, "editedAt" = NOW() WHERE "id" = ${messageId} AND "senderId" = ${userId}`);
       return Number((result as any).rowCount || 0) > 0;
@@ -150,7 +104,6 @@ export class DirectMessagesManager {
 
   async deleteConversation(conversationId: number, userId: number): Promise<boolean> {
     try {
-      await ensureTables();
       const check = await db.execute(sql`SELECT "id" FROM "conversations" WHERE "id" = ${conversationId} AND ("participant1Id" = ${userId} OR "participant2Id" = ${userId}) LIMIT 1`);
       if (!(check as any).rows?.length) return false;
       await db.execute(sql`DELETE FROM "directMessages" WHERE "conversationId" = ${conversationId}`);
@@ -161,7 +114,6 @@ export class DirectMessagesManager {
 
   async searchConversationMessages(conversationId: number, query: string, limit = 20): Promise<any[]> {
     try {
-      await ensureTables();
       const result = await db.execute(sql`SELECT * FROM "directMessages" WHERE "conversationId" = ${conversationId} AND "content" ILIKE ${"%" + query + "%"} ORDER BY "sentAt" DESC LIMIT ${Math.min(limit, 100)}`);
       return (result as any).rows || [];
     } catch { return []; }
