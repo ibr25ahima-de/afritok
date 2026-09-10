@@ -4,6 +4,8 @@ import { getLiveSessionsManager } from './live-sessions';
 import { getLogger } from './logging';
 
 const logger = getLogger();
+const MAX_MESSAGES_PER_SESSION = 2000;
+const MAX_REACTIONS_PER_SESSION = 2000;
 
 export type MessageType = 'text' | 'emoji' | 'gift' | 'system';
 
@@ -39,7 +41,12 @@ export class LiveChatManager {
     const messageId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     const message: ChatMessage = { messageId, sessionId, userId, username, type, content, timestamp: new Date(), isModerator, isPinned: false };
     if (!this.messages.has(sessionId)) this.messages.set(sessionId, []);
-    this.messages.get(sessionId)!.push(message);
+    const messages = this.messages.get(sessionId)!;
+    messages.push(message);
+    if (messages.length > MAX_MESSAGES_PER_SESSION) {
+      const removed = messages.splice(0, messages.length - MAX_MESSAGES_PER_SESSION);
+      for (const oldMessage of removed) this.pinnedMessages.delete(oldMessage.messageId);
+    }
     logger.info('Chat message sent', { messageId, sessionId, userId, type });
     return message;
   }
@@ -66,7 +73,10 @@ export class LiveChatManager {
   addReaction(sessionId: string, userId: number, username: string, emoji: string) {
     const reaction: ChatReaction = { reactionId: 'react_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9), sessionId, userId, username, emoji, timestamp: new Date() };
     if (!this.reactions.has(sessionId)) this.reactions.set(sessionId, []);
-    this.reactions.get(sessionId)!.push(reaction); return reaction;
+    const reactions = this.reactions.get(sessionId)!;
+    reactions.push(reaction);
+    if (reactions.length > MAX_REACTIONS_PER_SESSION) reactions.splice(0, reactions.length - MAX_REACTIONS_PER_SESSION);
+    return reaction;
   }
   getReactions(sessionId: string, limit = 100) { return (this.reactions.get(sessionId) || []).slice(-limit); }
   getRecentReactions(sessionId: string, since: Date) { return (this.reactions.get(sessionId) || []).filter(r => r.timestamp > since); }
