@@ -1,4 +1,4 @@
-import { eq, desc, sql, and, or, isNull, lte } from "drizzle-orm";
+import { eq, desc, sql, and, or, isNull } from "drizzle-orm";
 import { db } from "./index";
 import { videos, users } from "../../drizzle/schema";
 
@@ -35,9 +35,8 @@ export async function getFeedVideos(limit: number, offset: number) {
     .leftJoin(users, eq(videos.userId, users.id))
     .where(and(
       eq(videos.isPublic, true),
-      isNull(videos.deletedAt),
       sql`${videos.videoUrl} IS NOT NULL`,
-      or(isNull(videos.scheduledAt), lte(videos.scheduledAt, new Date()))
+      or(isNull(videos.scheduledAt), sql`"videos"."scheduledAt" <= NOW()`)
     ))
     .orderBy(desc(videos.createdAt))
     .limit(limit)
