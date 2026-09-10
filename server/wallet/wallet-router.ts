@@ -1,5 +1,5 @@
+import { randomUUID } from "node:crypto";
 import { router, protectedProcedure } from "../_core/trpc";
-import { z } from "zod";
 import { createPayment } from "../payments/payment-service";
 import { PaymentOperator } from "../payments/payment-types";
 import { db } from "../db";
@@ -154,10 +154,7 @@ export const walletRouter = router({
     })
   )
   .mutation(async ({ ctx, input }) => {
-    const referenceId =
-      `afritok_pay_${ctx.user.id}_${Date.now()}_${Math.random()
-        .toString(36)
-        .slice(2, 10)}`;
+    const referenceId = `afritok_pay_${randomUUID()}`;
 
     const { createPaymentTransaction } =
       await import("../payments/payment-service");
