@@ -34,7 +34,7 @@ export async function getFeedVideos(limit: number, offset: number) {
     .from(videos)
     .leftJoin(users, eq(videos.userId, users.id))
     .where(and(
-      eq(videos.isPublic, true),
+      sql`COALESCE("videos"."isPublic", true) = true`,
       sql`${videos.videoUrl} IS NOT NULL`,
       or(isNull(videos.scheduledAt), sql`"videos"."scheduledAt" <= NOW()`)
     ))
@@ -47,6 +47,9 @@ export async function getUserVideos(userId: number) {
   return db
     .select()
     .from(videos)
-    .where(and(eq(videos.userId, userId), eq(videos.isPublic, true)))
+    .where(and(
+      eq(videos.userId, userId),
+      sql`COALESCE("videos"."isPublic", true) = true`
+    ))
     .orderBy(desc(videos.createdAt));
 }
