@@ -23,7 +23,7 @@ export default function Feed() {
   const { isAuthenticated, user } = useAuth();
   const [, navigate] = useLocation();
   const [offset, setOffset] = useState(0);
-  const { data: trpcVideos, isLoading: trpcLoading } = trpc.feed.getFeed.useQuery({ limit: 20, offset }, { keepPreviousData: true, staleTime: 5000 });
+  const { data: trpcVideos, isLoading: trpcLoading, isError: trpcError } = trpc.feed.getFeed.useQuery({ limit: 20, offset }, { keepPreviousData: true, staleTime: 5000 });
   const [videos, setVideos] = useState<Video[]>([]);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [likedVideos, setLikedVideos] = useState<Set<number>>(new Set());
@@ -71,7 +71,6 @@ export default function Feed() {
     setIsFetchingMore(false);
   }, [trpcVideos, offset]);
 
-  // Database is the source of truth for the current user's saved interactions.
   useEffect(() => {
     if (!interactionsQuery.data) return;
     setLikedVideos(new Set(interactionsQuery.data.likedVideoIds || []));
@@ -185,13 +184,15 @@ export default function Feed() {
         <h1 className="text-2xl font-black text-amber-400 tracking-tighter pointer-events-auto">AFRITOK</h1>
         <div className="flex items-center gap-4 pointer-events-auto"><button className="p-2 bg-black/20 rounded-full backdrop-blur-sm"><SearchIcon size={22} /></button><button className="p-2 bg-black/20 rounded-full backdrop-blur-sm"><BellIcon size={22} /></button></div>
       </header>
-      <div ref={containerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto snap-y snap-mandatory overscroll-none scrollbar-hide" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
+      <div ref={containerRef} onScroll={handleScroll} className="flex-1 min-h-0 overflow-y-auto snap-y snap-mandatory scrollbar-hide" style={{ scrollbarWidth: "none", msOverflowStyle: "none", touchAction: "pan-y", WebkitOverflowScrolling: "touch" }}>
+        {trpcError && videos.length === 0 && <div className="h-full min-h-screen flex items-center justify-center px-8 text-center"><div><p className="text-amber-400 font-bold text-lg">Impossible de charger les vidéos</p><p className="text-gray-400 text-sm mt-2">Le fil principal n’a pas reçu les vidéos. Réessaie dans quelques secondes.</p></div></div>}
+        {!trpcError && !trpcLoading && videos.length === 0 && <div className="h-full min-h-screen flex items-center justify-center px-8 text-center"><div><p className="text-white font-bold text-lg">Aucune vidéo dans le fil</p><p className="text-gray-400 text-sm mt-2">Les vidéos publiques apparaîtront ici.</p></div></div>}
         {videos.map((video, i) => {
           const isVisible = Math.abs(i - currentVideoIndex) <= 2;
           const counter = videoCounters[video.id] || { likes: video.likes || 0, comments: video.comments || 0, shares: video.shares || 0, favorites: video.favorites || 0 };
           return <div key={video.id} data-index={i} className="video-item h-screen w-full relative snap-start bg-black flex-shrink-0">
             {video.thumbnailUrl && <img src={video.thumbnailUrl} alt="" className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${loadedVideos.has(video.id) ? "opacity-0" : "opacity-100"}`} />}
-            {isVisible && <video ref={el => { videoRefs.current[video.id] = el; }} src={video.videoUrl} className="w-full h-full object-cover" loop playsInline muted={muted} autoPlay={i === currentVideoIndex} onPointerDown={() => startVideoLongPress(video)} onPointerUp={cancelVideoLongPress} onPointerCancel={cancelVideoLongPress} onPointerLeave={cancelVideoLongPress} onContextMenu={event => event.preventDefault()} onPlaying={() => setLoadedVideos(prev => new Set(prev).add(video.id))} onLoadedData={e => { if (i === currentVideoIndex) e.currentTarget.play().catch(() => {}); }} />}
+            {isVisible && <video ref={el => { videoRefs.current[video.id] = el; }} src={video.videoUrl} className="w-full h-full object-cover" style={{ touchAction: "pan-y" }} loop playsInline muted={muted} autoPlay={i === currentVideoIndex} onPointerDown={() => startVideoLongPress(video)} onPointerUp={cancelVideoLongPress} onPointerCancel={cancelVideoLongPress} onPointerLeave={cancelVideoLongPress} onContextMenu={event => event.preventDefault()} onPlaying={() => setLoadedVideos(prev => new Set(prev).add(video.id))} onLoadedData={e => { if (i === currentVideoIndex) e.currentTarget.play().catch(() => {}); }} />}
             <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60 pointer-events-none" />
             <button onClick={() => setMuted(!muted)} className="absolute top-24 right-4 z-40 p-2 bg-black/30 rounded-full backdrop-blur-md">{muted ? <MuteIcon size={20} /> : <UnmuteIcon size={20} />}</button>
             <div className="absolute right-3 top-32 flex flex-col gap-5 z-40 items-center">
