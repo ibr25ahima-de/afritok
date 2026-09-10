@@ -141,7 +141,7 @@ export default function Feed() {
   if (trpcLoading && videos.length === 0) return <div className="h-screen bg-black flex items-center justify-center"><Loader2 className="animate-spin text-amber-400" size={40} /></div>;
 
   return (
-    <div className="bg-black text-white h-screen overflow-hidden flex flex-col relative">
+    <div className="bg-black text-white h-[100dvh] min-h-screen overflow-hidden flex flex-col relative">
       <header className="absolute top-0 left-0 right-0 z-50 bg-gradient-to-b from-black/80 to-transparent px-4 py-4 flex items-center justify-between pointer-events-none">
         <h1 className="text-2xl font-black text-amber-400 tracking-tighter pointer-events-auto">AFRITOK</h1>
         <div className="flex items-center gap-4 pointer-events-auto"><button className="p-2 bg-black/20 rounded-full backdrop-blur-sm"><SearchIcon size={22} /></button><button className="p-2 bg-black/20 rounded-full backdrop-blur-sm"><BellIcon size={22} /></button></div>
@@ -170,7 +170,7 @@ export default function Feed() {
           </div>;
         })}
       </div>
-      <nav className="absolute inset-x-0 bottom-0 z-50 min-h-[64px] bg-gradient-to-t from-black to-black/80 backdrop-blur-lg border-t border-white/10 px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2">
+      <nav className="fixed inset-x-0 bottom-0 z-[200] min-h-[68px] bg-black/95 backdrop-blur-lg border-t border-white/20 px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2">
         <div className="mx-auto flex w-full max-w-md items-end justify-between gap-1">
           <button onClick={() => navigate("/feed")} className="flex min-w-0 flex-1 flex-col items-center gap-0.5 py-1"><BaobabIcon active={true} size={21} /><span className="truncate text-[9px] font-bold text-amber-400">Accueil</span></button>
           <button onClick={() => navigate("/discover")} className="flex min-w-0 flex-1 flex-col items-center gap-0.5 py-1 opacity-60"><ElephantIcon size={21} /><span className="truncate text-[9px] font-bold">Amis</span></button>

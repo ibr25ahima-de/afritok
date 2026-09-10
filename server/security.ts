@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import helmet from "helmet";
 import cors from "cors";
 
@@ -27,7 +27,7 @@ export const authRateLimiter = rateLimit({
   max: 5,
   message: "Too many login attempts, please try again later.",
   skipSuccessfulRequests: true,
-  keyGenerator: (req) => req.ip || req.socket.remoteAddress || "unknown",
+  keyGenerator: (req) => ipKeyGenerator(req.ip || req.socket.remoteAddress || "unknown"),
 });
 
 export const uploadRateLimiter = rateLimit({
