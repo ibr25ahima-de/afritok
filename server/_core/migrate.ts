@@ -23,10 +23,9 @@ async function createTables(pool: Pool) {
         END $$;
       `);
     } catch (e) {
-      // Ignore if enum already exists
+      console.warn("[Migrations] role enum preparation skipped:", e instanceof Error ? e.message : e);
     }
 
-    // Create users table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -47,7 +46,6 @@ async function createTables(pool: Pool) {
       );
     `);
 
-    // Add administration columns to users table
     await pool.query(`
       ALTER TABLE users
       ADD COLUMN IF NOT EXISTS "isBanned" BOOLEAN NOT NULL DEFAULT false,
@@ -60,7 +58,6 @@ async function createTables(pool: Pool) {
       ADD COLUMN IF NOT EXISTS "warningMessage" TEXT;
     `);
 
-    // Update users table with new settings columns
     await pool.query(`
       ALTER TABLE users
       ADD COLUMN IF NOT EXISTS "profilePublic" BOOLEAN NOT NULL DEFAULT true,
@@ -68,10 +65,8 @@ async function createTables(pool: Pool) {
       ADD COLUMN IF NOT EXISTS "allowComments" BOOLEAN NOT NULL DEFAULT true,
       ADD COLUMN IF NOT EXISTS "showFollowers" BOOLEAN NOT NULL DEFAULT true,
       ADD COLUMN IF NOT EXISTS "showFollowing" BOOLEAN NOT NULL DEFAULT true,
-
       ADD COLUMN IF NOT EXISTS "twoFactorEnabled" BOOLEAN NOT NULL DEFAULT false,
       ADD COLUMN IF NOT EXISTS "loginAlerts" BOOLEAN NOT NULL DEFAULT true,
-
       ADD COLUMN IF NOT EXISTS "notifyFollowers" BOOLEAN NOT NULL DEFAULT true,
       ADD COLUMN IF NOT EXISTS "notifyLikes" BOOLEAN NOT NULL DEFAULT true,
       ADD COLUMN IF NOT EXISTS "notifyComments" BOOLEAN NOT NULL DEFAULT true,
@@ -86,7 +81,6 @@ async function createTables(pool: Pool) {
       ADD COLUMN IF NOT EXISTS "animations" BOOLEAN NOT NULL DEFAULT true;
     `);
 
-    // Create otps table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS otps (
         id SERIAL PRIMARY KEY,
@@ -98,7 +92,6 @@ async function createTables(pool: Pool) {
       );
     `);
 
-    // Create videos table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS videos (
         id SERIAL PRIMARY KEY,
@@ -119,7 +112,6 @@ async function createTables(pool: Pool) {
       );
     `);
 
-    // Add video columns required by Premium publishing before requests are served.
     await pool.query(`
       ALTER TABLE videos
       ADD COLUMN IF NOT EXISTS favorites INTEGER DEFAULT 0,
@@ -130,7 +122,6 @@ async function createTables(pool: Pool) {
       ADD COLUMN IF NOT EXISTS "hdVideoUrl" TEXT;
     `);
 
-    // Create likes table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS likes (
         id SERIAL PRIMARY KEY,
@@ -140,7 +131,6 @@ async function createTables(pool: Pool) {
       );
     `);
 
-    // Create favorites table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS favorites (
         id SERIAL PRIMARY KEY,
@@ -150,7 +140,6 @@ async function createTables(pool: Pool) {
       );
     `);
 
-    // Create shares table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS shares (
         id SERIAL PRIMARY KEY,
@@ -161,7 +150,6 @@ async function createTables(pool: Pool) {
       );
     `);
 
-    // Create comments table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS comments (
         id SERIAL PRIMARY KEY,
@@ -173,7 +161,6 @@ async function createTables(pool: Pool) {
       );
     `);
 
-    // Create followers table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS followers (
         id SERIAL PRIMARY KEY,
@@ -183,7 +170,6 @@ async function createTables(pool: Pool) {
       );
     `);
 
-    // Create earnings table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS earnings (
         id SERIAL PRIMARY KEY,
@@ -195,7 +181,6 @@ async function createTables(pool: Pool) {
       );
     `);
 
-    // Create withdrawals table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS withdrawals (
         id SERIAL PRIMARY KEY,
@@ -208,7 +193,6 @@ async function createTables(pool: Pool) {
       );
     `);
 
-    // Create notifications table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS notifications (
         id SERIAL PRIMARY KEY,
@@ -222,7 +206,6 @@ async function createTables(pool: Pool) {
       );
     `);
 
-    // Create blocks table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS blocks (
         id SERIAL PRIMARY KEY,
@@ -232,7 +215,6 @@ async function createTables(pool: Pool) {
       );
     `);
 
-    // Create reports table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS reports (
         id SERIAL PRIMARY KEY,
@@ -246,7 +228,6 @@ async function createTables(pool: Pool) {
       );
     `);
 
-    // Create warnings table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS warnings (
         id SERIAL PRIMARY KEY,
@@ -259,21 +240,20 @@ async function createTables(pool: Pool) {
     `);
 
     await pool.query(`
-    CREATE TABLE IF NOT EXISTS music (
-      id SERIAL PRIMARY KEY,
-      title TEXT NOT NULL,
-      artist TEXT NOT NULL,
-      "audioUrl" TEXT NOT NULL,
-      "coverUrl" TEXT,
-      duration INTEGER NOT NULL,
-      category VARCHAR(50) DEFAULT 'trending',
-      plays INTEGER DEFAULT 0,
-      "isActive" BOOLEAN DEFAULT true,
-      "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
-    );
+      CREATE TABLE IF NOT EXISTS music (
+        id SERIAL PRIMARY KEY,
+        title TEXT NOT NULL,
+        artist TEXT NOT NULL,
+        "audioUrl" TEXT NOT NULL,
+        "coverUrl" TEXT,
+        duration INTEGER NOT NULL,
+        category VARCHAR(50) DEFAULT 'trending',
+        plays INTEGER DEFAULT 0,
+        "isActive" BOOLEAN DEFAULT true,
+        "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
+      );
     `);
 
-    // Create Premium subscription table before HTTP requests are served.
     await pool.query(`
       CREATE TABLE IF NOT EXISTS afritok_premium_subscriptions (
         id SERIAL PRIMARY KEY,
@@ -288,7 +268,6 @@ async function createTables(pool: Pool) {
       );
     `);
 
-    // Create direct-message tables before HTTP requests are served.
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "conversations" (
         "id" SERIAL PRIMARY KEY,
@@ -322,7 +301,15 @@ async function createTables(pool: Pool) {
 
     console.log("✅ Database tables created successfully");
   } catch (error) {
-    console.error("❌ Migration error:", error);
+    console.error("❌ Migration error details:", {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      code: typeof error === "object" && error !== null && "code" in error ? (error as { code?: unknown }).code : undefined,
+      detail: typeof error === "object" && error !== null && "detail" in error ? (error as { detail?: unknown }).detail : undefined,
+      hint: typeof error === "object" && error !== null && "hint" in error ? (error as { hint?: unknown }).hint : undefined,
+      table: typeof error === "object" && error !== null && "table" in error ? (error as { table?: unknown }).table : undefined,
+      column: typeof error === "object" && error !== null && "column" in error ? (error as { column?: unknown }).column : undefined,
+    });
     throw error;
   }
 }
@@ -334,7 +321,6 @@ export async function runMigrations() {
   });
 
   try {
-    // Complete schema preparation before the application starts serving requests.
     await createTables(pool);
     console.log("[Migrations] Startup schema preparation completed");
   } catch (error) {
