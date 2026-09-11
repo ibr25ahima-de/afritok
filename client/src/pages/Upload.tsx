@@ -270,6 +270,10 @@ export default function Upload() {
       <>
         <CameraRecorder 
           onVideoRecorded={(blob, duration) => {
+            if (blob.size < 1024) {
+              toast.error("La vidéo enregistrée est vide. Réessaie.");
+              return;
+            }
             const recordedFile = new File([blob], "video.webm", { type: "video/webm" });
             setFile(recordedFile);
             setRecordedDuration(duration);

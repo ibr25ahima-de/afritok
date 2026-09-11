@@ -40,6 +40,7 @@ export default function Publish() {
       setUploadProgress(50);
       const uploadFileResult = await uploadFileMutation.mutateAsync({ fileBuffer: buffer, fileName: file.name, fileType: finalFile.type });
       if (!uploadFileResult.success || !uploadFileResult.videoUrl) throw new Error("Échec de l'envoi de la vidéo vers le stockage");
+      setUploadProgress(60);
       const videoUrl = uploadFileResult.videoUrl;
       let thumbnailUrl: string | null = null;
       if (thumbnailDataUrl) {

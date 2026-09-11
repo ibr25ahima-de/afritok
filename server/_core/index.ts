@@ -90,7 +90,10 @@ async function startServer() {
   app.use(cookieParser());
 
   app.post("/api/webhooks/stripe", express.raw({ type: "application/json" }), handleStripeWebhook);
-  app.use(express.json({ limit: "1mb" }));
+  // video.uploadFile sends the recorded binary through the tRPC JSON
+  // transformer; allow the configured 100 MB video limit plus encoding
+  // overhead instead of silently stopping large uploads around the midpoint.
+  app.use(express.json({ limit: "150mb" }));
   app.use(express.urlencoded({ limit: "1mb", extended: true, parameterLimit: 100 }));
   app.use(validateInput);
   app.use("/api/payments", paymentWebhookRouter);
