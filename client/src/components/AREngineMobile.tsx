@@ -1,203 +1,25 @@
-import React, { useCallback, useEffect, useRef } from "react";
-import { FaceLandmarker, FilesetResolver, NormalizedLandmark } from "@mediapipe/tasks-vision";
-import type { AREffect } from "@/features/ar/ARRegistry";
-import { smoothLandmarks } from "./faceUtils";
-import { applyBeautyPipeline } from "@/features/beauty/BeautyPipeline";
-import { renderFaceEffect } from "@/features/beauty/FaceEffects";
-
-const WASM = "/mediapipe/wasm";
-const MODEL = "/mediapipe/face_landmarker.task";
-const DETECTION_INTERVAL_MS = 40;
-const LANDMARK_SMOOTHING = 0.72;
-const LOST_FACE_TIMEOUT_MS = 350;
-
-// No beauty processing is allowed unless the user explicitly selects a beauty
-// effect. This fallback is intentionally a complete no-op.
-const BASE_BEAUTY_CONFIG = {
-  smoothSkin: 0,
-  skinTexture: 0,
-  brightenSkin: 0,
-  darkCircles: 0,
-  eyeBrilliance: 0,
-  smileLines: 0,
-  enlargeEyes: 0,
-  slimFace: 0,
-  whitenTeeth: 0,
-  enlargeLips: 0,
-  symmetry: 0,
+import React,{useCallback,useEffect,useRef}from"react";
+import{FaceLandmarker,FilesetResolver,NormalizedLandmark}from"@mediapipe/tasks-vision";
+import type{AREffect}from"@/features/ar/ARRegistry";
+import{smoothLandmarks}from"./faceUtils";
+import{applyBeautyPipeline}from"@/features/beauty/BeautyPipeline";
+import{renderFaceEffect}from"@/features/beauty/FaceEffects";
+const WASM="/mediapipe/wasm",MODEL="/mediapipe/face_landmarker.task";
+type ARStatus="loading"|"ready"|"face"|"no-face"|"error";
+const BASE={smoothSkin:0,skinTexture:0,brightenSkin:0,darkCircles:0,eyeBrilliance:0,smileLines:0,enlargeEyes:0,slimFace:0,whitenTeeth:0,enlargeLips:0,symmetry:0};
+const msg=(e:unknown)=>e instanceof Error?e.message:String(e);
+function size(c:HTMLCanvasElement){const r=c.getBoundingClientRect(),a=r.width>10&&r.height>10?r.width/r.height:9/16,m=1280;return a<1?{width:Math.max(360,Math.round(m*a)),height:m}:{width:m,height:Math.max(360,Math.round(m/a))}}
+function draw(ctx:CanvasRenderingContext2D,v:HTMLVideoElement,w:number,h:number){const s=Math.max(w/v.videoWidth,h/v.videoHeight),dw=v.videoWidth*s,dh=v.videoHeight*s,dx=(w-dw)/2,dy=(h-dh)/2;ctx.drawImage(v,dx,dy,dw,dh);return{s,dx,dy}}
+function map(ls:NormalizedLandmark[],v:HTMLVideoElement,w:number,h:number,t:{s:number,dx:number,dy:number}){return ls.map(p=>({...p,x:(p.x*v.videoWidth*t.s+t.dx)/w,y:(p.y*v.videoHeight*t.s+t.dy)/h}))}
+export const AREngineMobile:React.FC<{videoRef:React.RefObject<HTMLVideoElement|null>;activeEffect:AREffect|null;isRecording?:boolean;canvasRef?:React.RefObject<HTMLCanvasElement|null>;onStatusChange?:(s:ARStatus,e?:unknown)=>void;onTrackingFrame?:(f:{video:HTMLVideoElement;landmarks:NormalizedLandmark[];width:number;height:number})=>void}>=(p)=>{
+ const local=useRef<HTMLCanvasElement|null>(null),det=useRef<FaceLandmarker|null>(null),prev=useRef<NormalizedLandmark[]|null>(null),raf=useRef(0),lastVideo=useRef(-1),lastDetect=useRef(0),timestamp=useRef(0),status=useRef<ARStatus>("loading"),effect=useRef<AREffect|null>(p.activeEffect);
+ useEffect(()=>{effect.current=p.activeEffect},[p.activeEffect]);
+ const setCanvas=useCallback((n:HTMLCanvasElement|null)=>{local.current=n;if(p.canvasRef)p.canvasRef.current=n},[p.canvasRef]);
+ const setStatus=useCallback((s:ARStatus,e?:unknown)=>{if(status.current===s&&s!=="error")return;status.current=s;p.onStatusChange?.(s,e)},[p.onStatusChange]);
+ const detect=useCallback((v:HTMLVideoElement,now:number)=>{if(!det.current||v.currentTime<=0||v.currentTime===lastVideo.current||now-lastDetect.current<40)return prev.current;lastDetect.current=now;lastVideo.current=v.currentTime;timestamp.current=Math.max(Math.round(now),timestamp.current+1);try{const r=det.current.detectForVideo(v,timestamp.current),f=r.faceLandmarks?.[0];if(f&&f.length>400){prev.current=smoothLandmarks(f,prev.current,.72);setStatus("face")}else{prev.current=null;setStatus("no-face")}}catch(e){console.error("[AREngineMobile] detect",e);setStatus("error",e)}return prev.current},[setStatus]);
+ useEffect(()=>{let dead=false;(async()=>{try{const vision=await FilesetResolver.forVisionTasks(WASM);const d=await FaceLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:MODEL},runningMode:"VIDEO",numFaces:1,minFaceDetectionConfidence:.15,minFacePresenceConfidence:.15,minTrackingConfidence:.15});if(dead){d.close();return}det.current=d;setStatus("ready")}catch(e){console.error("[AREngineMobile] init",e);setStatus("error",e)}})();return()=>{dead=true;det.current?.close();det.current=null;prev.current=null;if(raf.current)cancelAnimationFrame(raf.current)}},[setStatus]);
+ const render=useCallback(()=>{const v=p.videoRef.current,c=local.current;if(!v||!c||v.readyState<HTMLMediaElement.HAVE_CURRENT_DATA||!v.videoWidth||!v.videoHeight){raf.current=requestAnimationFrame(render);return}const z=size(c);if(c.width!==z.width||c.height!==z.height){c.width=z.width;c.height=z.height}const ctx=c.getContext("2d",{alpha:true});if(!ctx){raf.current=requestAnimationFrame(render);return}const w=c.width,h=c.height,now=performance.now();ctx.clearRect(0,0,w,h);ctx.save();ctx.translate(w,0);ctx.scale(-1,1);const e=effect.current,cfg=e?.beautyConfig||BASE;ctx.filter=`brightness(${1+((cfg.brightenSkin||0)*.055).toFixed(3)})`;let t;try{t=draw(ctx,v,w,h)}catch(err){console.error("[AREngineMobile] draw",err);ctx.restore();raf.current=requestAnimationFrame(render);return}ctx.filter="none";const ls=detect(v,now);if(ls?.length){const m=map(ls,v,w,h,t);if(e)try{renderFaceEffect(ctx,m,w,h,e)}catch(err){console.error("[AREngineMobile] effect",err)}if(e?.beautyConfig)try{applyBeautyPipeline(ctx,m,w,h,e.beautyConfig)}catch(err){console.error("[AREngineMobile] beauty",err)}p.onTrackingFrame?.({video:v,landmarks:m,width:w,height:h})}ctx.restore();raf.current=requestAnimationFrame(render)},[p.videoRef,detect,p.onTrackingFrame]);
+ useEffect(()=>{raf.current=requestAnimationFrame(render);return()=>{if(raf.current)cancelAnimationFrame(raf.current)}},[render]);
+ return <canvas ref={setCanvas} className="absolute inset-0 w-full h-full pointer-events-none z-20" style={{background:"transparent"}}/>;
 };
-
-type ARStatus = "loading" | "ready" | "face" | "no-face" | "error";
-type ARError = { message: string; cause?: unknown };
-type CoverTransform = { scale: number; dx: number; dy: number };
-
-function errorMessage(error: unknown) { return error instanceof Error ? error.message : String(error); }
-
-function grade(e: AREffect | null) {
-  const c = e?.beautyConfig ?? BASE_BEAUTY_CONFIG;
-  const brighten = Math.max(0, Math.min(1, c.brightenSkin ?? 0));
-  const smooth = Math.max(0, Math.min(1, Math.max(c.smoothSkin ?? 0, c.skinTexture ?? 0)));
-  return `brightness(${(1 + brighten * 0.055).toFixed(3)}) contrast(${(1 - smooth * 0.018).toFixed(3)}) saturate(${(1 + brighten * 0.045).toFixed(3)})`;
-}
-
-function outputSize(canvas: HTMLCanvasElement) {
-  const rect = canvas.getBoundingClientRect();
-  const aspect = rect.width > 10 && rect.height > 10 ? rect.width / rect.height : 9 / 16;
-  const maxDimension = 1280;
-  if (aspect < 1) return { width: Math.max(360, Math.round(maxDimension * aspect)), height: maxDimension };
-  return { width: maxDimension, height: Math.max(360, Math.round(maxDimension / aspect)) };
-}
-
-function drawCover(ctx: CanvasRenderingContext2D, video: HTMLVideoElement, width: number, height: number): CoverTransform {
-  const vw = video.videoWidth, vh = video.videoHeight;
-  const scale = Math.max(width / vw, height / vh);
-  const dw = vw * scale, dh = vh * scale;
-  const dx = (width - dw) / 2, dy = (height - dh) / 2;
-  ctx.drawImage(video, dx, dy, dw, dh);
-  return { scale, dx, dy };
-}
-
-function mapLandmarks(landmarks: NormalizedLandmark[], video: HTMLVideoElement, width: number, height: number, transform: CoverTransform) {
-  const { scale, dx, dy } = transform;
-  return landmarks.map((p) => ({
-    ...p,
-    x: (p.x * video.videoWidth * scale + dx) / width,
-    y: (p.y * video.videoHeight * scale + dy) / height,
-  }));
-}
-
-export const AREngineMobile: React.FC<{
-  videoRef: React.RefObject<HTMLVideoElement | null>;
-  activeEffect: AREffect | null;
-  isRecording?: boolean;
-  canvasRef?: React.RefObject<HTMLCanvasElement | null>;
-  onStatusChange?: (status: ARStatus, error?: ARError) => void;
-  onTrackingFrame?: (frame: { video: HTMLVideoElement; landmarks: NormalizedLandmark[]; width: number; height: number }) => void;
-}> = ({ videoRef, activeEffect, canvasRef: externalCanvasRef, onStatusChange, onTrackingFrame }) => {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const detector = useRef<FaceLandmarker | null>(null);
-  const previousLandmarks = useRef<NormalizedLandmark[] | null>(null);
-  const mappedLandmarks = useRef<NormalizedLandmark[] | null>(null);
-  const raf = useRef<number | null>(null);
-  const lastDetectAt = useRef(0), lastVideoTime = useRef(-1), lastTimestamp = useRef(0), lastFaceSeenAt = useRef(0);
-  const activeEffectRef = useRef<AREffect | null>(activeEffect);
-  const statusRef = useRef<ARStatus>("loading");
-
-  const setStatus = useCallback((status: ARStatus, error?: ARError) => {
-    if (statusRef.current === status && status !== "error") return;
-    statusRef.current = status;
-    onStatusChange?.(status, error);
-  }, [onStatusChange]);
-
-  useEffect(() => { activeEffectRef.current = activeEffect; }, [activeEffect]);
-  const setCanvas = useCallback((node: HTMLCanvasElement | null) => { canvasRef.current = node; if (externalCanvasRef) externalCanvasRef.current = node; }, [externalCanvasRef]);
-
-  const detect = useCallback((video: HTMLVideoElement, now: number) => {
-    const landmarker = detector.current;
-    if (!landmarker) return previousLandmarks.current;
-    if (video.currentTime <= 0 || video.currentTime === lastVideoTime.current) return previousLandmarks.current;
-    if (now - lastDetectAt.current < DETECTION_INTERVAL_MS) return previousLandmarks.current;
-    lastDetectAt.current = now;
-    lastVideoTime.current = video.currentTime;
-    const timestamp = Math.max(Math.round(now), lastTimestamp.current + 1);
-    lastTimestamp.current = timestamp;
-    try {
-      const result = landmarker.detectForVideo(video, timestamp);
-      const face = result.faceLandmarks?.[0];
-      if (face && face.length > 400) {
-        previousLandmarks.current = smoothLandmarks(face, previousLandmarks.current, LANDMARK_SMOOTHING);
-        lastFaceSeenAt.current = now;
-        setStatus("face");
-      } else if (now - lastFaceSeenAt.current > LOST_FACE_TIMEOUT_MS) {
-        previousLandmarks.current = null;
-        mappedLandmarks.current = null;
-        setStatus("no-face");
-      }
-    } catch (error) {
-      console.error("[AREngineMobile] detectForVideo", error);
-      setStatus("error", { message: errorMessage(error), cause: error });
-    }
-    return previousLandmarks.current;
-  }, [setStatus]);
-
-  useEffect(() => {
-    let disposed = false;
-    setStatus("loading");
-    (async () => {
-      try {
-        if (!FaceLandmarker || !FilesetResolver) throw new Error("@mediapipe/tasks-vision est absent du bundle");
-        const vision = await FilesetResolver.forVisionTasks(WASM);
-        const landmarker = await FaceLandmarker.createFromOptions(vision, {
-          baseOptions: { modelAssetPath: MODEL },
-          runningMode: "VIDEO",
-          numFaces: 1,
-          minFaceDetectionConfidence: 0.15,
-          minFacePresenceConfidence: 0.15,
-          minTrackingConfidence: 0.15,
-          outputFaceBlendshapes: false,
-          outputFacialTransformationMatrixes: false,
-        });
-        if (disposed) { landmarker.close(); return; }
-        detector.current = landmarker;
-        setStatus("ready");
-      } catch (error) {
-        console.error("[AREngineMobile] MediaPipe init", error);
-        setStatus("error", { message: errorMessage(error), cause: error });
-      }
-    })();
-    return () => {
-      disposed = true;
-      detector.current?.close(); detector.current = null;
-      previousLandmarks.current = null; mappedLandmarks.current = null;
-      lastDetectAt.current = 0; lastVideoTime.current = -1; lastTimestamp.current = 0; lastFaceSeenAt.current = 0;
-      if (raf.current !== null) cancelAnimationFrame(raf.current);
-    };
-  }, [setStatus]);
-
-  const render = useCallback(() => {
-    const video = videoRef.current, canvas = canvasRef.current;
-    if (!video || !canvas || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth || !video.videoHeight) { raf.current = requestAnimationFrame(render); return; }
-    const size = outputSize(canvas);
-    if (canvas.width !== size.width || canvas.height !== size.height) { canvas.width = size.width; canvas.height = size.height; }
-    const ctx = canvas.getContext("2d", { alpha: false });
-    if (!ctx) { raf.current = requestAnimationFrame(render); return; }
-    const width = canvas.width, height = canvas.height, now = performance.now(), effect = activeEffectRef.current;
-
-    // One visible/recordable surface: mirror the user camera like TikTok and keep
-    // that transform active for the camera, landmarks, effect and beauty rendering.
-    ctx.save();
-    ctx.clearRect(0, 0, width, height);
-    ctx.translate(width, 0);
-    ctx.scale(-1, 1);
-    ctx.filter = grade(effect);
-    const transform = drawCover(ctx, video, width, height);
-    ctx.filter = "none";
-
-    const landmarks = detect(video, now);
-    if (landmarks?.length) {
-      const current = mapLandmarks(landmarks, video, width, height, transform);
-      mappedLandmarks.current = current;
-      if (effect) {
-        try { renderFaceEffect(ctx, current, width, height, effect); }
-        catch (error) { console.error("[AREngineMobile] selected AR effect", error); }
-      }
-
-      // Beauty is opt-in. Creative effects do not inherit the default beauty
-      // retouch, and Natural (all-zero config) is a true no-op.
-      const beautyConfig = effect?.beautyConfig;
-      if (beautyConfig) {
-        try { applyBeautyPipeline(ctx, current, width, height, beautyConfig); }
-        catch (error) { console.error("[AREngineMobile] beauty pipeline", error); }
-      }
-      onTrackingFrame?.({ video, landmarks: current, width, height });
-    }
-    ctx.restore();
-
-    raf.current = requestAnimationFrame(render);
-  }, [videoRef, detect, onTrackingFrame]);
-
-  useEffect(() => { raf.current = requestAnimationFrame(render); return () => { if (raf.current !== null) cancelAnimationFrame(raf.current); }; }, [render]);
-  return <canvas ref={setCanvas} className="absolute inset-0 w-full h-full pointer-events-none z-20" />;
-};
-
 export default AREngineMobile;
