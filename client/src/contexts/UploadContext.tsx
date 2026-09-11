@@ -28,33 +28,52 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
   } | null>(null);
 
   // A recorded Blob is handed to the edit screen through a blob URL.
-  // On mobile browsers, changing the <video> src during the React transition
-  // can leave the media element stuck on an empty/black frame. Force a fresh
-  // media load after React has committed the new src.
+  // Mobile browsers can render the new edit <video> a little later than the
+  // React state update. Keep retrying briefly so we reload the actual element
+  // after it exists, instead of relying on a single animation-frame timing.
   const setPreview = useCallback((url: string | null) => {
     setPreviewState(url);
     if (!url || typeof window === "undefined") return;
 
+    let attempts = 0;
+    let timer: number | undefined;
+
     const reloadMatchingVideo = () => {
       const videos = document.querySelectorAll<HTMLVideoElement>("video");
+      let found = false;
+
       videos.forEach((video) => {
         const source = video.getAttribute("src");
         if (source !== url && video.currentSrc !== url) return;
 
+        found = true;
         video.playsInline = true;
         video.muted = true;
         video.preload = "auto";
+
+        const startPlayback = () => {
+          if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+            void video.play().catch(() => {});
+          }
+        };
+
+        video.addEventListener("loadedmetadata", startPlayback, { once: true });
+        video.addEventListener("canplay", startPlayback, { once: true });
         video.load();
-        void video.play().catch(() => {
-          // Autoplay can be blocked; the video is still loaded and can be
-          // started by the user's next interaction.
-        });
+        startPlayback();
       });
+
+      attempts += 1;
+      if (!found && attempts < 20) {
+        timer = window.setTimeout(reloadMatchingVideo, 100);
+      }
     };
 
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(reloadMatchingVideo);
-    });
+    window.requestAnimationFrame(reloadMatchingVideo);
+
+    return () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
   }, []);
 
   return (
