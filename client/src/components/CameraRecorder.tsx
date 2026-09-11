@@ -1,9 +1,11 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { X, Music, RefreshCw, Zap, ZapOff, Timer, Gauge, Layout, Palette } from 'lucide-react';
+import { toast } from 'sonner';
 import { AudioPlayer } from '@/services/audioService';
 import { EffectsPanel } from './EffectsPanel';
 import type { AREffect } from '@/features/ar/ARRegistry';
 import { AR_EFFECTS } from '@/features/ar/ARRegistry';
+import { AREngineMobile as AREngine } from './AREngineMobile';
 import { renderEffectPreviews, type EffectPreviewFrame } from '@/features/ar/preview/EffectPreviewRenderer';
 import { LiveEntryButton } from '@/features/live/LiveEntryButton';
 
