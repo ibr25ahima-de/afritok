@@ -16,8 +16,8 @@ export default function Publish() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [premiumOptions, setPremiumOptions] = useState<PremiumPublishOptionsValue>({ quality: "standard", scheduledAt: null, commentsMode: "all" });
 
-  const uploadFileMutation = trpc.video.uploadFile.useMutation();
   const uploadMutation = trpc.video.upload.useMutation();
+  const uploadFileMutation = trpc.video.uploadFile.useMutation();
   const { data: premiumStatus } = trpc.subscription.status.useQuery(undefined, { staleTime: 60_000 });
 
   const extractThumbnail = (videoFile: File): Promise<string | null> => new Promise((resolve) => {
@@ -27,21 +27,38 @@ export default function Publish() {
     video.onerror = () => { resolve(null); URL.revokeObjectURL(video.src); };
   });
 
+  const uploadVideoDirect = (videoFile: File): Promise<string> => new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/upload-video", true);
+    xhr.withCredentials = true;
+    xhr.upload.onprogress = event => {
+      if (event.lengthComputable) setUploadProgress(Math.min(75, 50 + Math.round((event.loaded / event.total) * 25)));
+    };
+    xhr.onload = () => {
+      try {
+        const body = JSON.parse(xhr.responseText || "{}");
+        if (xhr.status >= 200 && xhr.status < 300 && body.videoUrl) resolve(body.videoUrl);
+        else reject(new Error(body.error || body.message || "Échec de l'envoi de la vidéo"));
+      } catch { reject(new Error("Réponse invalide du serveur pendant l'envoi de la vidéo")); }
+    };
+    xhr.onerror = () => reject(new Error("Connexion impossible pendant l'envoi de la vidéo"));
+    xhr.onabort = () => reject(new Error("Envoi de la vidéo interrompu"));
+    const form = new FormData();
+    form.append("file", videoFile, videoFile.name || "video.webm");
+    xhr.send(form);
+  });
+
   const handlePublish = async () => {
     if (!file) return alert("Pas de fichier sélectionné");
     if (!user) return alert("Utilisateur non connecté");
     if (!title.trim()) return alert("Veuillez ajouter un titre");
     setLoading(true); setUploadProgress(0);
     try {
-      const finalFile = file;
-      const buffer = new Uint8Array(await finalFile.arrayBuffer());
       let thumbnailDataUrl: string | null = null;
-      if (file.type.startsWith("video/")) { setUploadProgress(40); thumbnailDataUrl = await extractThumbnail(file); }
+      if (file.type.startsWith("video/")) { setUploadProgress(10); thumbnailDataUrl = await extractThumbnail(file); }
       setUploadProgress(50);
-      const uploadFileResult = await uploadFileMutation.mutateAsync({ fileBuffer: buffer, fileName: file.name, fileType: finalFile.type });
-      if (!uploadFileResult.success || !uploadFileResult.videoUrl) throw new Error("Échec de l'envoi de la vidéo vers le stockage");
-      setUploadProgress(60);
-      const videoUrl = uploadFileResult.videoUrl;
+      const videoUrl = await uploadVideoDirect(file);
+      setUploadProgress(80);
       let thumbnailUrl: string | null = null;
       if (thumbnailDataUrl) {
         try {
@@ -51,7 +68,7 @@ export default function Publish() {
           if (thumbUploadResult.success && thumbUploadResult.videoUrl) thumbnailUrl = thumbUploadResult.videoUrl;
         } catch (thumbErr) { console.warn("Échec upload miniature:", thumbErr); }
       }
-      setUploadProgress(80);
+      setUploadProgress(90);
       const result = await uploadMutation.mutateAsync({ title: title.trim(), description: caption.trim(), videoUrl, thumbnailUrl, musicUrl: selectedMusic?.url || null, musicName: selectedMusic?.name || null, premiumOptions: premiumStatus?.isPremium ? premiumOptions : undefined });
       setUploadProgress(100);
       alert(result.success ? (premiumOptions.scheduledAt ? "Vidéo programmée avec succès ! ✅" : "Vidéo publiée avec succès ! ✅") : "Publication impossible");
