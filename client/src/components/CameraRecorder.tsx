@@ -27,7 +27,6 @@ export const CameraRecorder:React.FC<CameraRecorderProps>=({onVideoRecorded,onPh
  const [isRecording,setIsRecording]=useState(false),[facingMode,setFacingMode]=useState<"user"|"environment">("user"),[selectedDuration,setSelectedDuration]=useState('15 s'),[recordingTime,setRecordingTime]=useState(0),[flashEnabled,setFlashEnabled]=useState(false),[activeSpeed,setActiveSpeed]=useState('1x'),[timerValue,setTimerValue]=useState(0),[timerCountdown,setTimerCountdown]=useState(0),[isTimerActive,setIsTimerActive]=useState(false),[activeAREffect,setActiveAREffect]=useState<AREffect|null>(null),[showAREffectsPanel,setShowAREffectsPanel]=useState(true),[arStatus,setArStatus]=useState<ARStatus>('loading');
  const [previewImages,setPreviewImages]=useState<Record<string,string>>({});
  const [previewsLoading,setPreviewsLoading]=useState(false);
- const canvasHasVisibleFrame=(canvas:HTMLCanvasElement)=>{try{const ctx=canvas.getContext('2d');if(!ctx||canvas.width<2||canvas.height<2)return false;const points=[[.2,.2],[.5,.2],[.8,.2],[.2,.5],[.5,.5],[.8,.5],[.2,.8],[.5,.8],[.8,.8]];return points.some(([x,y])=>{const p=ctx.getImageData(Math.floor(canvas.width*x),Math.floor(canvas.height*y),1,1).data;return (p[0]||0)+(p[1]||0)+(p[2]||0)>18})}catch{return false}};
  const toggleFlash=async()=>{const n=!flashEnabled;setFlashEnabled(n);const t=streamRef.current?.getVideoTracks()[0];if(!t)return;const c=t.getCapabilities() as any;if(c.torch)try{await t.applyConstraints({advanced:[{torch:n}]} as any)}catch(e){console.error(e)}else toast.info("Le flash n'est pas supporté sur cet appareil")};
  const handleAREffectSelect=(e:AREffect|null)=>{setActiveAREffect(e);setShowAREffectsPanel(true);if(e)toast.info(`Effet AR "${e.name}" sélectionné — détection du visage en cours`) };
  const handleARStatus=useCallback((status:ARStatus,error?:unknown)=>{setArStatus(status);if(status==='error')toast.error("Les effets AR ne peuvent pas démarrer sur cet appareil");if(error)console.error('[CameraRecorder] AR status',status,error)},[]);
@@ -36,17 +35,11 @@ export const CameraRecorder:React.FC<CameraRecorderProps>=({onVideoRecorded,onPh
  useEffect(()=>{if(!selectedMusic){musicPlayerRef.current?.stop();return}musicPlayerRef.current=new AudioPlayer(selectedMusic.url);return()=>musicPlayerRef.current?.stop()},[selectedMusic]);
  useEffect(()=>{
    if(!showAREffectsPanel) return;
-   let cancelled=false;
-   let attempts=0;
-   let timer=0;
+   let cancelled=false; let attempts=0; let timer=0;
    setPreviewsLoading(true);
    const generate=()=>{
      const frame=latestFrameRef.current;
-     if(!frame && attempts<20){
-       attempts+=1;
-       timer=window.setTimeout(generate,100);
-       return;
-     }
+     if(!frame && attempts<20){attempts+=1;timer=window.setTimeout(generate,100);return;}
      if(!frame || cancelled){setPreviewsLoading(false);return;}
      const previews=renderEffectPreviews({ ...frame, width: 144, height: 256 }, AR_EFFECTS);
      if(!cancelled){setPreviewImages(previews);setPreviewsLoading(false);}
@@ -58,14 +51,76 @@ export const CameraRecorder:React.FC<CameraRecorderProps>=({onVideoRecorded,onPh
  useEffect(()=>{startCamera();return()=>streamRef.current?.getTracks().forEach(t=>t.stop())},[startCamera]);
  const takeProcessedPhoto=useCallback(()=>{const source=processedCanvasRef.current;if(!source||source.width<2||source.height<2){toast.error("La caméra n'est pas encore prête");return}source.toBlob(blob=>{if(blob)onPhotoTaken?.(blob)},'image/jpeg',.95)},[onPhotoTaken]);
  const stopRecording=useCallback(()=>{const recorder=mediaRecorderRef.current;if(!recorder||recorder.state==='inactive')return;try{recorder.requestData()}catch{}recorder.stop();setIsRecording(false)},[]);
- const handleCapture=async()=>{if(timerValue>0&&!isRecording)await startTimer(timerValue);if(selectedDuration==='PHOTO'){takeProcessedPhoto();return}if(isRecording){stopRecording();return}const processedCanvas=processedCanvasRef.current;if(!processedCanvas||processedCanvas.width<2||processedCanvas.height<2){toast.error("La caméra avec effets n'est pas encore prête");return}if(!streamRef.current){toast.error("Caméra indisponible");return}
-   const canvasStream=processedCanvas.captureStream(30);recordingCanvasStreamRef.current=canvasStream;const recordCanvas=canvasHasVisibleFrame(processedCanvas);const ac=new AudioContext();audioContextRef.current=ac;const d=ac.createMediaStreamDestination();const micSource=ac.createMediaStreamSource(streamRef.current);micSource.connect(d);let me:HTMLAudioElement|null=null;if(selectedMusic){me=new Audio(selectedMusic.url);me.crossOrigin='anonymous';musicElementRef.current=me;const ms=ac.createMediaElementSource(me);ms.connect(d);ms.connect(ac.destination)}const mixed=new MediaStream();(recordCanvas?canvasStream:streamRef.current).getVideoTracks().forEach(t=>mixed.addTrack(t));d.stream.getAudioTracks().forEach(t=>mixed.addTrack(t));const chunks:Blob[]=[];const opt=MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')?{mimeType:'video/webm;codecs=vp8,opus'}:{mimeType:'video/webm'};const mr=new MediaRecorder(mixed,opt);mr.ondataavailable=e=>{if(e.data.size>0)chunks.push(e.data)};mr.onstop=()=>{musicElementRef.current?.pause();audioContextRef.current?.close();recordingCanvasStreamRef.current?.getTracks().forEach(t=>t.stop());recordingCanvasStreamRef.current=null;const blob=new Blob(chunks,{type:mr.mimeType||'video/webm'});if(blob.size<1024){toast.error("La vidéo enregistrée est vide. Réessaie en gardant la caméra ouverte.");return}const duration=Math.max(0,Math.round((performance.now()-recordingStartedAtRef.current)/1000));onVideoRecorded?.(blob,duration)};mr.onerror=()=>{toast.error("Impossible d'enregistrer la vidéo avec l'effet");setIsRecording(false)};mr.start(1000);mediaRecorderRef.current=mr;recordingStartedAtRef.current=performance.now();if(me){await ac.resume();me.currentTime=0;me.playbackRate=parseFloat(activeSpeed.replace('x',''));me.play().catch(()=>{})}if(videoRef.current)videoRef.current.playbackRate=parseFloat(activeSpeed.replace('x',''));setIsRecording(true);setRecordingTime(0)};
+ const handleCapture=async()=>{
+   if(timerValue>0&&!isRecording)await startTimer(timerValue);
+   if(selectedDuration==='PHOTO'){takeProcessedPhoto();return}
+   if(isRecording){stopRecording();return}
+   const sourceStream=streamRef.current;
+   const videoElement=videoRef.current;
+   if(!sourceStream||!videoElement){toast.error("Caméra indisponible");return}
+   if(videoElement.readyState<HTMLMediaElement.HAVE_CURRENT_DATA||!videoElement.videoWidth||!videoElement.videoHeight){toast.error("La caméra n'est pas encore prête");return}
+   const videoTracks=sourceStream.getVideoTracks();
+   if(!videoTracks.length){toast.error("Flux vidéo indisponible");return}
+
+   let recordStream=sourceStream;
+   let musicElement:HTMLAudioElement|null=null;
+   if(selectedMusic){
+     try{
+       const ac=new AudioContext();
+       audioContextRef.current=ac;
+       const destination=ac.createMediaStreamDestination();
+       const micSource=ac.createMediaStreamSource(sourceStream);
+       micSource.connect(destination);
+       musicElement=new Audio(selectedMusic.url);
+       musicElement.crossOrigin='anonymous';
+       musicElementRef.current=musicElement;
+       const musicSource=ac.createMediaElementSource(musicElement);
+       musicSource.connect(destination);
+       musicSource.connect(ac.destination);
+       recordStream=new MediaStream([...videoTracks,...destination.stream.getAudioTracks()]);
+       await ac.resume();
+       musicElement.currentTime=0;
+       musicElement.playbackRate=parseFloat(activeSpeed.replace('x',''));
+       await musicElement.play().catch(()=>{});
+     }catch(error){
+       console.error('[CameraRecorder] music mix',error);
+       audioContextRef.current?.close();
+       audioContextRef.current=null;
+       musicElementRef.current=null;
+       musicElement=null;
+       recordStream=sourceStream;
+     }
+   }
+
+   const chunks:Blob[]=[];
+   const mimeCandidates=['video/webm;codecs=vp8,opus','video/webm;codecs=vp8','video/webm'];
+   const mimeType=mimeCandidates.find(type=>MediaRecorder.isTypeSupported(type));
+   let mr:MediaRecorder;
+   try{mr=mimeType?new MediaRecorder(recordStream,{mimeType}):new MediaRecorder(recordStream)}catch(error){console.error('[CameraRecorder] MediaRecorder',error);toast.error("Cet appareil ne peut pas enregistrer cette vidéo");audioContextRef.current?.close();return}
+   mr.ondataavailable=e=>{if(e.data.size>0)chunks.push(e.data)};
+   mr.onstop=()=>{
+     musicElementRef.current?.pause();
+     audioContextRef.current?.close();
+     audioContextRef.current=null;
+     musicElementRef.current=null;
+     const blob=new Blob(chunks,{type:mr.mimeType||mimeType||'video/webm'});
+     if(blob.size<1024){toast.error("La vidéo enregistrée est vide. Réessaie.");return}
+     const duration=Math.max(0,Math.round((performance.now()-recordingStartedAtRef.current)/1000));
+     onVideoRecorded?.(blob,duration);
+   };
+   mr.onerror=()=>{toast.error("Impossible d'enregistrer la vidéo");setIsRecording(false);};
+   mediaRecorderRef.current=mr;
+   recordingStartedAtRef.current=performance.now();
+   mr.start(1000);
+   if(videoElement)videoElement.playbackRate=parseFloat(activeSpeed.replace('x',''));
+   setIsRecording(true);setRecordingTime(0);
+ };
  useEffect(()=>{let i:NodeJS.Timeout;if(isRecording)i=setInterval(()=>setRecordingTime(p=>p+1),1000);return()=>clearInterval(i)},[isRecording]);
  useEffect(()=>{if(!isRecording)return;const m=selectedDuration==='10 min'?600:selectedDuration==='60 s'?60:15;if(recordingTime>=m)stopRecording()},[recordingTime,isRecording,selectedDuration,stopRecording]);
- useEffect(()=>()=>{mediaRecorderRef.current?.stop();recordingCanvasStreamRef.current?.getTracks().forEach(t=>t.stop());streamRef.current?.getTracks().forEach(t=>t.stop());audioContextRef.current?.close()},[]);
+ useEffect(()=>()=>{mediaRecorderRef.current?.stop();streamRef.current?.getTracks().forEach(t=>t.stop());audioContextRef.current?.close()},[]);
  const arLabel=arStatus==='face'?'Visage détecté • AR actif':arStatus==='ready'?'AR prêt • regardez la caméra':arStatus==='no-face'?'Visage non détecté':arStatus==='error'?'AR indisponible':'Chargement des effets…';
  return <div className="h-screen bg-black text-white relative overflow-hidden flex flex-col">
-   <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover opacity-0 pointer-events-none"/>
+   <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 z-10 w-full h-full object-cover opacity-100"/>
    <AREngine videoRef={videoRef} activeEffect={activeAREffect} isRecording={isRecording} canvasRef={processedCanvasRef} onStatusChange={handleARStatus} onTrackingFrame={handleTrackingFrame}/>
    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur text-[11px] font-semibold whitespace-nowrap">{activeAREffect?`${activeAREffect.name} • ${arLabel}`:arLabel}</div>
    {isRecording&&<div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-1"><div className="rounded-full bg-black/75 px-4 py-1.5 text-sm font-bold tabular-nums shadow-lg"><span className="text-red-400">●</span> {String(Math.floor(recordingTime/60)).padStart(2,'0')}:{String(recordingTime%60).padStart(2,'0')} <span className="text-white/60">/ {selectedDuration==='10 min'?'10:00':selectedDuration==='60 s'?'01:00':'00:15'}</span></div><div className="h-1 w-32 overflow-hidden rounded-full bg-white/30"><div className="h-full bg-red-500 transition-[width]" style={{width:`${Math.min(100,(recordingTime/(selectedDuration==='10 min'?600:selectedDuration==='60 s'?60:15))*100)}%`}}/></div></div>}
