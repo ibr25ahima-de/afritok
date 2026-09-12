@@ -13,8 +13,6 @@ interface CameraRecorderProps {
 
 const LIMITS: Record<string, number> = { "15 s": 15, "60 s": 60, "10 min": 600 };
 
-type AfriTokWindow = Window & { __afritokRecordedMime?: string };
-
 export const CameraRecorder: React.FC<CameraRecorderProps> = ({
   onVideoRecorded, onPhotoTaken, onClose, onOpenMusic, onPublish, selectedMusic,
 }) => {
@@ -33,8 +31,10 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
     streamRef.current?.getTracks().forEach((track) => track.stop());
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
+        // The edit screen must be able to decode the recorded file immediately.
+        // Keep the recording video-only here; music is handled separately by the editor.
         video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: true,
+        audio: false,
       });
       streamRef.current = stream;
       const video = videoRef.current;
@@ -45,7 +45,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
         await video.play();
       }
     } catch (error) {
-      console.error("[CameraRecorder:minimal] camera", error);
+      console.error("[CameraRecorder] camera", error);
       toast.error("Impossible d'ouvrir la caméra");
     }
   }, [facingMode]);
@@ -71,7 +71,6 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
   const stopRecording = useCallback(() => {
     const recorder = recorderRef.current;
     if (!recorder || recorder.state === "inactive") return;
-    try { recorder.requestData(); } catch { /* browser may not support it */ }
     recorder.stop();
     setRecording(false);
   }, []);
@@ -83,31 +82,31 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       return;
     }
 
-    // Select a format that the browser can encode. Keep the exact MIME value
-    // so the edit screen receives the real container/codec instead of a
-    // mismatched video/webm label.
+    // VP8/WebM video-only is intentionally used for the in-app preview. It avoids
+    // an audio codec/container mismatch on mobile WebViews after recording stops.
     const mime = [
-      "video/mp4",
-      "video/webm;codecs=vp8,opus",
       "video/webm;codecs=vp8",
-      "video/webm;codecs=vp9,opus",
-      "video/webm;codecs=vp9",
       "video/webm",
     ].find((type) => MediaRecorder.isTypeSupported(type));
 
     try {
       const recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
       chunksRef.current = [];
-      recorder.ondataavailable = (event) => { if (event.data.size) chunksRef.current.push(event.data); };
-      recorder.onerror = () => { setRecording(false); toast.error("L'enregistrement a échoué"); };
+      recorder.ondataavailable = (event) => {
+        if (event.data.size) chunksRef.current.push(event.data);
+      };
+      recorder.onerror = (event) => {
+        console.error("[CameraRecorder] recorder error", event);
+        setRecording(false);
+        toast.error("L'enregistrement a échoué");
+      };
       recorder.onstop = () => {
         const actualMime = recorder.mimeType || mime || "video/webm";
         const blob = new Blob(chunksRef.current, { type: actualMime });
         const duration = Math.max(1, Math.round((performance.now() - startedAtRef.current) / 1000));
-        if (blob.size < 1024) { toast.error("La vidéo enregistrée est vide"); return; }
-
-        if (typeof window !== "undefined") {
-          (window as AfriTokWindow).__afritokRecordedMime = actualMime;
+        if (blob.size < 1024) {
+          toast.error("La vidéo enregistrée est vide");
+          return;
         }
         onVideoRecorded?.(blob, duration);
       };
@@ -117,14 +116,17 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       setSeconds(0);
       setRecording(true);
     } catch (error) {
-      console.error("[CameraRecorder:minimal] recorder", error);
+      console.error("[CameraRecorder] recorder", error);
       toast.error("Ce téléphone ne peut pas enregistrer cette vidéo");
     }
   };
 
   const capture = async () => {
     if (timer > 0 && !recording) {
-      for (let n = timer; n > 0; n -= 1) { setTimer(n); await new Promise((resolve) => setTimeout(resolve, 1000)); }
+      for (let n = timer; n > 0; n -= 1) {
+        setTimer(n);
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
       setTimer(0);
     }
     if (durationMode === "PHOTO") return takePhoto();
@@ -142,9 +144,10 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
     if (recording && seconds >= LIMITS[durationMode]) stopRecording();
   }, [recording, seconds, durationMode, stopRecording]);
 
-  useEffect(() => () => { if (recorderRef.current?.state !== "inactive") recorderRef.current?.stop(); }, []);
+  useEffect(() => () => {
+    if (recorderRef.current?.state !== "inactive") recorderRef.current?.stop();
+  }, []);
 
-  const limit = LIMITS[durationMode] || 15;
   return (
     <div className="h-screen bg-black text-white relative overflow-hidden flex flex-col">
       <video ref={videoRef} autoPlay muted playsInline className="absolute inset-0 w-full h-full object-cover" />
