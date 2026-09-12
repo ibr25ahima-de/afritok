@@ -43,7 +43,7 @@ export const helmetConfig = helmet({
       styleSrc: ["'self'", "'unsafe-inline'"],
       scriptSrc: ["'self'"],
       imgSrc: ["'self'", "data:", "https:"],
-      mediaSrc: ["'self'", "https:"],
+      mediaSrc: ["'self'", "https:", "blob:"],
       connectSrc: ["'self'", "https:"],
     },
   },
