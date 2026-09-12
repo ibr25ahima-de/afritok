@@ -13,6 +13,8 @@ interface CameraRecorderProps {
 
 const LIMITS: Record<string, number> = { "15 s": 15, "60 s": 60, "10 min": 600 };
 
+type AfriTokWindow = Window & { __afritokRecordedMime?: string };
+
 export const CameraRecorder: React.FC<CameraRecorderProps> = ({
   onVideoRecorded, onPhotoTaken, onClose, onOpenMusic, onPublish, selectedMusic,
 }) => {
@@ -81,9 +83,9 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       return;
     }
 
-    // Prefer formats that the browser can both encode and normally decode on Android.
-    // MP4 is used when the browser actually exposes MediaRecorder support for it;
-    // otherwise keep the WebM fallbacks.
+    // Select a format that the browser can encode. Keep the exact MIME value
+    // so the edit screen receives the real container/codec instead of a
+    // mismatched video/webm label.
     const mime = [
       "video/mp4",
       "video/webm;codecs=vp8,opus",
@@ -99,9 +101,14 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       recorder.ondataavailable = (event) => { if (event.data.size) chunksRef.current.push(event.data); };
       recorder.onerror = () => { setRecording(false); toast.error("L'enregistrement a échoué"); };
       recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || mime || "video/webm" });
+        const actualMime = recorder.mimeType || mime || "video/webm";
+        const blob = new Blob(chunksRef.current, { type: actualMime });
         const duration = Math.max(1, Math.round((performance.now() - startedAtRef.current) / 1000));
         if (blob.size < 1024) { toast.error("La vidéo enregistrée est vide"); return; }
+
+        if (typeof window !== "undefined") {
+          (window as AfriTokWindow).__afritokRecordedMime = actualMime;
+        }
         onVideoRecorded?.(blob, duration);
       };
       recorderRef.current = recorder;
