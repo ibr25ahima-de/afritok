@@ -275,7 +275,11 @@ export default function Upload() {
               return;
             }
             const recordedFile = new File([blob], "video.webm", { type: "video/webm" });
+            // Set the object URL before switching screens. This avoids the
+            // editor rendering once with a null/stale preview on mobile.
+            const recordedPreview = URL.createObjectURL(recordedFile);
             setFile(recordedFile);
+            setPreview(recordedPreview);
             setRecordedDuration(duration);
             setStep("edit");
           }}
@@ -328,10 +332,13 @@ export default function Upload() {
           ) : (
             <video 
               ref={videoRef}
+              key={preview}
               src={preview!} 
               autoPlay 
               loop 
               muted 
+              playsInline
+              onLoadedData={(event) => event.currentTarget.play().catch(() => {})}
               className="w-full h-full object-cover" 
               style={{ filter: editFilter?.cssFilter || 'none' }}
             />
