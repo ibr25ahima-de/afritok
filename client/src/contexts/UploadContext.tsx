@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 
 type UploadContextType = {
   file: File | null;
@@ -19,11 +19,13 @@ type UploadContextType = {
 
 const UploadContext = createContext<UploadContextType | undefined>(undefined);
 
+type AfriTokWindow = Window & { __afritokRecordedMime?: string };
+
 function normalizeRecordedFile(file: File | null): File | null {
   if (!file || !file.type.startsWith("video/")) return file;
   if (typeof window === "undefined") return file;
 
-  const recordedMime = (window as Window & { __afritokRecordedMime?: string }).__afritokRecordedMime;
+  const recordedMime = (window as AfriTokWindow).__afritokRecordedMime;
   if (!recordedMime || recordedMime === file.type) return file;
 
   const extension = recordedMime.startsWith("video/mp4") ? "mp4" : "webm";
@@ -47,6 +49,31 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
 
   const setPreview = useCallback((url: string | null) => {
     setPreviewState(url);
+  }, []);
+
+  // Upload.tsx creates the recorded preview URL immediately after calling
+  // setFile(), but currently labels that File as video/webm. If MediaRecorder
+  // produced another container (for example MP4), fix only that one recorded
+  // preview URL before it reaches the <video> element.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const urlApi = URL;
+    const originalCreateObjectURL = urlApi.createObjectURL.bind(urlApi);
+
+    urlApi.createObjectURL = (object: Blob | MediaSource) => {
+      const recordedMime = (window as AfriTokWindow).__afritokRecordedMime;
+      if (recordedMime && object instanceof Blob && object.type.startsWith("video/") && object.type !== recordedMime) {
+        const corrected = new Blob([object], { type: recordedMime });
+        (window as AfriTokWindow).__afritokRecordedMime = undefined;
+        return originalCreateObjectURL(corrected);
+      }
+      return originalCreateObjectURL(object);
+    };
+
+    return () => {
+      urlApi.createObjectURL = originalCreateObjectURL;
+    };
   }, []);
 
   return (
