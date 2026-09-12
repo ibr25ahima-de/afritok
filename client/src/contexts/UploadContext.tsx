@@ -19,61 +19,34 @@ type UploadContextType = {
 
 const UploadContext = createContext<UploadContextType | undefined>(undefined);
 
+function normalizeRecordedFile(file: File | null): File | null {
+  if (!file || !file.type.startsWith("video/")) return file;
+  if (typeof window === "undefined") return file;
+
+  const recordedMime = (window as Window & { __afritokRecordedMime?: string }).__afritokRecordedMime;
+  if (!recordedMime || recordedMime === file.type) return file;
+
+  const extension = recordedMime.startsWith("video/mp4") ? "mp4" : "webm";
+  return new File([file], `video.${extension}`, {
+    type: recordedMime,
+    lastModified: file.lastModified || Date.now(),
+  });
+}
+
 export function UploadProvider({ children }: { children: React.ReactNode }) {
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFileState] = useState<File | null>(null);
   const [preview, setPreviewState] = useState<string | null>(null);
   const [selectedMusic, setSelectedMusic] = useState<{
     url: string;
     name: string;
   } | null>(null);
 
-  // A recorded Blob is handed to the edit screen through a blob URL.
-  // Mobile browsers can render the new edit <video> a little later than the
-  // React state update. Keep retrying briefly so we reload the actual element
-  // after it exists, instead of relying on a single animation-frame timing.
+  const setFile = useCallback((nextFile: File | null) => {
+    setFileState(normalizeRecordedFile(nextFile));
+  }, []);
+
   const setPreview = useCallback((url: string | null) => {
     setPreviewState(url);
-    if (!url || typeof window === "undefined") return;
-
-    let attempts = 0;
-    let timer: number | undefined;
-
-    const reloadMatchingVideo = () => {
-      const videos = document.querySelectorAll<HTMLVideoElement>("video");
-      let found = false;
-
-      videos.forEach((video) => {
-        const source = video.getAttribute("src");
-        if (source !== url && video.currentSrc !== url) return;
-
-        found = true;
-        video.playsInline = true;
-        video.muted = true;
-        video.preload = "auto";
-
-        const startPlayback = () => {
-          if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-            void video.play().catch(() => {});
-          }
-        };
-
-        video.addEventListener("loadedmetadata", startPlayback, { once: true });
-        video.addEventListener("canplay", startPlayback, { once: true });
-        video.load();
-        startPlayback();
-      });
-
-      attempts += 1;
-      if (!found && attempts < 20) {
-        timer = window.setTimeout(reloadMatchingVideo, 100);
-      }
-    };
-
-    window.requestAnimationFrame(reloadMatchingVideo);
-
-    return () => {
-      if (timer !== undefined) window.clearTimeout(timer);
-    };
   }, []);
 
   return (
