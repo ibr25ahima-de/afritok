@@ -80,6 +80,7 @@ export default function Upload() {
   
   const [step, setStep] = useState<Step>("capture");
   const [recordedDuration, setRecordedDuration] = useState(0);
+  const [recordedPreviewUrl, setRecordedPreviewUrl] = useState<string | null>(null);
   const [showAudioSelector, setShowAudioSelector] = useState(false);
 
   // States pour l'étape edit
@@ -275,11 +276,9 @@ export default function Upload() {
               return;
             }
             const recordedFile = new File([blob], "video.webm", { type: "video/webm" });
-            // Set the object URL before switching screens. This avoids the
-            // editor rendering once with a null/stale preview on mobile.
             const recordedPreview = URL.createObjectURL(recordedFile);
             setFile(recordedFile);
-            setPreview(recordedPreview);
+            setRecordedPreviewUrl(recordedPreview);
             setRecordedDuration(duration);
             setStep("edit");
           }}
@@ -332,13 +331,26 @@ export default function Upload() {
           ) : (
             <video 
               ref={videoRef}
-              key={preview}
-              src={preview!} 
+              key={recordedPreviewUrl || preview}
+              src={recordedPreviewUrl || preview!} 
               autoPlay 
               loop 
               muted 
               playsInline
-              onLoadedData={(event) => event.currentTarget.play().catch(() => {})}
+              onLoadedMetadata={(event) => {
+                const video = event.currentTarget;
+                video.load();
+                video.play().catch(() => {});
+              }}
+              onError={(event) => {
+                console.error("[Upload] recorded preview failed", {
+                  error: event.currentTarget.error?.message,
+                  src: event.currentTarget.currentSrc,
+                  fileType: file?.type,
+                  fileSize: file?.size,
+                });
+                toast.error("Le téléphone ne peut pas lire cette vidéo enregistrée.");
+              }}
               className="w-full h-full object-cover" 
               style={{ filter: editFilter?.cssFilter || 'none' }}
             />
