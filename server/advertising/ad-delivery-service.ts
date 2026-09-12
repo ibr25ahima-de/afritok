@@ -11,13 +11,6 @@ import { and, eq, lte, gte } from "drizzle-orm";
  *
  * Sélectionne uniquement les campagnes publicitaires
  * actuellement autorisées à être diffusées.
- *
- * IMPORTANT :
- * - séparé du feed vidéo normal ;
- * - une campagne doit être active ;
- * - la période doit être valide ;
- * - le budget ne doit pas être épuisé ;
- * - tout ciblage défini doit être vérifiable avant diffusion.
  */
 
 export async function getNextAdvertisement(params?: {
@@ -28,11 +21,6 @@ export async function getNextAdvertisement(params?: {
 }) {
   const now = new Date().toISOString();
 
-  // Une diffusion personnalisée doit toujours avoir un utilisateur connecté.
-  if (!params?.userId) {
-    return null;
-  }
-
   const campaigns = await db
     .select()
     .from(advertisingCampaigns)
@@ -42,22 +30,21 @@ export async function getNextAdvertisement(params?: {
         lte(advertisingCampaigns.startDate, now),
         gte(advertisingCampaigns.endDate, now)
       )
-    )
-    .limit(50);
+    );
 
   if (campaigns.length === 0) {
     return null;
   }
 
   const eligibleCampaigns = campaigns.filter((campaign) => {
-    // Ne jamais diffuser une campagne dont le budget est épuisé.
     if (Number(campaign.spentAmount) >= Number(campaign.budget)) {
       return false;
     }
 
-    // Pays : si ciblé, le pays de l'utilisateur est obligatoire et doit correspondre.
+    // Une campagne sans ciblage reste diffusible à tous les utilisateurs,
+    // y compris un visiteur non connecté.
     if (campaign.targetCountry) {
-      if (!params.country) return false;
+      if (!params?.country) return false;
       if (
         campaign.targetCountry.trim().toLowerCase() !==
         params.country.trim().toLowerCase()
@@ -66,9 +53,8 @@ export async function getNextAdvertisement(params?: {
       }
     }
 
-    // Genre : même règle stricte que pour le pays.
     if (campaign.targetGender) {
-      if (!params.gender) return false;
+      if (!params?.gender) return false;
       if (
         campaign.targetGender.trim().toLowerCase() !==
         params.gender.trim().toLowerCase()
@@ -77,15 +63,13 @@ export async function getNextAdvertisement(params?: {
       }
     }
 
-    // Âge minimum : impossible de vérifier le ciblage sans âge.
     if (campaign.targetAgeMin !== null && campaign.targetAgeMin !== undefined) {
-      if (params.age === undefined) return false;
+      if (params?.age === undefined) return false;
       if (params.age < campaign.targetAgeMin) return false;
     }
 
-    // Âge maximum : impossible de vérifier le ciblage sans âge.
     if (campaign.targetAgeMax !== null && campaign.targetAgeMax !== undefined) {
-      if (params.age === undefined) return false;
+      if (params?.age === undefined) return false;
       if (params.age > campaign.targetAgeMax) return false;
     }
 
@@ -96,12 +80,7 @@ export async function getNextAdvertisement(params?: {
     return null;
   }
 
-  /**
-   * Distribution simple et équilibrée :
-   * priorité aux campagnes ayant le moins d'impressions.
-   */
   eligibleCampaigns.sort((a, b) => a.impressions - b.impressions);
-
   const campaign = eligibleCampaigns[0];
 
   return {
@@ -117,12 +96,6 @@ export async function getNextAdvertisement(params?: {
     campaignId: campaign.id,
   };
 }
-
-/**
- * =========================================================
- * 📊 INFORMATIONS DE DIFFUSION
- * =========================================================
- */
 
 export async function getAdvertisingCampaign(campaignId: number) {
   const result = await db
