@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { ExternalLink, Megaphone, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 
 /** Global sponsored ad slot. Premium users with an active subscription do not receive this global ad. */
 export default function GlobalAdSlot() {
   const [closed, setClosed] = useState(false);
-  const impressionSent = useRef(false);
+  const impressionCampaignId = useRef<number | null>(null);
+  const { isAuthenticated } = useAuth();
   const { data: premium } = trpc.subscription.status.useQuery(undefined, { staleTime: 60_000, refetchOnWindowFocus: false });
   const { data: ad } = trpc.advertising.getNextAdvertisement.useQuery({}, {
-    staleTime: 30_000,
+    staleTime: 0,
+    refetchInterval: 30_000,
     refetchOnWindowFocus: false,
     enabled: premium?.isPremium !== true,
   });
@@ -16,15 +19,17 @@ export default function GlobalAdSlot() {
   const recordClick = trpc.advertising.recordClick.useMutation();
 
   useEffect(() => {
-    if (!ad || closed || impressionSent.current) return;
-    impressionSent.current = true;
+    if (!ad || closed || !isAuthenticated || impressionCampaignId.current === ad.campaignId) return;
+    impressionCampaignId.current = ad.campaignId;
     recordImpression.mutate({ campaignId: ad.campaignId });
-  }, [ad, closed, recordImpression]);
+  }, [ad, closed, isAuthenticated, recordImpression]);
 
   if (premium?.isPremium === true || !ad || closed) return null;
 
   const handleClick = () => {
-    recordClick.mutate({ campaignId: ad.campaignId });
+    if (isAuthenticated) {
+      recordClick.mutate({ campaignId: ad.campaignId });
+    }
     if (ad.destinationUrl) window.open(ad.destinationUrl, "_blank", "noopener,noreferrer");
   };
 
