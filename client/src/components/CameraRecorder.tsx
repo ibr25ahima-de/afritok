@@ -1,133 +1,142 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { X, Music, RefreshCw, Zap, ZapOff, Timer, Gauge, Layout, Palette } from 'lucide-react';
-import { toast } from 'sonner';
-import { AudioPlayer } from '@/services/audioService';
-import { EffectsPanel } from './EffectsPanel';
-import type { AREffect } from '@/features/ar/ARRegistry';
-import { AR_EFFECTS } from '@/features/ar/ARRegistry';
-import { AREngineMobile as AREngine } from './AREngineMobile';
-import { renderEffectPreviews, type EffectPreviewFrame } from '@/features/ar/preview/EffectPreviewRenderer';
-import { LiveEntryButton } from '@/features/live/LiveEntryButton';
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Music, RefreshCw, Timer, X } from "lucide-react";
+import { toast } from "sonner";
 
-interface CameraRecorderProps { onVideoRecorded?: (blob: Blob, duration: number) => void; onPhotoTaken?: (blob: Blob) => void; onClose?: () => void; onOpenMusic?: () => void; onOpenEffects?: () => void; onPublish?: () => void; selectedMusic?: { name: string; url: string } | null; }
-const SPEED_OPTIONS=['0.5x','1x','1.5x','2x'];
-type ARStatus='loading'|'ready'|'face'|'no-face'|'error';
+interface CameraRecorderProps {
+  onVideoRecorded?: (blob: Blob, duration: number) => void;
+  onPhotoTaken?: (blob: Blob) => void;
+  onClose?: () => void;
+  onOpenMusic?: () => void;
+  onPublish?: () => void;
+  selectedMusic?: { name: string; url: string } | null;
+}
 
-export const CameraRecorder:React.FC<CameraRecorderProps>=({onVideoRecorded,onPhotoTaken,onClose,onOpenMusic,onPublish,selectedMusic})=>{
- const videoRef=useRef<HTMLVideoElement>(null);
- const processedCanvasRef=useRef<HTMLCanvasElement|null>(null);
- const mediaRecorderRef=useRef<MediaRecorder|null>(null);
- const recordingCanvasStreamRef=useRef<MediaStream|null>(null);
- const streamRef=useRef<MediaStream|null>(null);
- const musicPlayerRef=useRef<AudioPlayer|null>(null);
- const audioContextRef=useRef<AudioContext|null>(null);
- const musicElementRef=useRef<HTMLAudioElement|null>(null);
- const recordingStartedAtRef=useRef(0);
- const latestFrameRef=useRef<EffectPreviewFrame|null>(null);
- const [isRecording,setIsRecording]=useState(false),[facingMode,setFacingMode]=useState<"user"|"environment">("user"),[selectedDuration,setSelectedDuration]=useState('15 s'),[recordingTime,setRecordingTime]=useState(0),[flashEnabled,setFlashEnabled]=useState(false),[activeSpeed,setActiveSpeed]=useState('1x'),[timerValue,setTimerValue]=useState(0),[timerCountdown,setTimerCountdown]=useState(0),[isTimerActive,setIsTimerActive]=useState(false),[activeAREffect,setActiveAREffect]=useState<AREffect|null>(null),[showAREffectsPanel,setShowAREffectsPanel]=useState(true),[arStatus,setArStatus]=useState<ARStatus>('loading');
- const [previewImages,setPreviewImages]=useState<Record<string,string>>({});
- const [previewsLoading,setPreviewsLoading]=useState(false);
- const toggleFlash=async()=>{const n=!flashEnabled;setFlashEnabled(n);const t=streamRef.current?.getVideoTracks()[0];if(!t)return;const c=t.getCapabilities() as any;if(c.torch)try{await t.applyConstraints({advanced:[{torch:n}]} as any)}catch(e){console.error(e)}else toast.info("Le flash n'est pas supporté sur cet appareil")};
- const handleAREffectSelect=(e:AREffect|null)=>{setActiveAREffect(e);setShowAREffectsPanel(true);if(e)toast.info(`Effet AR "${e.name}" sélectionné — détection du visage en cours`) };
- const handleARStatus=useCallback((status:ARStatus,error?:unknown)=>{setArStatus(status);if(status==='error')toast.error("Les effets AR ne peuvent pas démarrer sur cet appareil");if(error)console.error('[CameraRecorder] AR status',status,error)},[]);
- const handleTrackingFrame=useCallback((frame:EffectPreviewFrame)=>{latestFrameRef.current=frame},[]);
- const startTimer=useCallback((d:number):Promise<void>=>new Promise(r=>{setIsTimerActive(true);setTimerCountdown(d);let n=d;const i=setInterval(()=>{n--;setTimerCountdown(n);if(n<=0){clearInterval(i);setIsTimerActive(false);r()}},1000)}),[]);
- useEffect(()=>{if(!selectedMusic){musicPlayerRef.current?.stop();return}musicPlayerRef.current=new AudioPlayer(selectedMusic.url);return()=>musicPlayerRef.current?.stop()},[selectedMusic]);
- useEffect(()=>{
-   if(!showAREffectsPanel) return;
-   let cancelled=false; let attempts=0; let timer=0;
-   setPreviewsLoading(true);
-   const generate=()=>{
-     const frame=latestFrameRef.current;
-     if(!frame && attempts<20){attempts+=1;timer=window.setTimeout(generate,100);return;}
-     if(!frame || cancelled){setPreviewsLoading(false);return;}
-     const previews=renderEffectPreviews({ ...frame, width: 144, height: 256 }, AR_EFFECTS);
-     if(!cancelled){setPreviewImages(previews);setPreviewsLoading(false);}
-   };
-   generate();
-   return()=>{cancelled=true;window.clearTimeout(timer);setPreviewsLoading(false)};
- },[showAREffectsPanel]);
- const startCamera=useCallback(async()=>{try{latestFrameRef.current=null;setPreviewImages({});streamRef.current?.getTracks().forEach(t=>t.stop());const s=await navigator.mediaDevices.getUserMedia({video:{facingMode,width:{ideal:1280},height:{ideal:720}},audio:true});streamRef.current=s;if(videoRef.current){videoRef.current.srcObject=s;await videoRef.current.play().catch(()=>{})}}catch{toast.error('Erreur caméra') }},[facingMode]);
- useEffect(()=>{startCamera();return()=>streamRef.current?.getTracks().forEach(t=>t.stop())},[startCamera]);
- const takeProcessedPhoto=useCallback(()=>{const source=processedCanvasRef.current;if(!source||source.width<2||source.height<2){toast.error("La caméra n'est pas encore prête");return}source.toBlob(blob=>{if(blob)onPhotoTaken?.(blob)},'image/jpeg',.95)},[onPhotoTaken]);
- const stopRecording=useCallback(()=>{const recorder=mediaRecorderRef.current;if(!recorder||recorder.state==='inactive')return;try{recorder.requestData()}catch{}recorder.stop();setIsRecording(false)},[]);
- const handleCapture=async()=>{
-   if(timerValue>0&&!isRecording)await startTimer(timerValue);
-   if(selectedDuration==='PHOTO'){takeProcessedPhoto();return}
-   if(isRecording){stopRecording();return}
-   const sourceStream=streamRef.current;
-   const videoElement=videoRef.current;
-   if(!sourceStream||!videoElement){toast.error("Caméra indisponible");return}
-   if(videoElement.readyState<HTMLMediaElement.HAVE_CURRENT_DATA||!videoElement.videoWidth||!videoElement.videoHeight){toast.error("La caméra n'est pas encore prête");return}
-   const videoTracks=sourceStream.getVideoTracks();
-   if(!videoTracks.length){toast.error("Flux vidéo indisponible");return}
+const LIMITS: Record<string, number> = { "15 s": 15, "60 s": 60, "10 min": 600 };
 
-   let recordStream=sourceStream;
-   let musicElement:HTMLAudioElement|null=null;
-   if(selectedMusic){
-     try{
-       const ac=new AudioContext();
-       audioContextRef.current=ac;
-       const destination=ac.createMediaStreamDestination();
-       const micSource=ac.createMediaStreamSource(sourceStream);
-       micSource.connect(destination);
-       musicElement=new Audio(selectedMusic.url);
-       musicElement.crossOrigin='anonymous';
-       musicElementRef.current=musicElement;
-       const musicSource=ac.createMediaElementSource(musicElement);
-       musicSource.connect(destination);
-       musicSource.connect(ac.destination);
-       recordStream=new MediaStream([...videoTracks,...destination.stream.getAudioTracks()]);
-       await ac.resume();
-       musicElement.currentTime=0;
-       musicElement.playbackRate=parseFloat(activeSpeed.replace('x',''));
-       await musicElement.play().catch(()=>{});
-     }catch(error){
-       console.error('[CameraRecorder] music mix',error);
-       audioContextRef.current?.close();
-       audioContextRef.current=null;
-       musicElementRef.current=null;
-       musicElement=null;
-       recordStream=sourceStream;
-     }
-   }
+export const CameraRecorder: React.FC<CameraRecorderProps> = ({
+  onVideoRecorded, onPhotoTaken, onClose, onOpenMusic, onPublish, selectedMusic,
+}) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const startedAtRef = useRef(0);
+  const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
+  const [durationMode, setDurationMode] = useState("15 s");
+  const [recording, setRecording] = useState(false);
+  const [seconds, setSeconds] = useState(0);
+  const [timer, setTimer] = useState(0);
 
-   const chunks:Blob[]=[];
-   const mimeCandidates=['video/webm;codecs=vp8,opus','video/webm;codecs=vp8','video/webm'];
-   const mimeType=mimeCandidates.find(type=>MediaRecorder.isTypeSupported(type));
-   let mr:MediaRecorder;
-   try{mr=mimeType?new MediaRecorder(recordStream,{mimeType}):new MediaRecorder(recordStream)}catch(error){console.error('[CameraRecorder] MediaRecorder',error);toast.error("Cet appareil ne peut pas enregistrer cette vidéo");audioContextRef.current?.close();return}
-   mr.ondataavailable=e=>{if(e.data.size>0)chunks.push(e.data)};
-   mr.onstop=()=>{
-     musicElementRef.current?.pause();
-     audioContextRef.current?.close();
-     audioContextRef.current=null;
-     musicElementRef.current=null;
-     const blob=new Blob(chunks,{type:mr.mimeType||mimeType||'video/webm'});
-     if(blob.size<1024){toast.error("La vidéo enregistrée est vide. Réessaie.");return}
-     const duration=Math.max(0,Math.round((performance.now()-recordingStartedAtRef.current)/1000));
-     onVideoRecorded?.(blob,duration);
-   };
-   mr.onerror=()=>{toast.error("Impossible d'enregistrer la vidéo");setIsRecording(false);};
-   mediaRecorderRef.current=mr;
-   recordingStartedAtRef.current=performance.now();
-   mr.start(1000);
-   if(videoElement)videoElement.playbackRate=parseFloat(activeSpeed.replace('x',''));
-   setIsRecording(true);setRecordingTime(0);
- };
- useEffect(()=>{let i:NodeJS.Timeout;if(isRecording)i=setInterval(()=>setRecordingTime(p=>p+1),1000);return()=>clearInterval(i)},[isRecording]);
- useEffect(()=>{if(!isRecording)return;const m=selectedDuration==='10 min'?600:selectedDuration==='60 s'?60:15;if(recordingTime>=m)stopRecording()},[recordingTime,isRecording,selectedDuration,stopRecording]);
- useEffect(()=>()=>{mediaRecorderRef.current?.stop();streamRef.current?.getTracks().forEach(t=>t.stop());audioContextRef.current?.close()},[]);
- const arLabel=arStatus==='face'?'Visage détecté • AR actif':arStatus==='ready'?'AR prêt • regardez la caméra':arStatus==='no-face'?'Visage non détecté':arStatus==='error'?'AR indisponible':'Chargement des effets…';
- return <div className="h-screen bg-black text-white relative overflow-hidden flex flex-col">
-   <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 z-10 w-full h-full object-cover opacity-100"/>
-   <AREngine videoRef={videoRef} activeEffect={activeAREffect} isRecording={isRecording} canvasRef={processedCanvasRef} onStatusChange={handleARStatus} onTrackingFrame={handleTrackingFrame}/>
-   <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur text-[11px] font-semibold whitespace-nowrap">{activeAREffect?`${activeAREffect.name} • ${arLabel}`:arLabel}</div>
-   {isRecording&&<div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-1"><div className="rounded-full bg-black/75 px-4 py-1.5 text-sm font-bold tabular-nums shadow-lg"><span className="text-red-400">●</span> {String(Math.floor(recordingTime/60)).padStart(2,'0')}:{String(recordingTime%60).padStart(2,'0')} <span className="text-white/60">/ {selectedDuration==='10 min'?'10:00':selectedDuration==='60 s'?'01:00':'00:15'}</span></div><div className="h-1 w-32 overflow-hidden rounded-full bg-white/30"><div className="h-full bg-red-500 transition-[width]" style={{width:`${Math.min(100,(recordingTime/(selectedDuration==='10 min'?600:selectedDuration==='60 s'?60:15))*100)}%`}}/></div></div>}
-   {isTimerActive&&<div className="absolute inset-0 flex items-center justify-center z-40 bg-black/40"><div className="text-8xl font-bold">{timerCountdown}</div></div>}
-   <div className={`absolute left-0 right-0 z-20 ${showAREffectsPanel?'bottom-[280px]':'bottom-[60px]'}`}><div className="flex justify-start gap-3 overflow-x-auto px-6 pb-2 snap-x snap-mandatory scrollbar-hide" role="tablist" aria-label="Choisir le type et la durée" style={{scrollbarWidth:'none'}}>{['PHOTO','15 s','60 s','10 min'].map(d=><button key={d} role="tab" aria-selected={selectedDuration===d} onClick={()=>setSelectedDuration(d)} className={`shrink-0 min-w-[88px] snap-center rounded-full border px-4 py-2 text-sm font-semibold transition-colors ${selectedDuration===d?'border-yellow-400 bg-yellow-400 text-black':'border-white/40 bg-black/50 text-white'}`}>{d==='PHOTO'?'Photo':`Vidéo ${d}`}</button>)}</div><div className="flex justify-center mt-3"><div className="w-20 h-20 rounded-full border-[5px] border-white p-1.5"><button onClick={handleCapture} className="w-full h-full bg-red-500 rounded-full"/></div></div></div>
-   {showAREffectsPanel&&<div className="absolute bottom-[50px] left-0 right-0 z-40"><EffectsPanel selectedEffect={activeAREffect} onSelectEffect={handleAREffectSelect} previewImages={previewImages} previewsLoading={previewsLoading}/></div>}
-   <div className="absolute bottom-0 left-0 right-0 z-30 bg-black flex items-center px-4 h-[50px]"><div className="w-9 h-9 rounded-lg bg-gradient-to-br from-yellow-500 via-red-500 to-purple-600"/><button onClick={()=>setShowAREffectsPanel(v=>!v)} className="flex-1 mx-4 py-2.5 rounded-full font-bold"><Palette size={16}/>Effets</button><div className="flex gap-3"><LiveEntryButton className="px-3 py-2 text-sm"/><button onClick={()=>onPublish?.()}>PUBLIER</button><button onClick={()=>onOpenMusic?.()}>CRÉER</button></div></div>
- </div>;
+  const startCamera = useCallback(async () => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: true,
+      });
+      streamRef.current = stream;
+      const video = videoRef.current;
+      if (video) {
+        video.srcObject = stream;
+        video.muted = true;
+        video.playsInline = true;
+        await video.play();
+      }
+    } catch (error) {
+      console.error("[CameraRecorder:minimal] camera", error);
+      toast.error("Impossible d'ouvrir la caméra");
+    }
+  }, [facingMode]);
+
+  useEffect(() => {
+    void startCamera();
+    return () => streamRef.current?.getTracks().forEach((track) => track.stop());
+  }, [startCamera]);
+
+  const takePhoto = () => {
+    const video = videoRef.current;
+    if (!video?.videoWidth || !video.videoHeight) {
+      toast.error("La caméra n'est pas encore prête");
+      return;
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob((blob) => { if (blob) onPhotoTaken?.(blob); }, "image/jpeg", 0.95);
+  };
+
+  const stopRecording = useCallback(() => {
+    const recorder = recorderRef.current;
+    if (!recorder || recorder.state === "inactive") return;
+    try { recorder.requestData(); } catch { /* browser may not support it */ }
+    recorder.stop();
+    setRecording(false);
+  }, []);
+
+  const startRecording = async () => {
+    const stream = streamRef.current;
+    if (!stream || stream.getVideoTracks().every((track) => track.readyState !== "live")) {
+      toast.error("La caméra n'est pas disponible");
+      return;
+    }
+    const mime = ["video/webm;codecs=vp8,opus", "video/webm;codecs=vp8", "video/webm"].find((type) => MediaRecorder.isTypeSupported(type));
+    try {
+      const recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      chunksRef.current = [];
+      recorder.ondataavailable = (event) => { if (event.data.size) chunksRef.current.push(event.data); };
+      recorder.onerror = () => { setRecording(false); toast.error("L'enregistrement a échoué"); };
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || mime || "video/webm" });
+        const duration = Math.max(1, Math.round((performance.now() - startedAtRef.current) / 1000));
+        if (blob.size < 1024) { toast.error("La vidéo enregistrée est vide"); return; }
+        onVideoRecorded?.(blob, duration);
+      };
+      recorderRef.current = recorder;
+      startedAtRef.current = performance.now();
+      recorder.start(1000);
+      setSeconds(0);
+      setRecording(true);
+    } catch (error) {
+      console.error("[CameraRecorder:minimal] recorder", error);
+      toast.error("Ce téléphone ne peut pas enregistrer cette vidéo");
+    }
+  };
+
+  const capture = async () => {
+    if (timer > 0 && !recording) {
+      for (let n = timer; n > 0; n -= 1) { setTimer(n); await new Promise((resolve) => setTimeout(resolve, 1000)); }
+      setTimer(0);
+    }
+    if (durationMode === "PHOTO") return takePhoto();
+    if (recording) return stopRecording();
+    return startRecording();
+  };
+
+  useEffect(() => {
+    if (!recording) return;
+    const interval = window.setInterval(() => setSeconds((value) => value + 1), 1000);
+    return () => window.clearInterval(interval);
+  }, [recording]);
+
+  useEffect(() => {
+    if (recording && seconds >= LIMITS[durationMode]) stopRecording();
+  }, [recording, seconds, durationMode, stopRecording]);
+
+  useEffect(() => () => { if (recorderRef.current?.state !== "inactive") recorderRef.current?.stop(); }, []);
+
+  const limit = LIMITS[durationMode] || 15;
+  return (
+    <div className="h-screen bg-black text-white relative overflow-hidden flex flex-col">
+      <video ref={videoRef} autoPlay muted playsInline className="absolute inset-0 w-full h-full object-cover" />
+      {timer > 0 && <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/40 text-8xl font-bold">{timer}</div>}
+      {recording && <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 rounded-full bg-black/75 px-4 py-1.5 font-bold tabular-nums"><span className="text-red-400">●</span> {String(Math.floor(seconds / 60)).padStart(2, "0")}:{String(seconds % 60).padStart(2, "0")} <span className="text-white/60">/ {durationMode === "10 min" ? "10:00" : durationMode === "60 s" ? "01:00" : "00:15"}</span></div>}
+      <div className="relative z-20 flex justify-between p-4"><button onClick={onClose} aria-label="Fermer"><X size={28} /></button><button onClick={onOpenMusic} className="rounded-full bg-black/50 px-4 py-2 text-xs"><Music size={15} className="inline mr-2" />{selectedMusic?.name || "Ajouter un son"}</button><button onClick={() => setFacingMode((value) => value === "user" ? "environment" : "user")} aria-label="Retourner"><RefreshCw size={24} /></button></div>
+      <div className="relative z-20 mt-auto bg-gradient-to-t from-black/90 to-transparent p-5 pb-8">
+        <div className="flex justify-center gap-5 mb-5">{["PHOTO", "15 s", "60 s", "10 min"].map((mode) => <button key={mode} onClick={() => !recording && setDurationMode(mode)} className={`rounded-full px-4 py-2 text-sm font-bold ${durationMode === mode ? "bg-yellow-400 text-black" : "bg-black/50"}`}>{mode === "PHOTO" ? "Photo" : `Vidéo ${mode}`}</button>)}</div>
+        <div className="flex items-center justify-center gap-8"><button onClick={onOpenMusic} className="text-xs">Audio</button><button onClick={capture} aria-label={recording ? "Arrêter" : "Enregistrer"} className={`h-20 w-20 rounded-full border-4 border-white p-2 ${recording ? "bg-red-500" : "bg-red-500"}`}><span className={recording ? "block h-7 w-7 mx-auto rounded-md bg-white" : "block h-full w-full rounded-full bg-red-500"} /></button><button onClick={onPublish} className="text-xs">Publier</button></div>
+      </div>
+    </div>
+  );
 };
 export default CameraRecorder;
