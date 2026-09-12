@@ -27,12 +27,73 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
   const [seconds, setSeconds] = useState(0);
   const [timer, setTimer] = useState(0);
 
+  const diagnoseRecordedBlob = useCallback((blob: Blob, actualMime: string) => {
+    const url = URL.createObjectURL(blob);
+    const probe = document.createElement("video");
+    probe.preload = "metadata";
+    probe.muted = true;
+    probe.playsInline = true;
+
+    const canPlay = probe.canPlayType(actualMime) || "";
+    const timeout = window.setTimeout(() => {
+      console.error("[CameraRecorder] DIAGNOSTIC timeout", {
+        mime: actualMime,
+        size: blob.size,
+        canPlay,
+      });
+      toast.error(
+        `DIAGNOSTIC vidéo: aucune réponse du lecteur. MIME=${actualMime} | taille=${blob.size} octets | canPlay=${canPlay || "non"}`,
+        { duration: 12000 }
+      );
+      URL.revokeObjectURL(url);
+    }, 8000);
+
+    probe.onloadedmetadata = () => {
+      window.clearTimeout(timeout);
+      console.info("[CameraRecorder] DIAGNOSTIC OK", {
+        mime: actualMime,
+        size: blob.size,
+        canPlay,
+        duration: probe.duration,
+        width: probe.videoWidth,
+        height: probe.videoHeight,
+      });
+      toast.success(
+        `DIAGNOSTIC OK: vidéo lisible (${probe.videoWidth}x${probe.videoHeight}, ${Math.round(probe.duration * 10) / 10}s) | MIME=${actualMime} | ${blob.size} octets`,
+        { duration: 9000 }
+      );
+      URL.revokeObjectURL(url);
+    };
+
+    probe.onerror = () => {
+      window.clearTimeout(timeout);
+      const mediaError = probe.error;
+      const code = mediaError?.code ?? 0;
+      const message = mediaError?.message || "aucun détail fourni par le lecteur";
+      console.error("[CameraRecorder] DIAGNOSTIC PLAYBACK ERROR", {
+        code,
+        message,
+        mime: actualMime,
+        size: blob.size,
+        canPlay,
+        duration: probe.duration,
+        width: probe.videoWidth,
+        height: probe.videoHeight,
+      });
+      toast.error(
+        `ERREUR RÉELLE VIDÉO: code=${code} | ${message} | MIME=${actualMime} | taille=${blob.size} | canPlay=${canPlay || "non"}`,
+        { duration: 15000 }
+      );
+      URL.revokeObjectURL(url);
+    };
+
+    probe.src = url;
+  }, []);
+
   const startCamera = useCallback(async () => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        // The edit screen must be able to decode the recorded file immediately.
-        // Keep the recording video-only here; music is handled separately by the editor.
         video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false,
       });
@@ -82,8 +143,6 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       return;
     }
 
-    // VP8/WebM video-only is intentionally used for the in-app preview. It avoids
-    // an audio codec/container mismatch on mobile WebViews after recording stops.
     const mime = [
       "video/webm;codecs=vp8",
       "video/webm",
@@ -93,31 +152,59 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       const recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
       chunksRef.current = [];
       recorder.ondataavailable = (event) => {
+        console.info("[CameraRecorder] dataavailable", {
+          size: event.data.size,
+          type: event.data.type,
+          chunkCount: chunksRef.current.length + 1,
+        });
         if (event.data.size) chunksRef.current.push(event.data);
       };
       recorder.onerror = (event) => {
-        console.error("[CameraRecorder] recorder error", event);
+        const error = (event as Event & { error?: DOMException }).error;
+        console.error("[CameraRecorder] recorder error", {
+          name: error?.name,
+          message: error?.message,
+          mime: recorder.mimeType || mime,
+          state: recorder.state,
+          chunks: chunksRef.current.length,
+        });
         setRecording(false);
-        toast.error("L'enregistrement a échoué");
+        toast.error(
+          `ERREUR ENREGISTREMENT: ${error?.name || "inconnue"} | ${error?.message || "aucun détail"} | chunks=${chunksRef.current.length}`,
+          { duration: 15000 }
+        );
       };
+      recorderRef.current = recorder;
+      startedAtRef.current = performance.now();
       recorder.onstop = () => {
         const actualMime = recorder.mimeType || mime || "video/webm";
         const blob = new Blob(chunksRef.current, { type: actualMime });
         const duration = Math.max(1, Math.round((performance.now() - startedAtRef.current) / 1000));
+        console.info("[CameraRecorder] FINAL RECORDED BLOB", {
+          mime: actualMime,
+          size: blob.size,
+          duration,
+          chunks: chunksRef.current.length,
+          trackStates: stream.getTracks().map((track) => ({ kind: track.kind, state: track.readyState })),
+          videoSettings: stream.getVideoTracks()[0]?.getSettings(),
+        });
         if (blob.size < 1024) {
-          toast.error("La vidéo enregistrée est vide");
+          toast.error("ERREUR ENREGISTREMENT: le Blob final est vide");
           return;
         }
+
+        // Teste le Blob final lui-même avant de passer au montage.
+        // Si ce test échoue, le problème vient de l'enregistrement/codec et non du montage.
+        diagnoseRecordedBlob(blob, actualMime);
         onVideoRecorded?.(blob, duration);
       };
-      recorderRef.current = recorder;
-      startedAtRef.current = performance.now();
       recorder.start(1000);
       setSeconds(0);
       setRecording(true);
     } catch (error) {
       console.error("[CameraRecorder] recorder", error);
-      toast.error("Ce téléphone ne peut pas enregistrer cette vidéo");
+      const err = error instanceof DOMException ? `${error.name}: ${error.message}` : String(error);
+      toast.error(`ERREUR CRÉATION ENREGISTREUR: ${err}`, { duration: 15000 });
     }
   };
 
