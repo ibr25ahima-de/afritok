@@ -80,7 +80,19 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       toast.error("La caméra n'est pas disponible");
       return;
     }
-    const mime = ["video/webm;codecs=vp8,opus", "video/webm;codecs=vp8", "video/webm"].find((type) => MediaRecorder.isTypeSupported(type));
+
+    // Prefer formats that the browser can both encode and normally decode on Android.
+    // MP4 is used when the browser actually exposes MediaRecorder support for it;
+    // otherwise keep the WebM fallbacks.
+    const mime = [
+      "video/mp4",
+      "video/webm;codecs=vp8,opus",
+      "video/webm;codecs=vp8",
+      "video/webm;codecs=vp9,opus",
+      "video/webm;codecs=vp9",
+      "video/webm",
+    ].find((type) => MediaRecorder.isTypeSupported(type));
+
     try {
       const recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
       chunksRef.current = [];
