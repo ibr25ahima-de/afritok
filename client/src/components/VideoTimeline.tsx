@@ -111,7 +111,7 @@ export function VideoTimeline({ src, currentTime, duration, trimStart, trimEnd, 
   };
 
   const handleTrackTap = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if ((event.target as HTMLElement).closest("button")) return;
+    if (dragging || (event.target as HTMLElement).closest("button")) return;
     const value = clamp(positionFromPointer(event.clientX), safeStart, safeEnd);
     const now = Date.now();
     const previous = lastTapRef.current;
