@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { db } from "./db";
 import { videos, users, likes, favorites, comments } from "../drizzle/schema";
 import { eq, sql, inArray, and } from "drizzle-orm";
-import { getUserLike, getUserFavorite, getVideoComments, getVideoById, likeVideo, unlikeVideo, favoriteVideo, unfavoriteVideo, addComment, deleteComment, shareVideo, isFollowing } from "./db";
+import { getUserLike, getUserFavorite, getVideoComments, getVideoById, likeVideo, unlikeVideo, favoriteVideo, unfavoriteVideo, addComment, deleteComment, shareVideo, isFollowing, canViewVideo } from "./db";
 import { recordLikeEarning, recordCommentEarning, recordShareEarning } from "./micro-earnings";
 
 const positiveId = z.number().int().positive();
@@ -15,6 +15,7 @@ export const likeRouter = router({
     const user = ctx.user;
     const video = await getVideoById(input.videoId);
     if (!video) throw new TRPCError({ code: "NOT_FOUND" });
+    if (!(await canViewVideo(input.videoId, user.id, user.role === "admin"))) throw new TRPCError({ code: "FORBIDDEN", message: "Vous ne pouvez pas interagir avec cette vidéo." });
     const existing = await getUserLike(user.id, input.videoId);
     if (existing) {
       await unlikeVideo(user.id, input.videoId);
@@ -39,9 +40,10 @@ export const likeRouter = router({
 });
 
 export const commentRouter = router({
-  getByVideo: publicProcedure.input(videoIdInput).query(async ({ input }) => {
+  getByVideo: publicProcedure.input(videoIdInput).query(async ({ input, ctx }) => {
     const video = await getVideoById(input.videoId);
     if (!video) throw new TRPCError({ code: "NOT_FOUND" });
+    if (!(await canViewVideo(input.videoId, ctx.user?.id ?? null))) return [];
     const [owner] = await db.select({ allowComments: users.allowComments }).from(users).where(eq(users.id, video.userId)).limit(1);
     if (!owner || !owner.allowComments) return [];
     return getVideoComments(input.videoId);
@@ -50,6 +52,7 @@ export const commentRouter = router({
     const user = ctx.user;
     const video = await getVideoById(input.videoId);
     if (!video) throw new TRPCError({ code: "NOT_FOUND" });
+    if (!(await canViewVideo(input.videoId, user.id, user.role === "admin"))) throw new TRPCError({ code: "FORBIDDEN", message: "Vous ne pouvez pas commenter cette vidéo." });
     const [owner] = await db.select({ allowComments: users.allowComments }).from(users).where(eq(users.id, video.userId)).limit(1);
     if (!owner) throw new TRPCError({ code: "NOT_FOUND", message: "Propriétaire du contenu introuvable." });
     if (!owner.allowComments) throw new TRPCError({ code: "FORBIDDEN", message: "Cette personne a désactivé les commentaires." });
@@ -75,6 +78,7 @@ export const favoriteRouter = router({
   toggle: protectedProcedure.input(videoIdInput).mutation(async ({ ctx, input }) => {
     const video = await getVideoById(input.videoId);
     if (!video) throw new TRPCError({ code: "NOT_FOUND" });
+    if (!(await canViewVideo(input.videoId, ctx.user.id, ctx.user.role === "admin"))) throw new TRPCError({ code: "FORBIDDEN", message: "Vous ne pouvez pas interagir avec cette vidéo." });
     const existing = await getUserFavorite(ctx.user.id, input.videoId);
     if (existing) {
       await unfavoriteVideo(ctx.user.id, input.videoId);
@@ -94,6 +98,7 @@ export const shareRouter = router({
   create: protectedProcedure.input(z.object({ videoId: positiveId, platform: z.string().trim().min(1).max(50) })).mutation(async ({ ctx, input }) => {
     const video = await getVideoById(input.videoId);
     if (!video) throw new TRPCError({ code: "NOT_FOUND" });
+    if (!(await canViewVideo(input.videoId, ctx.user.id, ctx.user.role === "admin"))) throw new TRPCError({ code: "FORBIDDEN", message: "Vous ne pouvez pas partager cette vidéo." });
     await shareVideo(ctx.user.id, input.videoId, input.platform);
     await db.update(videos).set({ shares: sql`COALESCE(${videos.shares}, 0) + 1` }).where(eq(videos.id, input.videoId));
     return { success: true, shares: (video.shares || 0) + 1, earning: await recordShareEarning(ctx.user.id, input.videoId) };
