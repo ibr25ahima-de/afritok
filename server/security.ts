@@ -54,13 +54,46 @@ export const helmetConfig = helmet({
   },
 });
 
+/**
+ * Returns the explicitly configured origins plus the public Render URL when
+ * available. Render's RENDER_EXTERNAL_URL is the canonical URL of this service,
+ * so same-origin requests from the deployed Afritok app are not rejected by
+ * the CSRF/CORS protection when FRONTEND_URL/APP_URL has not been configured.
+ */
+function configuredAllowedOrigins(): string[] {
+  return [
+    process.env.ALLOWED_ORIGINS,
+    process.env.FRONTEND_URL,
+    process.env.APP_URL,
+    process.env.RENDER_EXTERNAL_URL,
+  ]
+    .filter(Boolean)
+    .flatMap(value => (value as string).split(","))
+    .map(value => value.trim().replace(/\/$/, ""))
+    .filter(Boolean);
+}
+
+function isSameOriginRequest(req: Request, requestOrigin: string): boolean {
+  const host = req.get("host")?.trim();
+  if (!host) return false;
+
+  const protocol = req.get("x-forwarded-proto")?.split(",")[0]?.trim() || req.protocol;
+  const expectedOrigin = `${protocol}://${host}`.replace(/\/$/, "");
+  return requestOrigin === expectedOrigin;
+}
+
 export const corsConfig = cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(",") || [
-    "http://localhost:3000",
-    "http://localhost:5173",
-  ],
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    const normalizedOrigin = origin.trim().replace(/\/$/, "");
+    const allowed = configuredAllowedOrigins();
+    if (allowed.includes(normalizedOrigin)) return callback(null, true);
+    // Allow the browser's same-origin request even if Render's environment
+    // variables have not been configured yet.
+    return callback(null, false);
+  },
   credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
 });
 
@@ -74,10 +107,7 @@ export const csrfProtection = (req: Request, res: Response, next: NextFunction) 
   const method = req.method.toUpperCase();
   if (["GET", "HEAD", "OPTIONS"].includes(method)) return next();
 
-  const configuredOrigins = (process.env.ALLOWED_ORIGINS || process.env.FRONTEND_URL || process.env.APP_URL || "")
-    .split(",")
-    .map(value => value.trim())
-    .filter(Boolean);
+  const configuredOrigins = configuredAllowedOrigins();
 
   const origin = req.headers.origin?.trim();
   const referer = req.headers.referer?.trim();
@@ -93,11 +123,17 @@ export const csrfProtection = (req: Request, res: Response, next: NextFunction) 
 
   if (!requestOrigin) return next();
 
+  const normalizedRequestOrigin = requestOrigin.replace(/\/$/, "");
+
   const isDevelopmentLocalhost =
     process.env.NODE_ENV === "development" &&
-    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(requestOrigin);
+    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalizedRequestOrigin);
 
-  if (isDevelopmentLocalhost || configuredOrigins.includes(requestOrigin)) {
+  if (
+    isDevelopmentLocalhost ||
+    configuredOrigins.includes(normalizedRequestOrigin) ||
+    isSameOriginRequest(req, normalizedRequestOrigin)
+  ) {
     return next();
   }
 
@@ -105,6 +141,12 @@ export const csrfProtection = (req: Request, res: Response, next: NextFunction) 
 };
 
 export const validateInput = (req: Request, res: Response, next: NextFunction) => {
+  // /api/upload-video uses multer with its own 100 MB file-size limit.
+  // Do not apply the generic 10 MB JSON/body guard to that multipart upload.
+  if (req.path === "/api/upload-video") {
+    return next();
+  }
+
   const maxBodySize = 10 * 1024 * 1024;
   if (req.headers["content-length"]) {
     const contentLength = parseInt(req.headers["content-length"], 10);
