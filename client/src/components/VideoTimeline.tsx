@@ -44,6 +44,7 @@ export function VideoTimeline({ src, currentTime, duration, trimStart, trimEnd, 
   const current = clamp(currentTime, safeStart, safeEnd);
   const cutSegments = useMemo(() => mergeRanges(cuts), [cuts]);
   const segments = useMemo(() => buildVideoSegments(safeStart, safeEnd, cutSegments, splitPoints), [safeStart, safeEnd, cutSegments, splitPoints]);
+  const selectedSegment = useMemo(() => segments.find((segment) => current >= segment.start && current < segment.end) || segments[segments.length - 1] || null, [segments, current]);
 
   useEffect(() => {
     setSplitPoints((points) => points.filter((point) => point > safeStart + 0.05 && point < safeEnd - 0.05));
@@ -90,9 +91,16 @@ export function VideoTimeline({ src, currentTime, duration, trimStart, trimEnd, 
     return true;
   };
 
-  const splitCurrent = () => {
-    if (splitAt(current)) return;
-    // Keep the action honest: a split at an existing boundary or at the ends does nothing.
+  const splitCurrent = () => { splitAt(current); };
+
+  const deleteSelectedSegment = () => {
+    if (!selectedSegment || segments.length <= 1) return;
+    const nextCuts = mergeRanges([...cuts, { start: selectedSegment.start, end: selectedSegment.end }]);
+    onCutsChange(nextCuts);
+    const nextSegment = segments.find((segment) => segment.id !== selectedSegment.id && segment.end > selectedSegment.end + 0.01)
+      || segments.find((segment) => segment.id !== selectedSegment.id && segment.start < selectedSegment.start - 0.01)
+      || null;
+    if (nextSegment) onCurrentTimeChange(nextSegment.start);
   };
 
   useEffect(() => {
@@ -126,9 +134,7 @@ export function VideoTimeline({ src, currentTime, duration, trimStart, trimEnd, 
       lastTapRef.current = null;
     } else {
       lastTapRef.current = { time: value, at: now };
-      window.setTimeout(() => {
-        if (lastTapRef.current?.at === now) lastTapRef.current = null;
-      }, 450);
+      window.setTimeout(() => { if (lastTapRef.current?.at === now) lastTapRef.current = null; }, 450);
     }
   };
 
@@ -144,6 +150,7 @@ export function VideoTimeline({ src, currentTime, duration, trimStart, trimEnd, 
       <div className="pointer-events-none absolute inset-y-0 right-0 bg-black/65" style={{ width: `${100 - endPercent}%` }} />
       {cutSegments.map((range) => <div key={`${range.start}-${range.end}`} className="pointer-events-none absolute inset-y-0 bg-black/75" style={{ left: `${(range.start / safeDuration) * 100}%`, width: `${((range.end - range.start) / safeDuration) * 100}%` }} />)}
       {segments.slice(0, -1).map((segment) => <div key={`split-${segment.end}`} className="pointer-events-none absolute inset-y-0 z-20 w-0.5 bg-white/90" style={{ left: `${(segment.end / safeDuration) * 100}%` }} />)}
+      {selectedSegment && <div className="pointer-events-none absolute inset-y-0 z-[15] border-2 border-white/80" style={{ left: `${(selectedSegment.start / safeDuration) * 100}%`, width: `${((selectedSegment.end - selectedSegment.start) / safeDuration) * 100}%` }} />}
       <div className="pointer-events-none absolute inset-y-0 z-10 border-x-2 border-white" style={{ left: `${startPercent}%`, width: `${Math.max(0, endPercent - startPercent)}%` }} />
       <button type="button" aria-label="Début de la vidéo" className="absolute top-0 bottom-0 z-30 w-5 -translate-x-1/2 touch-none" style={{ left: `${startPercent}%` }} onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture?.(event.pointerId); setDragging("start"); }}><span className="mx-auto block h-full w-1 rounded-full bg-white" /><span className="absolute left-1/2 top-1/2 h-10 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow" /></button>
       <button type="button" aria-label="Fin de la vidéo" className="absolute top-0 bottom-0 z-30 w-5 -translate-x-1/2 touch-none" style={{ left: `${endPercent}%` }} onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture?.(event.pointerId); setDragging("end"); }}><span className="mx-auto block h-full w-1 rounded-full bg-white" /><span className="absolute left-1/2 top-0 h-full w-0.5 -translate-x-1/2 bg-white" /><span className="absolute left-1/2 top-1/2 h-10 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow" /></button>
@@ -152,9 +159,10 @@ export function VideoTimeline({ src, currentTime, duration, trimStart, trimEnd, 
     <div className="flex items-center justify-between px-3 py-1.5 text-[10px] text-white/55"><span>{formatTime(safeStart)}</span><span>{formatTime(safeEnd)}</span></div>
     <div className="flex items-center justify-center gap-2 px-3 pb-1.5">
       <button type="button" onClick={splitCurrent} disabled={current <= safeStart + 0.05 || current >= safeEnd - 0.05 || cutSegments.some((r) => current > r.start && current < r.end)} className="rounded-full bg-white/10 px-4 py-1.5 text-xs font-semibold disabled:opacity-35">Diviser</button>
+      <button type="button" onClick={deleteSelectedSegment} disabled={!selectedSegment || segments.length <= 1} className="rounded-full bg-red-500/90 px-4 py-1.5 text-xs font-semibold disabled:opacity-35">Supprimer</button>
       {splitPoints.length > 0 && <span className="text-[10px] text-white/55">{splitPoints.length} division{splitPoints.length > 1 ? "s" : ""}</span>}
     </div>
-    {splitPoints.length > 0 && <div className="px-3 pb-1 text-[10px] text-white/55">Les séparations sont placées à la position de lecture. Double-appuie aussi sur la timeline pour diviser.</div>}
-    {cutSegments.length > 0 && <div className="px-3 pb-2 text-[10px] text-white/45">Les zones assombries seront retirées au montage.</div>}
+    {splitPoints.length > 0 && <div className="px-3 pb-1 text-[10px] text-white/55">Sélectionne une partie avec la tête de lecture puis « Supprimer ». Double-appuie aussi sur la timeline pour diviser.</div>}
+    {cutSegments.length > 0 && <div className="px-3 pb-2 text-[10px] text-white/45">Les zones assombries seront retirées de la lecture et de l’export.</div>}
   </section>;
 }
