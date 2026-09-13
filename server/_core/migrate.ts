@@ -13,7 +13,6 @@ async function createTables(pool: Pool) {
   try {
     console.log("[Migrations] Creating database tables...");
 
-    // Create ENUM type for role
     try {
       await pool.query(`
         DO $$ BEGIN
@@ -119,8 +118,15 @@ async function createTables(pool: Pool) {
       ADD COLUMN IF NOT EXISTS "premiumQuality" TEXT,
       ADD COLUMN IF NOT EXISTS "scheduledAt" TIMESTAMP,
       ADD COLUMN IF NOT EXISTS "commentsMode" TEXT,
-      ADD COLUMN IF NOT EXISTS "hdVideoUrl" TEXT;
+      ADD COLUMN IF NOT EXISTS "hdVideoUrl" TEXT,
+      ADD COLUMN IF NOT EXISTS "visibility" VARCHAR(20) NOT NULL DEFAULT 'public';
+
+      UPDATE videos
+      SET "visibility" = CASE WHEN "isPublic" = false THEN 'private' ELSE 'public' END
+      WHERE "visibility" = 'public';
     `);
+
+    await pool.query(`CREATE INDEX IF NOT EXISTS "videos_visibility_idx" ON videos ("visibility");`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS likes (
@@ -130,7 +136,6 @@ async function createTables(pool: Pool) {
         "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
       );
     `);
-
     await pool.query(`
       CREATE TABLE IF NOT EXISTS favorites (
         id SERIAL PRIMARY KEY,
@@ -139,7 +144,6 @@ async function createTables(pool: Pool) {
         "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
       );
     `);
-
     await pool.query(`
       CREATE TABLE IF NOT EXISTS shares (
         id SERIAL PRIMARY KEY,
@@ -149,7 +153,6 @@ async function createTables(pool: Pool) {
         "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
       );
     `);
-
     await pool.query(`
       CREATE TABLE IF NOT EXISTS comments (
         id SERIAL PRIMARY KEY,
@@ -160,7 +163,6 @@ async function createTables(pool: Pool) {
         "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
       );
     `);
-
     await pool.query(`
       CREATE TABLE IF NOT EXISTS followers (
         id SERIAL PRIMARY KEY,
@@ -169,7 +171,6 @@ async function createTables(pool: Pool) {
         "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
       );
     `);
-
     await pool.query(`
       CREATE TABLE IF NOT EXISTS earnings (
         id SERIAL PRIMARY KEY,
@@ -180,7 +181,6 @@ async function createTables(pool: Pool) {
         "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
       );
     `);
-
     await pool.query(`
       CREATE TABLE IF NOT EXISTS withdrawals (
         id SERIAL PRIMARY KEY,
@@ -192,7 +192,6 @@ async function createTables(pool: Pool) {
         "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
       );
     `);
-
     await pool.query(`
       CREATE TABLE IF NOT EXISTS notifications (
         id SERIAL PRIMARY KEY,
@@ -205,7 +204,6 @@ async function createTables(pool: Pool) {
         "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
       );
     `);
-
     await pool.query(`
       CREATE TABLE IF NOT EXISTS blocks (
         id SERIAL PRIMARY KEY,
@@ -214,7 +212,6 @@ async function createTables(pool: Pool) {
         "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
       );
     `);
-
     await pool.query(`
       CREATE TABLE IF NOT EXISTS reports (
         id SERIAL PRIMARY KEY,
@@ -227,7 +224,6 @@ async function createTables(pool: Pool) {
         "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
       );
     `);
-
     await pool.query(`
       CREATE TABLE IF NOT EXISTS warnings (
         id SERIAL PRIMARY KEY,
@@ -238,7 +234,6 @@ async function createTables(pool: Pool) {
         "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
       );
     `);
-
     await pool.query(`
       CREATE TABLE IF NOT EXISTS music (
         id SERIAL PRIMARY KEY,
@@ -253,7 +248,6 @@ async function createTables(pool: Pool) {
         "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
       );
     `);
-
     await pool.query(`
       CREATE TABLE IF NOT EXISTS afritok_premium_subscriptions (
         id SERIAL PRIMARY KEY,
@@ -267,7 +261,6 @@ async function createTables(pool: Pool) {
         updated_at TIMESTAMP NOT NULL DEFAULT NOW()
       );
     `);
-
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "conversations" (
         "id" SERIAL PRIMARY KEY,
@@ -279,7 +272,6 @@ async function createTables(pool: Pool) {
         UNIQUE ("participant1Id", "participant2Id")
       );
     `);
-
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "directMessages" (
         "id" SERIAL PRIMARY KEY,
@@ -295,7 +287,6 @@ async function createTables(pool: Pool) {
         "sentAt" TIMESTAMP NOT NULL DEFAULT NOW()
       );
     `);
-
     await pool.query(`CREATE INDEX IF NOT EXISTS "directMessages_conversation_idx" ON "directMessages" ("conversationId");`);
     await pool.query(`CREATE INDEX IF NOT EXISTS "directMessages_sender_idx" ON "directMessages" ("senderId");`);
 
