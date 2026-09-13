@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Music, RefreshCw, Timer, X } from "lucide-react";
+import { Check, Music, Pause, Play, RefreshCw, X } from "lucide-react";
 import { toast } from "sonner";
 
 interface CameraRecorderProps {
@@ -7,96 +7,64 @@ interface CameraRecorderProps {
   onPhotoTaken?: (blob: Blob) => void;
   onClose?: () => void;
   onOpenMusic?: () => void;
+  onOpenEffects?: () => void;
   onPublish?: () => void;
   selectedMusic?: { name: string; url: string } | null;
 }
 
 const LIMITS: Record<string, number> = { "15 s": 15, "60 s": 60, "10 min": 600 };
 
+type FacingMode = "user" | "environment";
+
 export const CameraRecorder: React.FC<CameraRecorderProps> = ({
-  onVideoRecorded, onPhotoTaken, onClose, onOpenMusic, onPublish, selectedMusic,
+  onVideoRecorded,
+  onPhotoTaken,
+  onClose,
+  onOpenMusic,
+  selectedMusic,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const startedAtRef = useRef(0);
-  const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
+  const drawFrameRef = useRef<number | null>(null);
+  const recordingCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
+  const mountedRef = useRef(true);
+
+  const [facingMode, setFacingMode] = useState<FacingMode>("user");
   const [durationMode, setDurationMode] = useState("15 s");
   const [recording, setRecording] = useState(false);
+  const [paused, setPaused] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [timer, setTimer] = useState(0);
+  const [switchingCamera, setSwitchingCamera] = useState(false);
 
-  const diagnoseRecordedBlob = useCallback((blob: Blob, actualMime: string) => {
-    const url = URL.createObjectURL(blob);
-    const probe = document.createElement("video");
-    probe.preload = "metadata";
-    probe.muted = true;
-    probe.playsInline = true;
-
-    const canPlay = probe.canPlayType(actualMime) || "";
-    const timeout = window.setTimeout(() => {
-      console.error("[CameraRecorder] DIAGNOSTIC timeout", {
-        mime: actualMime,
-        size: blob.size,
-        canPlay,
-      });
-      toast.error(
-        `DIAGNOSTIC vidéo: aucune réponse du lecteur. MIME=${actualMime} | taille=${blob.size} octets | canPlay=${canPlay || "non"}`,
-        { duration: 12000 }
-      );
-      URL.revokeObjectURL(url);
-    }, 8000);
-
-    probe.onloadedmetadata = () => {
-      window.clearTimeout(timeout);
-      console.info("[CameraRecorder] DIAGNOSTIC OK", {
-        mime: actualMime,
-        size: blob.size,
-        canPlay,
-        duration: probe.duration,
-        width: probe.videoWidth,
-        height: probe.videoHeight,
-      });
-      toast.success(
-        `DIAGNOSTIC OK: vidéo lisible (${probe.videoWidth}x${probe.videoHeight}, ${Math.round(probe.duration * 10) / 10}s) | MIME=${actualMime} | ${blob.size} octets`,
-        { duration: 9000 }
-      );
-      URL.revokeObjectURL(url);
-    };
-
-    probe.onerror = () => {
-      window.clearTimeout(timeout);
-      const mediaError = probe.error;
-      const code = mediaError?.code ?? 0;
-      const message = mediaError?.message || "aucun détail fourni par le lecteur";
-      console.error("[CameraRecorder] DIAGNOSTIC PLAYBACK ERROR", {
-        code,
-        message,
-        mime: actualMime,
-        size: blob.size,
-        canPlay,
-        duration: probe.duration,
-        width: probe.videoWidth,
-        height: probe.videoHeight,
-      });
-      toast.error(
-        `ERREUR RÉELLE VIDÉO: code=${code} | ${message} | MIME=${actualMime} | taille=${blob.size} | canPlay=${canPlay || "non"}`,
-        { duration: 15000 }
-      );
-      URL.revokeObjectURL(url);
-    };
-
-    probe.src = url;
+  const stopTracks = useCallback((stream: MediaStream | null) => {
+    stream?.getTracks().forEach((track) => track.stop());
   }, []);
 
-  const startCamera = useCallback(async () => {
-    streamRef.current?.getTracks().forEach((track) => track.stop());
+  const startCamera = useCallback(async (mode: FacingMode) => {
+    const oldStream = streamRef.current;
+    streamRef.current = null;
+    stopTracks(oldStream);
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: {
+          facingMode: mode,
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
         audio: false,
       });
+
+      if (!mountedRef.current) {
+        stopTracks(stream);
+        return;
+      }
+
       streamRef.current = stream;
       const video = videoRef.current;
       if (video) {
@@ -109,12 +77,41 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       console.error("[CameraRecorder] camera", error);
       toast.error("Impossible d'ouvrir la caméra");
     }
-  }, [facingMode]);
+  }, [stopTracks]);
 
   useEffect(() => {
-    void startCamera();
-    return () => streamRef.current?.getTracks().forEach((track) => track.stop());
-  }, [startCamera]);
+    mountedRef.current = true;
+    void startCamera("user");
+
+    return () => {
+      mountedRef.current = false;
+      if (drawFrameRef.current !== null) cancelAnimationFrame(drawFrameRef.current);
+      stopTracks(streamRef.current);
+      stopTracks(recordingStreamRef.current);
+      if (recorderRef.current?.state !== "inactive") {
+        try {
+          recorderRef.current?.stop();
+        } catch {
+          // Le composant est en train d'être démonté.
+        }
+      }
+    };
+  }, [startCamera, stopTracks]);
+
+  const switchCamera = useCallback(async () => {
+    if (switchingCamera) return;
+
+    const nextMode: FacingMode = facingMode === "user" ? "environment" : "user";
+    setSwitchingCamera(true);
+    try {
+      // Le canvas d'enregistrement reste le même : seule la source caméra change.
+      // Cela permet de continuer le même enregistrement après le changement de caméra.
+      await startCamera(nextMode);
+      setFacingMode(nextMode);
+    } finally {
+      setSwitchingCamera(false);
+    }
+  }, [facingMode, startCamera, switchingCamera]);
 
   const takePhoto = () => {
     const video = videoRef.current;
@@ -122,90 +119,159 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       toast.error("La caméra n'est pas encore prête");
       return;
     }
+
     const canvas = document.createElement("canvas");
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
-    canvas.toBlob((blob) => { if (blob) onPhotoTaken?.(blob); }, "image/jpeg", 0.95);
+    canvas.toBlob((blob) => {
+      if (blob) onPhotoTaken?.(blob);
+    }, "image/jpeg", 0.95);
   };
 
   const stopRecording = useCallback(() => {
     const recorder = recorderRef.current;
     if (!recorder || recorder.state === "inactive") return;
-    recorder.stop();
+
+    try {
+      recorder.stop();
+    } catch (error) {
+      console.error("[CameraRecorder] stop", error);
+    }
     setRecording(false);
+    setPaused(false);
   }, []);
 
   const startRecording = async () => {
-    const stream = streamRef.current;
-    if (!stream || stream.getVideoTracks().every((track) => track.readyState !== "live")) {
+    const video = videoRef.current;
+    const sourceStream = streamRef.current;
+
+    if (!video || !sourceStream || !video.videoWidth || !video.videoHeight) {
+      toast.error("La caméra n'est pas encore prête");
+      return;
+    }
+
+    const sourceTrack = sourceStream.getVideoTracks()[0];
+    if (!sourceTrack || sourceTrack.readyState !== "live") {
       toast.error("La caméra n'est pas disponible");
       return;
     }
 
     const mime = [
+      "video/webm;codecs=vp9",
       "video/webm;codecs=vp8",
       "video/webm",
     ].find((type) => MediaRecorder.isTypeSupported(type));
 
     try {
-      const recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      // On enregistre un canvas dont le flux reste stable pendant un changement
+      // de caméra. La vidéo affichée devient simplement la nouvelle source du canvas.
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth || 720;
+      canvas.height = video.videoHeight || 1280;
+      const context = canvas.getContext("2d");
+      if (!context) {
+        toast.error("Impossible de préparer l'enregistrement vidéo");
+        return;
+      }
+
+      recordingCanvasRef.current = canvas;
+      const canvasStream = canvas.captureStream(30);
+      recordingStreamRef.current = canvasStream;
+
+      const draw = () => {
+        const currentVideo = videoRef.current;
+        if (currentVideo && currentVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+          context.drawImage(currentVideo, 0, 0, canvas.width, canvas.height);
+        }
+        drawFrameRef.current = requestAnimationFrame(draw);
+      };
+      draw();
+
+      const recorder = mime
+        ? new MediaRecorder(canvasStream, { mimeType: mime })
+        : new MediaRecorder(canvasStream);
+
       chunksRef.current = [];
-      recorder.ondataavailable = (event) => {
-        console.info("[CameraRecorder] dataavailable", {
-          size: event.data.size,
-          type: event.data.type,
-          chunkCount: chunksRef.current.length + 1,
-        });
-        if (event.data.size) chunksRef.current.push(event.data);
-      };
-      recorder.onerror = (event) => {
-        const error = (event as Event & { error?: DOMException }).error;
-        console.error("[CameraRecorder] recorder error", {
-          name: error?.name,
-          message: error?.message,
-          mime: recorder.mimeType || mime,
-          state: recorder.state,
-          chunks: chunksRef.current.length,
-        });
-        setRecording(false);
-        toast.error(
-          `ERREUR ENREGISTREMENT: ${error?.name || "inconnue"} | ${error?.message || "aucun détail"} | chunks=${chunksRef.current.length}`,
-          { duration: 15000 }
-        );
-      };
       recorderRef.current = recorder;
       startedAtRef.current = performance.now();
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size) chunksRef.current.push(event.data);
+      };
+
+      recorder.onerror = (event) => {
+        const error = (event as Event & { error?: DOMException }).error;
+        console.error("[CameraRecorder] recorder error", error);
+        setRecording(false);
+        setPaused(false);
+        toast.error(`ERREUR ENREGISTREMENT: ${error?.message || "aucun détail"}`, {
+          duration: 12000,
+        });
+      };
+
       recorder.onstop = () => {
+        if (drawFrameRef.current !== null) {
+          cancelAnimationFrame(drawFrameRef.current);
+          drawFrameRef.current = null;
+        }
+
         const actualMime = recorder.mimeType || mime || "video/webm";
         const blob = new Blob(chunksRef.current, { type: actualMime });
         const duration = Math.max(1, Math.round((performance.now() - startedAtRef.current) / 1000));
+
+        stopTracks(recordingStreamRef.current);
+        recordingStreamRef.current = null;
+        recordingCanvasRef.current = null;
+        recorderRef.current = null;
+
         console.info("[CameraRecorder] FINAL RECORDED BLOB", {
           mime: actualMime,
           size: blob.size,
           duration,
           chunks: chunksRef.current.length,
-          trackStates: stream.getTracks().map((track) => ({ kind: track.kind, state: track.readyState })),
-          videoSettings: stream.getVideoTracks()[0]?.getSettings(),
+          camera: facingMode,
         });
+
         if (blob.size < 1024) {
-          toast.error("ERREUR ENREGISTREMENT: le Blob final est vide");
+          toast.error("La vidéo enregistrée est vide. Réessaie.");
           return;
         }
 
-        // Teste le Blob final lui-même avant de passer au montage.
-        // Si ce test échoue, le problème vient de l'enregistrement/codec et non du montage.
-        diagnoseRecordedBlob(blob, actualMime);
         onVideoRecorded?.(blob, duration);
       };
+
       recorder.start(1000);
       setSeconds(0);
+      setPaused(false);
       setRecording(true);
     } catch (error) {
       console.error("[CameraRecorder] recorder", error);
       const err = error instanceof DOMException ? `${error.name}: ${error.message}` : String(error);
-      toast.error(`ERREUR CRÉATION ENREGISTREUR: ${err}`, { duration: 15000 });
+      toast.error(`ERREUR CRÉATION ENREGISTREUR: ${err}`, { duration: 12000 });
+
+      if (drawFrameRef.current !== null) cancelAnimationFrame(drawFrameRef.current);
+      drawFrameRef.current = null;
+      stopTracks(recordingStreamRef.current);
+      recordingStreamRef.current = null;
+      recordingCanvasRef.current = null;
     }
+  };
+
+  const pauseRecording = () => {
+    const recorder = recorderRef.current;
+    if (!recorder || recorder.state !== "recording") return;
+
+    recorder.pause();
+    setPaused(true);
+  };
+
+  const resumeRecording = () => {
+    const recorder = recorderRef.current;
+    if (!recorder || recorder.state !== "paused") return;
+
+    recorder.resume();
+    setPaused(false);
   };
 
   const capture = async () => {
@@ -216,36 +282,167 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       }
       setTimer(0);
     }
+
     if (durationMode === "PHOTO") return takePhoto();
-    if (recording) return stopRecording();
-    return startRecording();
+    if (!recording) return startRecording();
+    if (paused) return resumeRecording();
+    return pauseRecording();
   };
 
   useEffect(() => {
-    if (!recording) return;
+    if (!recording || paused) return;
     const interval = window.setInterval(() => setSeconds((value) => value + 1), 1000);
     return () => window.clearInterval(interval);
-  }, [recording]);
+  }, [recording, paused]);
 
   useEffect(() => {
-    if (recording && seconds >= LIMITS[durationMode]) stopRecording();
-  }, [recording, seconds, durationMode, stopRecording]);
+    if (recording && !paused && seconds >= LIMITS[durationMode]) {
+      stopRecording();
+    }
+  }, [recording, paused, seconds, durationMode, stopRecording]);
 
-  useEffect(() => () => {
-    if (recorderRef.current?.state !== "inactive") recorderRef.current?.stop();
-  }, []);
+  const formatTime = (value: number) =>
+    `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
+
+  const progress = durationMode === "PHOTO"
+    ? 0
+    : Math.min(1, seconds / LIMITS[durationMode]);
 
   return (
     <div className="h-screen bg-black text-white relative overflow-hidden flex flex-col">
-      <video ref={videoRef} autoPlay muted playsInline className="absolute inset-0 w-full h-full object-cover" />
-      {timer > 0 && <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/40 text-8xl font-bold">{timer}</div>}
-      {recording && <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 rounded-full bg-black/75 px-4 py-1.5 font-bold tabular-nums"><span className="text-red-400">●</span> {String(Math.floor(seconds / 60)).padStart(2, "0")}:{String(seconds % 60).padStart(2, "0")} <span className="text-white/60">/ {durationMode === "10 min" ? "10:00" : durationMode === "60 s" ? "01:00" : "00:15"}</span></div>}
-      <div className="relative z-20 flex justify-between p-4"><button onClick={onClose} aria-label="Fermer"><X size={28} /></button><button onClick={onOpenMusic} className="rounded-full bg-black/50 px-4 py-2 text-xs"><Music size={15} className="inline mr-2" />{selectedMusic?.name || "Ajouter un son"}</button><button onClick={() => setFacingMode((value) => value === "user" ? "environment" : "user")} aria-label="Retourner"><RefreshCw size={24} /></button></div>
-      <div className="relative z-20 mt-auto bg-gradient-to-t from-black/90 to-transparent p-5 pb-8">
-        <div className="flex justify-center gap-5 mb-5">{["PHOTO", "15 s", "60 s", "10 min"].map((mode) => <button key={mode} onClick={() => !recording && setDurationMode(mode)} className={`rounded-full px-4 py-2 text-sm font-bold ${durationMode === mode ? "bg-yellow-400 text-black" : "bg-black/50"}`}>{mode === "PHOTO" ? "Photo" : `Vidéo ${mode}`}</button>)}</div>
-        <div className="flex items-center justify-center gap-8"><button onClick={onOpenMusic} className="text-xs">Audio</button><button onClick={capture} aria-label={recording ? "Arrêter" : "Enregistrer"} className={`h-20 w-20 rounded-full border-4 border-white p-2 ${recording ? "bg-red-500" : "bg-red-500"}`}><span className={recording ? "block h-7 w-7 mx-auto rounded-md bg-white" : "block h-full w-full rounded-full bg-red-500"} /></button><button onClick={onPublish} className="text-xs">Publier</button></div>
+      <video
+        ref={videoRef}
+        autoPlay
+        muted
+        playsInline
+        className="absolute inset-0 w-full h-full object-cover"
+      />
+
+      {timer > 0 && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 text-8xl font-bold">
+          {timer}
+        </div>
+      )}
+
+      <div className="relative z-30 flex items-center justify-between p-4">
+        <button
+          onClick={onClose}
+          className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center"
+          aria-label="Fermer"
+        >
+          <X size={25} />
+        </button>
+
+        <button
+          onClick={onOpenMusic}
+          className="rounded-full bg-black/55 px-4 py-2 text-xs max-w-[55%] truncate"
+          disabled={recording && switchingCamera}
+        >
+          <Music size={15} className="inline mr-2" />
+          {selectedMusic?.name || "Ajouter un son"}
+        </button>
+
+        <button
+          onClick={switchCamera}
+          disabled={switchingCamera}
+          className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center disabled:opacity-50"
+          aria-label="Changer de caméra"
+        >
+          <RefreshCw size={24} className={switchingCamera ? "animate-spin" : ""} />
+        </button>
+      </div>
+
+      {recording && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 rounded-full bg-black/75 px-4 py-1.5 font-bold tabular-nums">
+          <span className="text-red-400">●</span>{" "}
+          {formatTime(seconds)}{" "}
+          <span className="text-white/60">
+            / {durationMode === "10 min" ? "10:00" : durationMode === "60 s" ? "01:00" : "00:15"}
+          </span>
+          {paused && <span className="ml-2 text-yellow-300">PAUSE</span>}
+        </div>
+      )}
+
+      <div className="relative z-20 mt-auto bg-gradient-to-t from-black/95 via-black/55 to-transparent px-5 pb-7 pt-12">
+        <div className="flex justify-center gap-3 mb-5">
+          {["PHOTO", "15 s", "60 s", "10 min"].map((mode) => (
+            <button
+              key={mode}
+              onClick={() => !recording && setDurationMode(mode)}
+              disabled={recording}
+              className={`rounded-full px-3 py-2 text-xs font-bold transition ${
+                durationMode === mode ? "bg-white text-black" : "bg-black/55 text-white"
+              } ${recording ? "opacity-50" : ""}`}
+            >
+              {mode === "PHOTO" ? "Photo" : mode}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-center gap-7">
+          <div className="w-16 flex justify-center">
+            {recording && (
+              <button
+                onClick={pauseRecording}
+                disabled={paused}
+                className="h-11 w-11 rounded-full bg-black/60 flex items-center justify-center disabled:opacity-40"
+                aria-label="Mettre en pause"
+              >
+                <Pause size={20} />
+              </button>
+            )}
+          </div>
+
+          <button
+            onClick={capture}
+            disabled={timer > 0}
+            aria-label={!recording ? "Enregistrer" : paused ? "Continuer" : "Mettre en pause"}
+            className="relative h-20 w-20 rounded-full border-4 border-white p-1.5 disabled:opacity-70"
+          >
+            <span className="absolute inset-0 rounded-full bg-red-500" />
+            {recording && !paused ? (
+              <span className="absolute inset-0 m-auto h-7 w-7 rounded-md bg-white" />
+            ) : recording && paused ? (
+              <Play className="absolute inset-0 m-auto" size={30} fill="white" />
+            ) : (
+              <span className="absolute inset-0 m-2 rounded-full bg-red-500" />
+            )}
+          </button>
+
+          <div className="w-16 flex justify-center">
+            {recording ? (
+              <button
+                onClick={stopRecording}
+                className="h-12 w-12 rounded-full bg-white text-black flex items-center justify-center shadow-lg"
+                aria-label="Terminer et monter la vidéo"
+              >
+                <Check size={27} strokeWidth={3} />
+              </button>
+            ) : (
+              <button onClick={onOpenMusic} className="text-xs text-white/90">
+                Audio
+              </button>
+            )}
+          </div>
+        </div>
+
+        {recording && (
+          <div className="mt-4 h-1.5 rounded-full bg-white/25 overflow-hidden">
+            <div
+              className="h-full bg-red-500 transition-[width] duration-500"
+              style={{ width: `${progress * 100}%` }}
+            />
+          </div>
+        )}
+
+        {recording && (
+          <p className="text-center text-[11px] text-white/65 mt-2">
+            {paused ? "Vidéo en pause — appuie au centre pour continuer" : "Pause au centre • ✓ pour terminer et passer au montage"}
+          </p>
+        )}
       </div>
     </div>
   );
 };
+
 export default CameraRecorder;
