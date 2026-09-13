@@ -6,13 +6,36 @@ import { videos, users } from "../../drizzle/schema";
 VIDEOS
 ===================== */
 export async function getVideoById(videoId: number) {
-  return (await db.select().from(videos).where(eq(videos.id, videoId)).limit(1))[0];
+  const result = await db.execute(sql`
+    SELECT *
+    FROM "videos"
+    WHERE "id" = ${videoId}
+    LIMIT 1
+  `);
+  return (result as any).rows?.[0] as any;
 }
 
-export async function getFeedVideos(limit: number, offset: number) {
-  // Keep the home feed read-only and compatible with the deployed base schema.
-  // Optional scheduled/HD columns are not part of drizzle/schema.ts on all
-  // deployments, so referencing them here can generate invalid SQL.
+function visibilityCondition(viewerId?: number | null) {
+  if (!viewerId) {
+    return sql`"videos"."visibility" = 'public'`;
+  }
+
+  return sql`(
+    "videos"."visibility" = 'public'
+    OR "videos"."userId" = ${viewerId}
+    OR (
+      "videos"."visibility" = 'followers'
+      AND EXISTS (
+        SELECT 1
+        FROM "followers"
+        WHERE "followers"."followerId" = ${viewerId}
+          AND "followers"."followingId" = "videos"."userId"
+      )
+    )
+  )`;
+}
+
+export async function getFeedVideos(limit: number, offset: number, viewerId?: number | null) {
   return db
     .select({
       id: videos.id,
@@ -36,7 +59,7 @@ export async function getFeedVideos(limit: number, offset: number) {
     .from(videos)
     .leftJoin(users, eq(videos.userId, users.id))
     .where(and(
-      or(eq(videos.isPublic, true), isNull(videos.isPublic)),
+      visibilityCondition(viewerId),
       sql`${videos.videoUrl} IS NOT NULL`
     ))
     .orderBy(desc(videos.createdAt))
@@ -44,13 +67,55 @@ export async function getFeedVideos(limit: number, offset: number) {
     .offset(offset);
 }
 
-export async function getUserVideos(userId: number) {
+export async function getUserVideos(userId: number, viewerId?: number | null) {
+  if (viewerId === userId) {
+    return db
+      .select()
+      .from(videos)
+      .where(eq(videos.userId, userId))
+      .orderBy(desc(videos.createdAt));
+  }
+
+  const followerAccess = viewerId
+    ? sql`(
+        "videos"."visibility" = 'followers'
+        AND EXISTS (
+          SELECT 1
+          FROM "followers"
+          WHERE "followers"."followerId" = ${viewerId}
+            AND "followers"."followingId" = "videos"."userId"
+        )
+      )`
+    : sql`FALSE`;
+
   return db
     .select()
     .from(videos)
     .where(and(
       eq(videos.userId, userId),
-      or(eq(videos.isPublic, true), isNull(videos.isPublic))
+      sql`(
+        "videos"."visibility" = 'public'
+        OR ${followerAccess}
+      )`
     ))
     .orderBy(desc(videos.createdAt));
+}
+
+export async function canViewVideo(videoId: number, viewerId?: number | null, isAdmin = false) {
+  const video = await getVideoById(videoId);
+  if (!video) return false;
+  if (isAdmin || video.userId === viewerId) return true;
+  if (video.visibility === "public" || video.visibility == null) return true;
+  if (video.visibility === "private") return false;
+  if (video.visibility === "followers" && viewerId) {
+    const result = await db.execute(sql`
+      SELECT 1
+      FROM "followers"
+      WHERE "followerId" = ${viewerId}
+        AND "followingId" = ${video.userId}
+      LIMIT 1
+    `);
+    return Boolean((result as any).rows?.length);
+  }
+  return false;
 }
