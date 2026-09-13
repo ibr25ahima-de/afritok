@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { buildVideoSegments, splitVideoAt } from "@/lib/video-split";
 
 type Range = { start: number; end: number };
 
@@ -35,11 +36,17 @@ export function VideoTimeline({ src, currentTime, duration, trimStart, trimEnd, 
   const trackRef = useRef<HTMLDivElement>(null);
   const [thumbnails, setThumbnails] = useState<string[]>([]);
   const [dragging, setDragging] = useState<"playhead" | "start" | "end" | null>(null);
+  const [splitPoints, setSplitPoints] = useState<number[]>([]);
   const safeDuration = Math.max(0.01, duration);
   const safeStart = clamp(trimStart, 0, Math.max(0, safeDuration - 0.05));
   const safeEnd = clamp(trimEnd || safeDuration, safeStart + 0.05, safeDuration);
   const current = clamp(currentTime, safeStart, safeEnd);
   const cutSegments = useMemo(() => mergeRanges(cuts), [cuts]);
+  const segments = useMemo(() => buildVideoSegments(safeStart, safeEnd, cutSegments, splitPoints), [safeStart, safeEnd, cutSegments, splitPoints]);
+
+  useEffect(() => {
+    setSplitPoints((points) => points.filter((point) => point > safeStart + 0.05 && point < safeEnd - 0.05));
+  }, [safeStart, safeEnd]);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,6 +81,13 @@ export function VideoTimeline({ src, currentTime, duration, trimStart, trimEnd, 
     const track = trackRef.current; if (!track) return current;
     const rect = track.getBoundingClientRect(); return clamp((clientX - rect.left) / rect.width, 0, 1) * safeDuration;
   };
+
+  const splitAt = (time: number) => {
+    const next = splitVideoAt(time, safeStart, safeEnd, cutSegments, splitPoints);
+    if (next.length === splitPoints.length) return;
+    setSplitPoints(next);
+  };
+
   useEffect(() => {
     const move = (event: PointerEvent) => {
       if (!dragging) return;
@@ -93,23 +107,33 @@ export function VideoTimeline({ src, currentTime, duration, trimStart, trimEnd, 
     const blocked = cutSegments.find((r) => value >= r.start && value < r.end);
     onCurrentTimeChange(blocked ? Math.min(blocked.end, safeEnd) : value);
   };
+
+  const handleTrackDoubleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if ((event.target as HTMLElement).closest("button")) return;
+    const value = clamp(positionFromPointer(event.clientX), safeStart, safeEnd);
+    splitAt(value);
+    onCurrentTimeChange(value);
+  };
+
   const playheadPercent = (current / safeDuration) * 100;
   const startPercent = (safeStart / safeDuration) * 100;
   const endPercent = (safeEnd / safeDuration) * 100;
 
   return <section className="w-full select-none bg-black text-white" aria-label="Timeline de montage vidéo">
     <div className="flex items-center justify-between px-3 py-1.5 text-xs text-white/80"><span>{formatTime(current)}</span><span>{formatTime(Math.max(0, safeEnd - safeStart))}</span></div>
-    <div ref={trackRef} className="relative mx-3 h-[78px] overflow-hidden rounded-lg bg-white/10 touch-none" onPointerDown={handleTrackPointer}>
+    <div ref={trackRef} className="relative mx-3 h-[78px] overflow-hidden rounded-lg bg-white/10 touch-none" onPointerDown={handleTrackPointer} onDoubleClick={handleTrackDoubleClick}>
       <div className="absolute inset-0 flex">{(thumbnails.length ? thumbnails : Array.from({ length: 14 })).map((thumbnail, index) => <div key={index} className="relative h-full flex-1 overflow-hidden border-r border-black/30">{thumbnail && <img src={thumbnail} alt="" className="h-full w-full object-cover" draggable={false} />}</div>)}</div>
       <div className="pointer-events-none absolute inset-y-0 left-0 bg-black/65" style={{ width: `${startPercent}%` }} />
       <div className="pointer-events-none absolute inset-y-0 right-0 bg-black/65" style={{ width: `${100 - endPercent}%` }} />
       {cutSegments.map((range) => <div key={`${range.start}-${range.end}`} className="pointer-events-none absolute inset-y-0 bg-black/75" style={{ left: `${(range.start / safeDuration) * 100}%`, width: `${((range.end - range.start) / safeDuration) * 100}%` }} />)}
+      {segments.slice(0, -1).map((segment) => <div key={`split-${segment.end}`} className="pointer-events-none absolute inset-y-0 z-20 w-0.5 bg-white/90" style={{ left: `${(segment.end / safeDuration) * 100}%` }} />)}
       <div className="pointer-events-none absolute inset-y-0 z-10 border-x-2 border-white" style={{ left: `${startPercent}%`, width: `${Math.max(0, endPercent - startPercent)}%` }} />
       <button type="button" aria-label="Début de la vidéo" className="absolute top-0 bottom-0 z-30 w-5 -translate-x-1/2 touch-none" style={{ left: `${startPercent}%` }} onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture?.(event.pointerId); setDragging("start"); }}><span className="mx-auto block h-full w-1 rounded-full bg-white" /><span className="absolute left-1/2 top-1/2 h-10 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow" /></button>
       <button type="button" aria-label="Fin de la vidéo" className="absolute top-0 bottom-0 z-30 w-5 -translate-x-1/2 touch-none" style={{ left: `${endPercent}%` }} onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture?.(event.pointerId); setDragging("end"); }}><span className="mx-auto block h-full w-1 rounded-full bg-white" /><span className="absolute left-1/2 top-1/2 h-10 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow" /></button>
       <button type="button" aria-label="Position de lecture" className="absolute top-0 bottom-0 z-40 w-4 -translate-x-1/2 touch-none" style={{ left: `${playheadPercent}%` }} onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture?.(event.pointerId); setDragging("playhead"); }}><span className="absolute left-1/2 top-0 h-full w-0.5 -translate-x-1/2 bg-white" /><span className="absolute left-1/2 top-0 h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-white" /></button>
     </div>
     <div className="flex items-center justify-between px-3 py-1.5 text-[10px] text-white/55"><span>{formatTime(safeStart)}</span><span>{formatTime(safeEnd)}</span></div>
+    {splitPoints.length > 0 && <div className="px-3 pb-1 text-[10px] text-white/55">{splitPoints.length} division{splitPoints.length > 1 ? "s" : ""} · double-appuie sur la timeline pour créer une nouvelle séparation.</div>}
     {cutSegments.length > 0 && <div className="px-3 pb-2 text-[10px] text-white/45">Les zones assombries seront retirées au montage.</div>}
   </section>;
 }
