@@ -9,13 +9,23 @@ import { EffectsLibrary } from "@/components/EffectsLibrary";
 import { useUpload } from "@/contexts/UploadContext";
 import {
   ArrowLeft, Music, Pause, Play, RotateCcw, Sparkles, Volume2, X,
-  Scissors, Type, Smile, Captions, Wand2, Loader2
+  Scissors, Type, Smile, Captions, Wand2, Loader2, Trash2, Check,
 } from "lucide-react";
 import { toast } from "sonner";
 
 type Step = "capture" | "edit" | "publish";
 type Tool = "trim" | "text" | "stickers" | "subtitles" | "models" | "autocut" | null;
-type Overlay = { id: string; text: string; x: number; y: number; size: number; color: string; start: number; end: number; kind: "text" | "sticker" | "subtitle" };
+type Overlay = {
+  id: string;
+  text: string;
+  x: number;
+  y: number;
+  size: number;
+  color: string;
+  start: number;
+  end: number;
+  kind: "text" | "sticker" | "subtitle";
+};
 
 const QUICK_FILTERS: { id: string; name: string; cssFilter: string }[] = [
   { id: "none", name: "Normal", cssFilter: "none" },
@@ -43,6 +53,7 @@ export default function Upload() {
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
   const [overlays, setOverlays] = useState<Overlay[]>([]);
+  const [selectedOverlayId, setSelectedOverlayId] = useState<string | null>(null);
   const [textDraft, setTextDraft] = useState("");
   const [subtitleDraft, setSubtitleDraft] = useState("");
   const [overlayColor, setOverlayColor] = useState("#ffffff");
@@ -50,6 +61,8 @@ export default function Upload() {
   const [isExporting, setIsExporting] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const musicRef = useRef<HTMLAudioElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef<{ id: string; offsetX: number; offsetY: number } | null>(null);
 
   useEffect(() => {
     if (!file) return;
@@ -68,7 +81,9 @@ export default function Upload() {
     const video = videoRef.current;
     const onTime = () => {
       setProgress(video.duration ? video.currentTime / video.duration : 0);
-      if (musicRef.current) musicRef.current.currentTime = video.currentTime;
+      if (musicRef.current && Math.abs(musicRef.current.currentTime - video.currentTime) > 0.25) {
+        musicRef.current.currentTime = video.currentTime;
+      }
     };
     const onPlay = () => { setIsPlaying(true); musicRef.current?.play().catch(() => {}); };
     const onPause = () => { setIsPlaying(false); musicRef.current?.pause(); };
@@ -84,6 +99,25 @@ export default function Upload() {
       video.removeEventListener("ended", onEnded);
     };
   }, [step]);
+
+  useEffect(() => {
+    const move = (event: PointerEvent) => {
+      const drag = draggingRef.current;
+      const stage = stageRef.current;
+      if (!drag || !stage) return;
+      const rect = stage.getBoundingClientRect();
+      const x = Math.max(5, Math.min(95, ((event.clientX - rect.left) / rect.width) * 100 - drag.offsetX));
+      const y = Math.max(5, Math.min(95, ((event.clientY - rect.top) / rect.height) * 100 - drag.offsetY));
+      setOverlays((items) => items.map((item) => item.id === drag.id ? { ...item, x, y } : item));
+    };
+    const up = () => { draggingRef.current = null; };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+  }, []);
 
   const currentSeconds = useMemo(() => progress * duration, [progress, duration]);
   const visibleOverlays = overlays.filter((item) => currentSeconds >= item.start && currentSeconds <= item.end);
@@ -110,31 +144,57 @@ export default function Upload() {
     video.play().catch(() => {});
   };
 
+  const overlayTiming = () => {
+    const start = Math.max(0, Math.min(currentSeconds, duration || currentSeconds));
+    const end = Math.min(duration || 9999, Math.max(start + 1, trimEnd || duration || start + 1));
+    return { start, end };
+  };
+
   const addText = () => {
     const text = textDraft.trim();
     if (!text) return toast.error("Écris d'abord le texte");
-    const start = Math.max(0, currentSeconds);
-    const end = Math.min(duration || 9999, Math.max(start + 1, trimEnd || duration));
-    setOverlays((items) => [...items, { id: crypto.randomUUID(), text, x: 50, y: 45, size: overlaySize, color: overlayColor, start, end, kind: "text" }]);
+    const { start, end } = overlayTiming();
+    const id = crypto.randomUUID();
+    setOverlays((items) => [...items, { id, text, x: 50, y: 45, size: overlaySize, color: overlayColor, start, end, kind: "text" }]);
+    setSelectedOverlayId(id);
     setTextDraft("");
-    toast.success("Texte ajouté au montage");
+    toast.success("Texte ajouté sur la vidéo");
   };
 
   const addSticker = (sticker: string) => {
-    const start = Math.max(0, currentSeconds);
-    const end = Math.min(duration || 9999, Math.max(start + 1, trimEnd || duration));
-    setOverlays((items) => [...items, { id: crypto.randomUUID(), text: sticker, x: 50, y: 35, size: 48, color: "#ffffff", start, end, kind: "sticker" }]);
-    setTool(null);
+    const { start, end } = overlayTiming();
+    const id = crypto.randomUUID();
+    setOverlays((items) => [...items, { id, text: sticker, x: 50, y: 35, size: 48, color: "#ffffff", start, end, kind: "sticker" }]);
+    setSelectedOverlayId(id);
+    toast.success("Sticker ajouté sur la vidéo");
   };
 
   const addSubtitle = () => {
     const text = subtitleDraft.trim();
     if (!text) return toast.error("Écris le sous-titre");
-    const start = Math.max(0, currentSeconds);
-    const end = Math.min(duration || 9999, Math.max(start + 1, trimEnd || duration));
-    setOverlays((items) => [...items, { id: crypto.randomUUID(), text, x: 50, y: 84, size: 24, color: "#ffffff", start, end, kind: "subtitle" }]);
+    const { start, end } = overlayTiming();
+    const id = crypto.randomUUID();
+    setOverlays((items) => [...items, { id, text, x: 50, y: 84, size: 24, color: "#ffffff", start, end, kind: "subtitle" }]);
+    setSelectedOverlayId(id);
     setSubtitleDraft("");
-    toast.success("Sous-titre ajouté");
+    toast.success("Sous-titre ajouté sur la vidéo");
+  };
+
+  const deleteOverlay = (id: string) => {
+    setOverlays((items) => items.filter((item) => item.id !== id));
+    setSelectedOverlayId((current) => current === id ? null : current);
+  };
+
+  const startDrag = (event: React.PointerEvent<HTMLDivElement>, item: Overlay) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const stage = stageRef.current;
+    if (!stage) return;
+    const rect = stage.getBoundingClientRect();
+    const pointerX = ((event.clientX - rect.left) / rect.width) * 100;
+    const pointerY = ((event.clientY - rect.top) / rect.height) * 100;
+    draggingRef.current = { id: item.id, offsetX: pointerX - item.x, offsetY: pointerY - item.y };
+    setSelectedOverlayId(item.id);
   };
 
   const applyModel = (name: string) => {
@@ -170,7 +230,6 @@ export default function Upload() {
     const start = Math.max(0, Math.min(trimStart, duration));
     const end = Math.max(start + 0.2, Math.min(trimEnd || duration, duration));
     if (end <= start) { toast.error("La plage de montage est invalide"); return false; }
-
     setIsExporting(true);
     try {
       video.pause();
@@ -181,7 +240,6 @@ export default function Upload() {
         video.addEventListener("seeked", finish, { once: true });
         window.setTimeout(finish, 800);
       });
-
       const canvas = document.createElement("canvas");
       canvas.width = video.videoWidth || 720;
       canvas.height = video.videoHeight || 1280;
@@ -199,13 +257,11 @@ export default function Upload() {
         const source = audioContext.createMediaElementSource(audio);
         const destination = audioContext.createMediaStreamDestination();
         source.connect(destination);
-        source.connect(audioContext.destination);
         const track = destination.stream.getAudioTracks()[0];
         if (track) canvasStream.addTrack(track);
         await audioContext.resume();
         await audio.play().catch(() => {});
       }
-
       const mime = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"].find((type) => MediaRecorder.isTypeSupported(type));
       const recorder = mime ? new MediaRecorder(canvasStream, { mimeType: mime }) : new MediaRecorder(canvasStream);
       const chunks: Blob[] = [];
@@ -236,10 +292,7 @@ export default function Upload() {
       draw();
       await video.play();
       await new Promise<void>((resolve) => {
-        const check = () => {
-          if (video.currentTime >= end || video.ended) resolve();
-          else requestAnimationFrame(check);
-        };
+        const check = () => { if (video.currentTime >= end || video.ended) resolve(); else requestAnimationFrame(check); };
         check();
       });
       video.pause();
@@ -257,9 +310,7 @@ export default function Upload() {
       console.error("[Upload] montage export", error);
       toast.error("Impossible d'exporter le montage sur cet appareil");
       return false;
-    } finally {
-      setIsExporting(false);
-    }
+    } finally { setIsExporting(false); }
   };
 
   if (!isAuthenticated) return <div className="h-screen bg-black flex items-center justify-center text-white">Connexion requise</div>;
@@ -287,30 +338,45 @@ export default function Upload() {
   if (step === "edit") {
     const isImage = isImageFile(file);
     const openTool = (next: Tool) => setTool(next);
+    const selectedOverlay = overlays.find((item) => item.id === selectedOverlayId) || null;
     return (
       <div className="h-screen bg-black text-white overflow-hidden relative">
-        <div className="absolute inset-x-0 top-0 bottom-[116px] flex items-center justify-center bg-black">
+        <div ref={stageRef} className="absolute inset-x-0 top-0 bottom-[116px] flex items-center justify-center bg-black touch-none">
           {isImage ? (
             <img src={preview || ""} alt="Aperçu" className="w-full h-full object-cover" style={{ filter: editFilter?.cssFilter || "none" }} />
           ) : (
             <video ref={videoRef} src={preview || ""} autoPlay muted playsInline className="w-full h-full object-cover" style={{ filter: editFilter?.cssFilter || "none" }} onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)} onClick={togglePlayback} />
           )}
 
-          {!isImage && visibleOverlays.map((item) => (
-            <div key={item.id} className="absolute pointer-events-none select-none font-bold text-center" style={{ left: `${item.x}%`, top: `${item.y}%`, transform: "translate(-50%, -50%)", fontSize: item.size, color: item.color, textShadow: "0 2px 6px #000, 0 0 2px #000", whiteSpace: "pre-wrap", maxWidth: "85%" }}>
+          {visibleOverlays.map((item) => (
+            <div
+              key={item.id}
+              onPointerDown={(event) => startDrag(event, item)}
+              onClick={(event) => { event.stopPropagation(); setSelectedOverlayId(item.id); }}
+              className={`absolute select-none font-bold text-center cursor-move ${selectedOverlayId === item.id ? "ring-2 ring-white/80 rounded-lg px-2 py-1" : ""}`}
+              style={{ left: `${item.x}%`, top: `${item.y}%`, transform: "translate(-50%, -50%)", fontSize: item.size, color: item.color, textShadow: "0 2px 6px #000, 0 0 2px #000", whiteSpace: "pre-wrap", maxWidth: "85%", zIndex: 10, touchAction: "none" }}
+            >
               {item.text}
             </div>
           ))}
 
-          <div className="absolute top-0 left-0 right-0 p-4 flex items-center justify-between bg-gradient-to-b from-black/65 to-transparent">
+          {selectedOverlay && (
+            <div className="absolute left-1/2 top-16 -translate-x-1/2 z-30 flex items-center gap-2 rounded-full bg-black/70 backdrop-blur px-2 py-1.5">
+              <span className="text-[11px] px-2 max-w-32 truncate">{selectedOverlay.kind === "sticker" ? "Sticker" : selectedOverlay.kind === "subtitle" ? "Sous-titre" : "Texte"}</span>
+              <button onClick={() => deleteOverlay(selectedOverlay.id)} className="h-8 w-8 rounded-full bg-red-500 flex items-center justify-center" aria-label="Supprimer"><Trash2 size={15} /></button>
+              <button onClick={() => setSelectedOverlayId(null)} className="h-8 w-8 rounded-full bg-white/15 flex items-center justify-center" aria-label="Fermer"><Check size={15} /></button>
+            </div>
+          )}
+
+          <div className="absolute top-0 left-0 right-0 p-4 flex items-center justify-between bg-gradient-to-b from-black/65 to-transparent z-20">
             <button onClick={() => setStep("capture")} className="p-2 rounded-full bg-black/35" aria-label="Retour"><ArrowLeft size={25} /></button>
             <button onClick={() => setShowAudio(true)} className="rounded-full bg-black/50 px-5 py-2.5 text-sm font-bold flex items-center gap-2 max-w-[55%] truncate"><Music size={17} /><span className="truncate">{selectedMusic?.name || "Ajouter un son"}</span></button>
             <button onClick={resetMontagePlayback} className="p-2 rounded-full bg-black/35" aria-label="Recommencer"><RotateCcw size={22} /></button>
           </div>
 
-          {!isImage && !isPlaying && <button onClick={togglePlayback} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-16 w-16 rounded-full bg-black/55 backdrop-blur flex items-center justify-center" aria-label="Lire"><Play size={30} fill="white" /></button>}
+          {!isImage && !isPlaying && !tool && <button onClick={togglePlayback} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-16 w-16 rounded-full bg-black/55 backdrop-blur flex items-center justify-center z-20" aria-label="Lire"><Play size={30} fill="white" /></button>}
 
-          <div className="absolute right-3 top-24 flex flex-col gap-3 max-h-[65%] overflow-y-auto">
+          <div className="absolute right-3 top-24 flex flex-col gap-3 max-h-[65%] overflow-y-auto z-20">
             <ToolButton icon={<Scissors size={21} />} label="Modifier" onClick={() => openTool("trim")} />
             <ToolButton icon={<Type size={21} />} label="Texte" onClick={() => openTool("text")} />
             <ToolButton icon={<Smile size={21} />} label="Stickers" onClick={() => openTool("stickers")} />
@@ -321,12 +387,12 @@ export default function Upload() {
             <ToolButton icon={<Volume2 size={21} />} label="Audio" onClick={() => setShowAudio(true)} />
           </div>
 
-          {!isImage && <div className="absolute left-4 right-4 bottom-5"><div className="flex items-center gap-3"><button onClick={togglePlayback} className="h-9 w-9 rounded-full bg-black/55 flex items-center justify-center" aria-label={isPlaying ? "Pause" : "Lecture"}>{isPlaying ? <Pause size={17} /> : <Play size={17} fill="white" />}</button><input type="range" min="0" max="1" step="0.001" value={progress} onChange={(e) => seek(Number(e.target.value))} className="flex-1 accent-red-500" aria-label="Position dans la vidéo" /><span className="text-[11px] tabular-nums bg-black/45 px-2 py-1 rounded-full">{formatTime(currentSeconds)}</span></div></div>}
+          {!isImage && <div className="absolute left-4 right-4 bottom-5 z-20"><div className="flex items-center gap-3"><button onClick={togglePlayback} className="h-9 w-9 rounded-full bg-black/55 flex items-center justify-center" aria-label={isPlaying ? "Pause" : "Lecture"}>{isPlaying ? <Pause size={17} /> : <Play size={17} fill="white" />}</button><input type="range" min="0" max="1" step="0.001" value={progress} onChange={(e) => seek(Number(e.target.value))} className="flex-1 accent-red-500" aria-label="Position dans la vidéo" /><span className="text-[11px] tabular-nums bg-black/45 px-2 py-1 rounded-full">{formatTime(currentSeconds)}</span></div></div>}
         </div>
 
-        <div className="absolute bottom-0 left-0 right-0 h-[116px] bg-black px-4 py-3 z-20"><div className="flex items-center gap-2 mb-3 overflow-x-auto"><button onClick={() => setTool("autocut")} className="text-xs flex items-center gap-1.5 bg-white/10 px-3 py-2 rounded-full whitespace-nowrap"><Wand2 size={14} /> AutoCut</button><button onClick={() => setShowAudio(true)} className="text-xs flex items-center gap-1.5 bg-white/10 px-3 py-2 rounded-full whitespace-nowrap"><Music size={14} /> Son</button><span className="text-[11px] text-white/50 whitespace-nowrap">{overlays.length} élément(s)</span></div><div className="flex gap-3"><button onClick={() => navigate("/feed")} className="flex-1 py-3 rounded-full bg-white/10 font-bold text-sm">Annuler</button><button onClick={exportMontage} disabled={isExporting} className="flex-1 py-3 rounded-full bg-red-500 font-bold text-sm disabled:opacity-60 flex items-center justify-center gap-2">{isExporting ? <><Loader2 size={17} className="animate-spin" /> Export...</> : "Enregistrer le montage"}</button><button onClick={async () => { const ok = await exportMontage(); if (ok) setStep("publish"); }} disabled={isExporting} className="flex-1 py-3 rounded-full bg-white font-bold text-sm text-black">Suivant</button></div></div>
+        <div className="absolute bottom-0 left-0 right-0 h-[116px] bg-black px-4 py-3 z-40"><div className="flex items-center gap-2 mb-3 overflow-x-auto"><button onClick={() => setTool("autocut")} className="text-xs flex items-center gap-1.5 bg-white/10 px-3 py-2 rounded-full whitespace-nowrap"><Wand2 size={14} /> AutoCut</button><button onClick={() => setShowAudio(true)} className="text-xs flex items-center gap-1.5 bg-white/10 px-3 py-2 rounded-full whitespace-nowrap"><Music size={14} /> Son</button><span className="text-[11px] text-white/50 whitespace-nowrap">{overlays.length} élément(s)</span></div><div className="flex gap-3"><button onClick={() => navigate("/feed")} className="flex-1 py-3 rounded-full bg-white/10 font-bold text-sm">Annuler</button><button onClick={exportMontage} disabled={isExporting} className="flex-1 py-3 rounded-full bg-red-500 font-bold text-sm disabled:opacity-60 flex items-center justify-center gap-2">{isExporting ? <><Loader2 size={17} className="animate-spin" /> Export...</> : "Enregistrer le montage"}</button><button onClick={async () => { const ok = await exportMontage(); if (ok) setStep("publish"); }} disabled={isExporting} className="flex-1 py-3 rounded-full bg-white font-bold text-sm text-black">Suivant</button></div></div>
 
-        {tool && <div className="absolute inset-0 z-50 bg-black/96 p-4 overflow-y-auto"><div className="flex justify-between items-center mb-5"><h2 className="font-bold text-lg">{toolTitle(tool)}</h2><button onClick={() => setTool(null)}><X /></button></div>{tool === "trim" && <TrimPanel duration={duration} start={trimStart} end={trimEnd} onStart={setTrimStart} onEnd={setTrimEnd} onPreview={() => { if (videoRef.current) { videoRef.current.currentTime = trimStart; videoRef.current.play().catch(() => {}); } setTool(null); }} />}{tool === "text" && <OverlayPanel title="Ajouter du texte" value={textDraft} setValue={setTextDraft} size={overlaySize} setSize={setOverlaySize} color={overlayColor} setColor={setOverlayColor} onAdd={addText} items={overlays.filter((o) => o.kind === "text")} onDelete={(id) => setOverlays((items) => items.filter((o) => o.id !== id))} />}{tool === "stickers" && <StickerPanel onAdd={addSticker} items={overlays.filter((o) => o.kind === "sticker")} onDelete={(id) => setOverlays((items) => items.filter((o) => o.id !== id))} />}{tool === "subtitles" && <OverlayPanel title="Ajouter un sous-titre" value={subtitleDraft} setValue={setSubtitleDraft} size={24} setSize={() => {}} color="#ffffff" setColor={() => {}} onAdd={addSubtitle} items={overlays.filter((o) => o.kind === "subtitle")} onDelete={(id) => setOverlays((items) => items.filter((o) => o.id !== id))} />}{tool === "models" && <ModelPanel onApply={applyModel} />}{tool === "autocut" && <div className="space-y-4"><p className="text-white/70 text-sm">AutoCut sélectionne automatiquement un passage court et prêt à publier.</p><button onClick={applyAutoCut} className="w-full py-3 rounded-xl bg-red-500 font-bold">Appliquer AutoCut</button></div>}</div>}
+        {tool && <div className="absolute left-0 right-0 bottom-[116px] z-50 max-h-[52vh] overflow-y-auto rounded-t-3xl bg-[#101010] border-t border-white/10 shadow-2xl p-4 pb-6"><div className="flex justify-between items-center mb-4"><h2 className="font-bold text-lg">{toolTitle(tool)}</h2><button onClick={() => setTool(null)} className="h-9 w-9 rounded-full bg-white/10 flex items-center justify-center"><X /></button></div>{tool === "trim" && <TrimPanel duration={duration} start={trimStart} end={trimEnd} onStart={setTrimStart} onEnd={setTrimEnd} onPreview={() => { if (videoRef.current) { videoRef.current.currentTime = trimStart; videoRef.current.play().catch(() => {}); } setTool(null); }} />}{tool === "text" && <InlineTextPanel value={textDraft} setValue={setTextDraft} size={overlaySize} setSize={setOverlaySize} color={overlayColor} setColor={setOverlayColor} onAdd={addText} items={overlays.filter((o) => o.kind === "text")} onDelete={deleteOverlay} onDone={() => setTool(null)} />}{tool === "stickers" && <InlineStickerPanel onAdd={addSticker} items={overlays.filter((o) => o.kind === "sticker")} onDelete={deleteOverlay} onDone={() => setTool(null)} />}{tool === "subtitles" && <InlineSubtitlePanel value={subtitleDraft} setValue={setSubtitleDraft} onAdd={addSubtitle} items={overlays.filter((o) => o.kind === "subtitle")} onDelete={deleteOverlay} onDone={() => setTool(null)} />}{tool === "models" && <ModelPanel onApply={applyModel} />}{tool === "autocut" && <div className="space-y-4"><p className="text-white/70 text-sm">AutoCut sélectionne automatiquement un passage court et prêt à publier.</p><button onClick={applyAutoCut} className="w-full py-3 rounded-xl bg-red-500 font-bold">Appliquer AutoCut</button></div>}</div>}
 
         {showFilters && <div className="absolute inset-0 z-50 bg-black/95 p-4 overflow-y-auto"><div className="flex justify-between items-center mb-5"><h2 className="font-bold">Filtres</h2><button onClick={() => setShowFilters(false)}><X /></button></div><div className="flex gap-3 overflow-x-auto pb-4">{QUICK_FILTERS.map((filter) => <button key={filter.id} onClick={() => { setEditFilter(filter); setShowFilters(false); }} className="min-w-[70px] text-center"><div className="h-14 rounded-xl bg-white/10 border border-white/10" style={{ filter: filter.cssFilter }} /><span className="text-[10px]">{filter.name}</span></button>)}</div><FilterLibrary onFilterSelect={(filter: Filter) => { setEditFilter({ id: filter.id, cssFilter: filter.cssFilter || "none" }); setShowFilters(false); }} selectedFilters={editFilter ? [editFilter.id] : []} onFilterRemove={() => setEditFilter(null)} /></div>}
         {showEffects && <div className="absolute inset-0 z-50 bg-black/95 p-4 overflow-y-auto"><div className="flex justify-between items-center mb-5"><h2 className="font-bold">Effets</h2><button onClick={() => setShowEffects(false)}><X /></button></div><EffectsLibrary onEffectSelect={(effect) => toast.info(`Effet « ${effect.name} » disponible dans la bibliothèque`)} selectedEffects={[]} onEffectRemove={() => {}} /></div>}
@@ -343,7 +409,8 @@ function isImageFile(file: File | null) { return !!file?.type.startsWith("image/
 function formatTime(value: number) { return `${Math.floor(value / 60).toString().padStart(2, "0")}:${Math.floor(value % 60).toString().padStart(2, "0")}`; }
 function toolTitle(tool: Tool) { return ({ trim: "Modifier la vidéo", text: "Texte", stickers: "Stickers", subtitles: "Sous-titres", models: "Modèles", autocut: "AutoCut" } as Record<string, string>)[tool || ""] || "Montage"; }
 function ToolButton({ icon, label, onClick }: { icon: ReactNode; label: string; onClick: () => void }) { return <button onClick={onClick} className="flex flex-col items-center gap-1 shrink-0"><span className="h-11 w-11 rounded-full bg-black/45 backdrop-blur flex items-center justify-center">{icon}</span><span className="text-[11px] font-semibold">{label}</span></button>; }
-function TrimPanel({ duration, start, end, onStart, onEnd, onPreview }: { duration: number; start: number; end: number; onStart: (v: number) => void; onEnd: (v: number) => void; onPreview: () => void }) { return <div className="space-y-5"><p className="text-sm text-white/70">Choisis précisément le début et la fin. Le montage exporté contiendra uniquement cette partie.</p><div><label className="text-xs text-white/60">Début · {formatTime(start)}</label><input className="w-full" type="range" min="0" max={duration || 1} step="0.1" value={start} onChange={(e) => onStart(Math.min(Number(e.target.value), Math.max(0, end - 0.2)))} /></div><div><label className="text-xs text-white/60">Fin · {formatTime(end)}</label><input className="w-full" type="range" min="0" max={duration || 1} step="0.1" value={end || duration} onChange={(e) => onEnd(Math.max(Number(e.target.value), start + 0.2))} /></div><div className="flex gap-3"><button onClick={() => { onStart(0); onEnd(duration); }} className="flex-1 py-3 rounded-xl bg-white/10">Tout garder</button><button onClick={onPreview} className="flex-1 py-3 rounded-xl bg-red-500 font-bold">Prévisualiser</button></div></div>; }
-function OverlayPanel({ title, value, setValue, size, setSize, color, setColor, onAdd, items, onDelete }: { title: string; value: string; setValue: (v: string) => void; size: number; setSize: (v: number) => void; color: string; setColor: (v: string) => void; onAdd: () => void; items: Overlay[]; onDelete: (id: string) => void }) { return <div className="space-y-4"><input value={value} onChange={(e) => setValue(e.target.value)} placeholder="Écris ici..." className="w-full rounded-xl bg-white/10 border border-white/15 px-4 py-3 outline-none" /><div><div className="flex justify-between text-xs text-white/60"><span>Taille</span><span>{size}px</span></div><input type="range" min="16" max="72" value={size} onChange={(e) => setSize(Number(e.target.value))} className="w-full" /></div><div className="flex items-center gap-3"><span className="text-xs text-white/60">Couleur</span><input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="h-9 w-12 bg-transparent" /></div><button onClick={onAdd} className="w-full py-3 rounded-xl bg-red-500 font-bold">Ajouter au moment actuel</button><div className="space-y-2">{items.map((item) => <div key={item.id} className="flex items-center justify-between bg-white/5 rounded-xl px-3 py-2"><span className="truncate">{item.text}</span><button onClick={() => onDelete(item.id)} className="p-2 text-red-300"><X size={17} /></button></div>)}</div></div>; }
-function StickerPanel({ onAdd, items, onDelete }: { onAdd: (v: string) => void; items: Overlay[]; onDelete: (id: string) => void }) { return <div className="space-y-5"><div className="grid grid-cols-4 gap-3">{STICKERS.map((sticker) => <button key={sticker} onClick={() => onAdd(sticker)} className="text-3xl rounded-xl bg-white/10 py-4">{sticker}</button>)}</div><div className="space-y-2">{items.map((item) => <div key={item.id} className="flex items-center justify-between bg-white/5 rounded-xl px-3 py-2"><span className="text-2xl">{item.text}</span><button onClick={() => onDelete(item.id)} className="p-2 text-red-300"><X size={17} /></button></div>)}</div></div>; }
+function TrimPanel({ duration, start, end, onStart, onEnd, onPreview }: { duration: number; start: number; end: number; onStart: (v: number) => void; onEnd: (v: number) => void; onPreview: () => void }) { return <div className="space-y-5"><p className="text-sm text-white/70">Choisis précisément le début et la fin. La vidéo reste visible pendant le réglage.</p><div><label className="text-xs text-white/60">Début · {formatTime(start)}</label><input className="w-full" type="range" min="0" max={duration || 1} step="0.1" value={start} onChange={(e) => onStart(Math.min(Number(e.target.value), Math.max(0, end - 0.2)))} /></div><div><label className="text-xs text-white/60">Fin · {formatTime(end)}</label><input className="w-full" type="range" min="0" max={duration || 1} step="0.1" value={end || duration} onChange={(e) => onEnd(Math.max(Number(e.target.value), start + 0.2))} /></div><div className="flex gap-3"><button onClick={() => { onStart(0); onEnd(duration); }} className="flex-1 py-3 rounded-xl bg-white/10">Tout garder</button><button onClick={onPreview} className="flex-1 py-3 rounded-xl bg-red-500 font-bold">Prévisualiser</button></div></div>; }
+function InlineTextPanel({ value, setValue, size, setSize, color, setColor, onAdd, items, onDelete, onDone }: { value: string; setValue: (v: string) => void; size: number; setSize: (v: number) => void; color: string; setColor: (v: string) => void; onAdd: () => void; items: Overlay[]; onDelete: (id: string) => void; onDone: () => void }) { return <div className="space-y-3"><div className="flex gap-2"><input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="Écris ton texte..." className="flex-1 rounded-xl bg-white/10 border border-white/15 px-4 py-3 outline-none" /><button onClick={onAdd} className="px-4 rounded-xl bg-red-500 font-bold">Ajouter</button></div><div className="flex items-center gap-4"><div className="flex-1"><div className="flex justify-between text-xs text-white/60"><span>Taille</span><span>{size}px</span></div><input type="range" min="16" max="72" value={size} onChange={(e) => setSize(Number(e.target.value))} className="w-full" /></div><input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="h-9 w-12 bg-transparent" aria-label="Couleur du texte" /></div><p className="text-xs text-white/50">Le texte apparaît immédiatement sur la vidéo. Fais-le glisser directement avec le doigt pour le placer.</p><div className="flex flex-wrap gap-2">{items.map((item) => <div key={item.id} className="flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5"><span className="max-w-40 truncate text-sm">{item.text}</span><button onClick={() => onDelete(item.id)} aria-label="Supprimer"><Trash2 size={14} /></button></div>)}</div><button onClick={onDone} className="w-full py-2.5 rounded-xl bg-white/10 font-semibold">Terminer</button></div>; }
+function InlineStickerPanel({ onAdd, items, onDelete, onDone }: { onAdd: (v: string) => void; items: Overlay[]; onDelete: (id: string) => void; onDone: () => void }) { return <div className="space-y-3"><p className="text-xs text-white/50">Choisis un sticker : il apparaît directement sur la vidéo et tu peux le déplacer avec le doigt.</p><div className="grid grid-cols-6 gap-2">{STICKERS.map((sticker) => <button key={sticker} onClick={() => onAdd(sticker)} className="text-2xl rounded-xl bg-white/10 py-2.5 active:scale-95">{sticker}</button>)}</div><div className="flex flex-wrap gap-2">{items.map((item) => <div key={item.id} className="flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5"><span className="text-xl">{item.text}</span><button onClick={() => onDelete(item.id)} aria-label="Supprimer"><Trash2 size={14} /></button></div>)}</div><button onClick={onDone} className="w-full py-2.5 rounded-xl bg-white/10 font-semibold">Terminer</button></div>; }
+function InlineSubtitlePanel({ value, setValue, onAdd, items, onDelete, onDone }: { value: string; setValue: (v: string) => void; onAdd: () => void; items: Overlay[]; onDelete: (id: string) => void; onDone: () => void }) { return <div className="space-y-3"><div className="flex gap-2"><input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="Écris un sous-titre..." className="flex-1 rounded-xl bg-white/10 border border-white/15 px-4 py-3 outline-none" /><button onClick={onAdd} className="px-4 rounded-xl bg-red-500 font-bold">Ajouter</button></div><p className="text-xs text-white/50">Le sous-titre est placé au moment actuel et reste visible pendant la lecture.</p><div className="flex flex-wrap gap-2">{items.map((item) => <div key={item.id} className="flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5"><span className="max-w-40 truncate text-sm">{item.text}</span><button onClick={() => onDelete(item.id)} aria-label="Supprimer"><Trash2 size={14} /></button></div>)}</div><button onClick={onDone} className="w-full py-2.5 rounded-xl bg-white/10 font-semibold">Terminer</button></div>; }
 function ModelPanel({ onApply }: { onApply: (name: string) => void }) { return <div className="grid gap-3">{["Rapide", "Focus", "Complet"].map((name) => <button key={name} onClick={() => onApply(name)} className="rounded-xl bg-white/10 p-4 text-left"><div className="font-bold">{name}</div><div className="text-xs text-white/60 mt-1">{name === "Rapide" ? "Premières 15 secondes" : name === "Focus" ? "10 secondes autour du milieu" : "Toute la vidéo"}</div></button>)}</div>; }
