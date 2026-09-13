@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { buildVideoSegments, splitVideoAt } from "@/lib/video-split";
 
 type Range = { start: number; end: number };
@@ -34,6 +34,7 @@ const formatTime = (seconds: number) => {
 
 export function VideoTimeline({ src, currentTime, duration, trimStart, trimEnd, cuts, onCurrentTimeChange, onTrimChange, onCutsChange, onDurationChange }: VideoTimelineProps) {
   const trackRef = useRef<HTMLDivElement>(null);
+  const lastTapRef = useRef<{ time: number; at: number } | null>(null);
   const [thumbnails, setThumbnails] = useState<string[]>([]);
   const [dragging, setDragging] = useState<"playhead" | "start" | "end" | null>(null);
   const [splitPoints, setSplitPoints] = useState<number[]>([]);
@@ -84,8 +85,9 @@ export function VideoTimeline({ src, currentTime, duration, trimStart, trimEnd, 
 
   const splitAt = (time: number) => {
     const next = splitVideoAt(time, safeStart, safeEnd, cutSegments, splitPoints);
-    if (next.length === splitPoints.length) return;
+    if (next.length === splitPoints.length) return false;
     setSplitPoints(next);
+    return true;
   };
 
   useEffect(() => {
@@ -108,11 +110,21 @@ export function VideoTimeline({ src, currentTime, duration, trimStart, trimEnd, 
     onCurrentTimeChange(blocked ? Math.min(blocked.end, safeEnd) : value);
   };
 
-  const handleTrackDoubleClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+  const handleTrackTap = (event: ReactPointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest("button")) return;
     const value = clamp(positionFromPointer(event.clientX), safeStart, safeEnd);
-    splitAt(value);
-    onCurrentTimeChange(value);
+    const now = Date.now();
+    const previous = lastTapRef.current;
+    const isDoubleTap = !!previous && now - previous.at < 420 && Math.abs(previous.time - value) < Math.max(0.7, safeDuration * 0.04);
+    if (isDoubleTap) {
+      splitAt(value);
+      lastTapRef.current = null;
+    } else {
+      lastTapRef.current = { time: value, at: now };
+      window.setTimeout(() => {
+        if (lastTapRef.current?.at === now) lastTapRef.current = null;
+      }, 450);
+    }
   };
 
   const playheadPercent = (current / safeDuration) * 100;
@@ -121,7 +133,7 @@ export function VideoTimeline({ src, currentTime, duration, trimStart, trimEnd, 
 
   return <section className="w-full select-none bg-black text-white" aria-label="Timeline de montage vidéo">
     <div className="flex items-center justify-between px-3 py-1.5 text-xs text-white/80"><span>{formatTime(current)}</span><span>{formatTime(Math.max(0, safeEnd - safeStart))}</span></div>
-    <div ref={trackRef} className="relative mx-3 h-[78px] overflow-hidden rounded-lg bg-white/10 touch-none" onPointerDown={handleTrackPointer} onDoubleClick={handleTrackDoubleClick}>
+    <div ref={trackRef} className="relative mx-3 h-[78px] overflow-hidden rounded-lg bg-white/10 touch-none" onPointerDown={handleTrackPointer} onPointerUp={handleTrackTap}>
       <div className="absolute inset-0 flex">{(thumbnails.length ? thumbnails : Array.from({ length: 14 })).map((thumbnail, index) => <div key={index} className="relative h-full flex-1 overflow-hidden border-r border-black/30">{thumbnail && <img src={thumbnail} alt="" className="h-full w-full object-cover" draggable={false} />}</div>)}</div>
       <div className="pointer-events-none absolute inset-y-0 left-0 bg-black/65" style={{ width: `${startPercent}%` }} />
       <div className="pointer-events-none absolute inset-y-0 right-0 bg-black/65" style={{ width: `${100 - endPercent}%` }} />
@@ -129,7 +141,7 @@ export function VideoTimeline({ src, currentTime, duration, trimStart, trimEnd, 
       {segments.slice(0, -1).map((segment) => <div key={`split-${segment.end}`} className="pointer-events-none absolute inset-y-0 z-20 w-0.5 bg-white/90" style={{ left: `${(segment.end / safeDuration) * 100}%` }} />)}
       <div className="pointer-events-none absolute inset-y-0 z-10 border-x-2 border-white" style={{ left: `${startPercent}%`, width: `${Math.max(0, endPercent - startPercent)}%` }} />
       <button type="button" aria-label="Début de la vidéo" className="absolute top-0 bottom-0 z-30 w-5 -translate-x-1/2 touch-none" style={{ left: `${startPercent}%` }} onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture?.(event.pointerId); setDragging("start"); }}><span className="mx-auto block h-full w-1 rounded-full bg-white" /><span className="absolute left-1/2 top-1/2 h-10 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow" /></button>
-      <button type="button" aria-label="Fin de la vidéo" className="absolute top-0 bottom-0 z-30 w-5 -translate-x-1/2 touch-none" style={{ left: `${endPercent}%` }} onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture?.(event.pointerId); setDragging("end"); }}><span className="mx-auto block h-full w-1 rounded-full bg-white shadow" /></button>
+      <button type="button" aria-label="Fin de la vidéo" className="absolute top-0 bottom-0 z-30 w-5 -translate-x-1/2 touch-none" style={{ left: `${endPercent}%` }} onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture?.(event.pointerId); setDragging("end"); }}><span className="mx-auto block h-full w-1 rounded-full bg-white" /><span className="absolute left-1/2 top-1/2 h-10 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow" /></button>
       <button type="button" aria-label="Position de lecture" className="absolute top-0 bottom-0 z-40 w-4 -translate-x-1/2 touch-none" style={{ left: `${playheadPercent}%` }} onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture?.(event.pointerId); setDragging("playhead"); }}><span className="absolute left-1/2 top-0 h-full w-0.5 -translate-x-1/2 bg-white" /><span className="absolute left-1/2 top-0 h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-white" /></button>
     </div>
     <div className="flex items-center justify-between px-3 py-1.5 text-[10px] text-white/55"><span>{formatTime(safeStart)}</span><span>{formatTime(safeEnd)}</span></div>
