@@ -7,7 +7,7 @@ import AudioSelector from "@/components/AudioSelector.tsx";
 import { FilterLibrary, Filter } from "@/components/FilterLibrary";
 import { EffectsLibrary } from "@/components/EffectsLibrary";
 import { useUpload } from "@/contexts/UploadContext";
-import { ArrowLeft, ChevronDown, Film, Music, Pause, Play, RotateCcw, Sparkles, Type, Volume2, X } from "lucide-react";
+import { ArrowLeft, Music, Pause, Play, RotateCcw, Sparkles, Volume2, X } from "lucide-react";
 import { toast } from "sonner";
 
 type Step = "capture" | "edit" | "publish";
@@ -23,7 +23,7 @@ const QUICK_FILTERS: { id: string; name: string; cssFilter: string }[] = [
 export default function Upload() {
   const [, navigate] = useLocation();
   const { isAuthenticated } = useAuth();
-  const { file, setFile, preview, setPreview, selectedMusic, setSelectedMusic } = useUpload();
+  const { file, setFile, setPreview, selectedMusic, setSelectedMusic } = useUpload();
   const [step, setStep] = useState<Step>("capture");
   const [showAudio, setShowAudio] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -47,29 +47,38 @@ export default function Upload() {
     const video = videoRef.current;
     const onTime = () => {
       setProgress(video.duration ? video.currentTime / video.duration : 0);
+      if (musicRef.current) musicRef.current.currentTime = video.currentTime;
     };
-    const onPlay = () => setIsPlaying(true);
-    const onPause = () => setIsPlaying(false);
+    const onPlay = () => {
+      setIsPlaying(true);
+      musicRef.current?.play().catch(() => {});
+    };
+    const onPause = () => {
+      setIsPlaying(false);
+      musicRef.current?.pause();
+    };
+    const onEnded = () => {
+      setIsPlaying(false);
+      setProgress(1);
+      if (musicRef.current) musicRef.current.pause();
+    };
     video.addEventListener("timeupdate", onTime);
     video.addEventListener("play", onPlay);
     video.addEventListener("pause", onPause);
+    video.addEventListener("ended", onEnded);
     return () => {
       video.removeEventListener("timeupdate", onTime);
       video.removeEventListener("play", onPlay);
       video.removeEventListener("pause", onPause);
+      video.removeEventListener("ended", onEnded);
     };
-  }, [step, preview]);
+  }, [step]);
 
   const togglePlayback = () => {
     const video = videoRef.current;
     if (!video) return;
-    if (video.paused) {
-      video.play().catch(() => {});
-      musicRef.current?.play().catch(() => {});
-    } else {
-      video.pause();
-      musicRef.current?.pause();
-    }
+    if (video.paused) video.play().catch(() => {});
+    else video.pause();
   };
 
   const seek = (value: number) => {
@@ -101,16 +110,12 @@ export default function Upload() {
               toast.error("La vidéo enregistrée est vide. Réessaie.");
               return;
             }
-            const recordedFile = new File([blob], "video.webm", { type: blob.type || "video/webm" });
-            setFile(recordedFile);
-            setPreview(URL.createObjectURL(recordedFile));
+            setFile(new File([blob], "video.webm", { type: blob.type || "video/webm" }));
             setStep("edit");
             toast.success(`Vidéo prête pour le montage · ${recordedDuration}s`);
           }}
           onPhotoTaken={(blob) => {
-            const photoFile = new File([blob], "photo.jpg", { type: "image/jpeg" });
-            setFile(photoFile);
-            setPreview(URL.createObjectURL(photoFile));
+            setFile(new File([blob], "photo.jpg", { type: "image/jpeg" }));
             setStep("edit");
           }}
           onClose={() => navigate("/feed")}
@@ -134,26 +139,23 @@ export default function Upload() {
     const isImage = file?.type.startsWith("image/");
     return (
       <div className="h-screen bg-black text-white overflow-hidden relative">
-        {/* Preview vidéo/photo */}
         <div className="absolute inset-x-0 top-0 bottom-[108px] flex items-center justify-center bg-black">
           {isImage ? (
-            <img src={preview || ""} alt="Aperçu" className="w-full h-full object-cover" style={{ filter: editFilter?.cssFilter || "none" }} />
+            <img src={URL.createObjectURL(file!)} alt="Aperçu" className="w-full h-full object-cover" style={{ filter: editFilter?.cssFilter || "none" }} />
           ) : (
             <video
               ref={videoRef}
-              src={preview || ""}
+              src={URL.createObjectURL(file!)}
               autoPlay
               muted
               playsInline
               className="w-full h-full object-cover"
               style={{ filter: editFilter?.cssFilter || "none" }}
               onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
-              onEnded={() => { setIsPlaying(false); setProgress(1); }}
               onClick={togglePlayback}
             />
           )}
 
-          {/* En-tête façon montage TikTok */}
           <div className="absolute top-0 left-0 right-0 p-4 flex items-center justify-between bg-gradient-to-b from-black/65 to-transparent">
             <button onClick={() => setStep("capture")} className="p-2 rounded-full bg-black/35" aria-label="Retour">
               <ArrowLeft size={25} />
@@ -167,27 +169,13 @@ export default function Upload() {
             </button>
           </div>
 
-          {/* Commande lecture centrale */}
           {!isImage && !isPlaying && (
             <button onClick={togglePlayback} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-16 w-16 rounded-full bg-black/55 backdrop-blur flex items-center justify-center" aria-label="Lire">
               <Play size={30} fill="white" />
             </button>
           )}
 
-          {/* Outils de montage : on laisse effets/filtres à part */}
-          <div className="absolute right-3 top-20 bottom-24 flex flex-col justify-center gap-4">
-            <button onClick={() => toast.info("Modifier sera ajouté dans l'étape suivante.")} className="flex flex-col items-center gap-1">
-              <span className="h-11 w-11 rounded-full bg-black/45 backdrop-blur flex items-center justify-center"><Film size={22} /></span>
-              <span className="text-[11px] font-semibold">Modifier</span>
-            </button>
-            <button onClick={() => toast.info("Les modèles seront ajoutés ensuite.")} className="flex flex-col items-center gap-1">
-              <span className="h-11 w-11 rounded-full bg-black/45 backdrop-blur flex items-center justify-center"><Film size={22} /></span>
-              <span className="text-[11px] font-semibold">Modèles</span>
-            </button>
-            <button onClick={() => toast.info("Le texte sera ajouté dans la prochaine étape.")} className="flex flex-col items-center gap-1">
-              <span className="h-11 w-11 rounded-full bg-black/45 backdrop-blur flex items-center justify-center"><Type size={22} /></span>
-              <span className="text-[11px] font-semibold">Texte</span>
-            </button>
+          <div className="absolute right-3 top-24 flex flex-col gap-4">
             <button onClick={() => setShowEffects(true)} className="flex flex-col items-center gap-1">
               <span className="h-11 w-11 rounded-full bg-black/45 backdrop-blur flex items-center justify-center"><Sparkles size={22} /></span>
               <span className="text-[11px] font-semibold">Effets</span>
@@ -196,13 +184,12 @@ export default function Upload() {
               <span className="h-11 w-11 rounded-full bg-black/45 backdrop-blur flex items-center justify-center"><Sparkles size={22} /></span>
               <span className="text-[11px] font-semibold">Filtres</span>
             </button>
-            <button onClick={() => toast.info("Effet vocal sera ajouté ensuite.")} className="flex flex-col items-center gap-1">
+            <button onClick={() => setShowAudio(true)} className="flex flex-col items-center gap-1">
               <span className="h-11 w-11 rounded-full bg-black/45 backdrop-blur flex items-center justify-center"><Volume2 size={22} /></span>
-              <span className="text-[11px] font-semibold">Voix</span>
+              <span className="text-[11px] font-semibold">Audio</span>
             </button>
           </div>
 
-          {/* Timeline de montage */}
           {!isImage && (
             <div className="absolute left-4 right-4 bottom-5">
               <div className="flex items-center gap-3">
@@ -219,13 +206,14 @@ export default function Upload() {
                   className="flex-1 accent-red-500"
                   aria-label="Position dans la vidéo"
                 />
-                <span className="text-[11px] tabular-nums bg-black/45 px-2 py-1 rounded-full">{Math.floor((progress * duration) / 60).toString().padStart(2, "0")}:{Math.floor(progress * duration % 60).toString().padStart(2, "0")}</span>
+                <span className="text-[11px] tabular-nums bg-black/45 px-2 py-1 rounded-full">
+                  {Math.floor((progress * duration) / 60).toString().padStart(2, "0")}:{Math.floor((progress * duration) % 60).toString().padStart(2, "0")}
+                </span>
               </div>
             </div>
           )}
         </div>
 
-        {/* Barre inférieure */}
         <div className="absolute bottom-0 left-0 right-0 h-[108px] bg-black px-4 py-3 z-20">
           <div className="flex items-center gap-3 mb-3">
             <button onClick={() => setShowAudio(true)} className="text-xs flex items-center gap-1.5 bg-white/10 px-3 py-2 rounded-full"><Music size={14} /> Son</button>
@@ -237,13 +225,9 @@ export default function Upload() {
           </div>
         </div>
 
-        {/* Panneau filtres : logique existante conservée */}
         {showFilters && (
           <div className="absolute inset-0 z-50 bg-black/95 p-4 overflow-y-auto">
-            <div className="flex justify-between items-center mb-5">
-              <h2 className="font-bold">Filtres</h2>
-              <button onClick={() => setShowFilters(false)}><X /></button>
-            </div>
+            <div className="flex justify-between items-center mb-5"><h2 className="font-bold">Filtres</h2><button onClick={() => setShowFilters(false)}><X /></button></div>
             <div className="flex gap-3 overflow-x-auto pb-4">
               {QUICK_FILTERS.map((filter) => (
                 <button key={filter.id} onClick={() => { setEditFilter(filter); setShowFilters(false); }} className="min-w-[70px] text-center">
@@ -260,13 +244,9 @@ export default function Upload() {
           </div>
         )}
 
-        {/* Panneau effets : bibliothèque existante conservée */}
         {showEffects && (
           <div className="absolute inset-0 z-50 bg-black/95 p-4 overflow-y-auto">
-            <div className="flex justify-between items-center mb-5">
-              <h2 className="font-bold">Effets</h2>
-              <button onClick={() => setShowEffects(false)}><X /></button>
-            </div>
+            <div className="flex justify-between items-center mb-5"><h2 className="font-bold">Effets</h2><button onClick={() => setShowEffects(false)}><X /></button></div>
             <EffectsLibrary
               onEffectSelect={(effect) => toast.info(`Effet "${effect.name}" appliqué`)}
               selectedEffects={[]}
