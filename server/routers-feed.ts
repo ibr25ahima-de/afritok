@@ -12,8 +12,7 @@ export const feedRouter = router({
         offset: z.number().int().min(0).max(1000000).default(0),
       })
     )
-    .query(async ({ input }) => {
-      const videos = await getFeedVideos(input.limit, input.offset);
-      return videos;
+    .query(async ({ input, ctx }) => {
+      return getFeedVideos(input.limit, input.offset, ctx.user?.id ?? null);
     }),
 });
