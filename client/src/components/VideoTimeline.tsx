@@ -161,7 +161,7 @@ export function VideoTimeline({
 
   const cutSegments = useMemo(() => mergeRanges(cuts), [cuts]);
 
-  const handleCutTap = (event: React.PointerEvent<HTMLDivElement>) => {
+  const handleCutTap = (event: PointerEvent<HTMLDivElement>) => {
     const value = positionFromPointer(event.clientX);
     const blocked = cutSegments.find((range) => value >= range.start && value <= range.end);
     if (blocked) {
