@@ -2,9 +2,11 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
-import { Loader2 } from "lucide-react";
+import { Loader2, Globe2, Users, Lock } from "lucide-react";
 import { useUpload } from "@/contexts/UploadContext";
 import { PremiumPublishOptions, PremiumPublishOptionsValue } from "@/components/PremiumPublishOptions";
+
+type VideoVisibility = "public" | "followers" | "private";
 
 export default function Publish() {
   const [, navigate] = useLocation();
@@ -14,6 +16,7 @@ export default function Publish() {
   const [title, setTitle] = useState("");
   const [loading, setLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [visibility, setVisibility] = useState<VideoVisibility>("public");
   const [premiumOptions, setPremiumOptions] = useState<PremiumPublishOptionsValue>({ quality: "standard", scheduledAt: null, commentsMode: "all" });
 
   const uploadMutation = trpc.video.upload.useMutation();
@@ -69,15 +72,21 @@ export default function Publish() {
         } catch (thumbErr) { console.warn("Échec upload miniature:", thumbErr); }
       }
       setUploadProgress(90);
-      const result = await uploadMutation.mutateAsync({ title: title.trim(), description: caption.trim(), videoUrl, thumbnailUrl, musicUrl: selectedMusic?.url || null, musicName: selectedMusic?.name || null, premiumOptions: premiumStatus?.isPremium ? premiumOptions : undefined });
+      const result = await uploadMutation.mutateAsync({ title: title.trim(), description: caption.trim(), videoUrl, thumbnailUrl, musicUrl: selectedMusic?.url || null, musicName: selectedMusic?.name || null, visibility, premiumOptions: premiumStatus?.isPremium ? premiumOptions : undefined });
       setUploadProgress(100);
       alert(result.success ? (premiumOptions.scheduledAt ? "Vidéo programmée avec succès ! ✅" : "Vidéo publiée avec succès ! ✅") : "Publication impossible");
-      setTitle(""); setCaption(""); setUploadProgress(0); navigate("/feed");
+      setTitle(""); setCaption(""); setVisibility("public"); setUploadProgress(0); navigate("/feed");
     } catch (err: any) {
       console.error("Erreur publication:", err);
       alert("ERREUR: " + (err?.shape?.message || err?.message || JSON.stringify(err)));
     } finally { setLoading(false); }
   };
+
+  const visibilityOptions = [
+    { value: "public" as const, label: "Tout le monde", description: "Tous les utilisateurs peuvent voir cette vidéo", icon: Globe2 },
+    { value: "followers" as const, label: "Mes abonnés uniquement", description: "Seuls tes abonnés peuvent voir cette vidéo", icon: Users },
+    { value: "private" as const, label: "Moi uniquement", description: "Seul toi peux voir cette vidéo", icon: Lock },
+  ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white flex flex-col p-4">
@@ -85,6 +94,40 @@ export default function Publish() {
       {preview && <video src={preview} className="w-full h-60 object-cover rounded-lg mb-6" autoPlay loop muted />}
       <input type="text" placeholder="Titre de la vidéo..." value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-slate-800 border border-purple-800/50 rounded-lg px-4 py-2 text-white mb-4" />
       <textarea placeholder="Description..." value={caption} onChange={e => setCaption(e.target.value)} className="w-full bg-slate-800 border border-purple-800/50 rounded-lg px-3 py-3 text-white mb-4 resize-none" rows={4} />
+
+      <section className="mb-5">
+        <div className="mb-2">
+          <h2 className="text-base font-semibold">Qui peut voir cette vidéo ?</h2>
+          <p className="text-xs text-slate-300 mt-1">Ce choix s'applique uniquement à cette vidéo.</p>
+        </div>
+        <div className="space-y-2">
+          {visibilityOptions.map(option => {
+            const Icon = option.icon;
+            const selected = visibility === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setVisibility(option.value)}
+                disabled={loading}
+                className={`w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition ${selected ? "border-purple-400 bg-purple-600/20" : "border-slate-700 bg-slate-800/70 hover:bg-slate-800"}`}
+              >
+                <span className={`flex h-9 w-9 items-center justify-center rounded-full ${selected ? "bg-purple-600" : "bg-slate-700"}`}>
+                  <Icon className="w-4 h-4" />
+                </span>
+                <span className="flex-1">
+                  <span className="block text-sm font-semibold">{option.label}</span>
+                  <span className="block text-xs text-slate-300 mt-0.5">{option.description}</span>
+                </span>
+                <span className={`h-5 w-5 rounded-full border flex items-center justify-center ${selected ? "border-purple-400" : "border-slate-500"}`}>
+                  {selected && <span className="h-2.5 w-2.5 rounded-full bg-purple-400" />}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
       <PremiumPublishOptions enabled={premiumStatus?.isPremium === true} onChange={setPremiumOptions} />
       {uploadProgress > 0 && uploadProgress < 100 && <div className="w-full bg-slate-700 rounded-full h-2 mb-4"><div className="bg-gradient-to-r from-purple-600 to-pink-600 h-2 rounded-full transition-all" style={{ width: `${uploadProgress}%` }} /></div>}
       <button onClick={handlePublish} disabled={loading || !file || !title.trim()} className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 py-3 rounded-lg font-semibold flex justify-center items-center gap-2 transition">
