@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { buildVideoSegments, splitVideoAt } from "@/lib/video-split";
 
 type Range = { start: number; end: number };
@@ -108,7 +108,7 @@ export function VideoTimeline({ src, currentTime, duration, trimStart, trimEnd, 
     onCurrentTimeChange(blocked ? Math.min(blocked.end, safeEnd) : value);
   };
 
-  const handleTrackDoubleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+  const handleTrackDoubleClick = (event: ReactMouseEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest("button")) return;
     const value = clamp(positionFromPointer(event.clientX), safeStart, safeEnd);
     splitAt(value);
@@ -129,7 +129,7 @@ export function VideoTimeline({ src, currentTime, duration, trimStart, trimEnd, 
       {segments.slice(0, -1).map((segment) => <div key={`split-${segment.end}`} className="pointer-events-none absolute inset-y-0 z-20 w-0.5 bg-white/90" style={{ left: `${(segment.end / safeDuration) * 100}%` }} />)}
       <div className="pointer-events-none absolute inset-y-0 z-10 border-x-2 border-white" style={{ left: `${startPercent}%`, width: `${Math.max(0, endPercent - startPercent)}%` }} />
       <button type="button" aria-label="Début de la vidéo" className="absolute top-0 bottom-0 z-30 w-5 -translate-x-1/2 touch-none" style={{ left: `${startPercent}%` }} onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture?.(event.pointerId); setDragging("start"); }}><span className="mx-auto block h-full w-1 rounded-full bg-white" /><span className="absolute left-1/2 top-1/2 h-10 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow" /></button>
-      <button type="button" aria-label="Fin de la vidéo" className="absolute top-0 bottom-0 z-30 w-5 -translate-x-1/2 touch-none" style={{ left: `${endPercent}%` }} onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture?.(event.pointerId); setDragging("end"); }}><span className="mx-auto block h-full w-1 rounded-full bg-white" /><span className="absolute left-1/2 top-1/2 h-10 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow" /></button>
+      <button type="button" aria-label="Fin de la vidéo" className="absolute top-0 bottom-0 z-30 w-5 -translate-x-1/2 touch-none" style={{ left: `${endPercent}%` }} onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture?.(event.pointerId); setDragging("end"); }}><span className="mx-auto block h-full w-1 rounded-full bg-white shadow" /></button>
       <button type="button" aria-label="Position de lecture" className="absolute top-0 bottom-0 z-40 w-4 -translate-x-1/2 touch-none" style={{ left: `${playheadPercent}%` }} onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture?.(event.pointerId); setDragging("playhead"); }}><span className="absolute left-1/2 top-0 h-full w-0.5 -translate-x-1/2 bg-white" /><span className="absolute left-1/2 top-0 h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-white" /></button>
     </div>
     <div className="flex items-center justify-between px-3 py-1.5 text-[10px] text-white/55"><span>{formatTime(safeStart)}</span><span>{formatTime(safeEnd)}</span></div>
