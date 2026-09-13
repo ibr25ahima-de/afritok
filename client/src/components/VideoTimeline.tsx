@@ -90,6 +90,11 @@ export function VideoTimeline({ src, currentTime, duration, trimStart, trimEnd, 
     return true;
   };
 
+  const splitCurrent = () => {
+    if (splitAt(current)) return;
+    // Keep the action honest: a split at an existing boundary or at the ends does nothing.
+  };
+
   useEffect(() => {
     const move = (event: PointerEvent) => {
       if (!dragging) return;
@@ -141,11 +146,15 @@ export function VideoTimeline({ src, currentTime, duration, trimStart, trimEnd, 
       {segments.slice(0, -1).map((segment) => <div key={`split-${segment.end}`} className="pointer-events-none absolute inset-y-0 z-20 w-0.5 bg-white/90" style={{ left: `${(segment.end / safeDuration) * 100}%` }} />)}
       <div className="pointer-events-none absolute inset-y-0 z-10 border-x-2 border-white" style={{ left: `${startPercent}%`, width: `${Math.max(0, endPercent - startPercent)}%` }} />
       <button type="button" aria-label="Début de la vidéo" className="absolute top-0 bottom-0 z-30 w-5 -translate-x-1/2 touch-none" style={{ left: `${startPercent}%` }} onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture?.(event.pointerId); setDragging("start"); }}><span className="mx-auto block h-full w-1 rounded-full bg-white" /><span className="absolute left-1/2 top-1/2 h-10 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow" /></button>
-      <button type="button" aria-label="Fin de la vidéo" className="absolute top-0 bottom-0 z-30 w-5 -translate-x-1/2 touch-none" style={{ left: `${endPercent}%` }} onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture?.(event.pointerId); setDragging("end"); }}><span className="mx-auto block h-full w-1 rounded-full bg-white" /><span className="absolute left-1/2 top-1/2 h-10 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow" /></button>
+      <button type="button" aria-label="Fin de la vidéo" className="absolute top-0 bottom-0 z-30 w-5 -translate-x-1/2 touch-none" style={{ left: `${endPercent}%` }} onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture?.(event.pointerId); setDragging("end"); }}><span className="mx-auto block h-full w-1 rounded-full bg-white" /><span className="absolute left-1/2 top-0 h-full w-0.5 -translate-x-1/2 bg-white" /><span className="absolute left-1/2 top-1/2 h-10 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow" /></button>
       <button type="button" aria-label="Position de lecture" className="absolute top-0 bottom-0 z-40 w-4 -translate-x-1/2 touch-none" style={{ left: `${playheadPercent}%` }} onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture?.(event.pointerId); setDragging("playhead"); }}><span className="absolute left-1/2 top-0 h-full w-0.5 -translate-x-1/2 bg-white" /><span className="absolute left-1/2 top-0 h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-white" /></button>
     </div>
     <div className="flex items-center justify-between px-3 py-1.5 text-[10px] text-white/55"><span>{formatTime(safeStart)}</span><span>{formatTime(safeEnd)}</span></div>
-    {splitPoints.length > 0 && <div className="px-3 pb-1 text-[10px] text-white/55">{splitPoints.length} division{splitPoints.length > 1 ? "s" : ""} · double-appuie sur la timeline pour créer une nouvelle séparation.</div>}
+    <div className="flex items-center justify-center gap-2 px-3 pb-1.5">
+      <button type="button" onClick={splitCurrent} disabled={current <= safeStart + 0.05 || current >= safeEnd - 0.05 || cutSegments.some((r) => current > r.start && current < r.end)} className="rounded-full bg-white/10 px-4 py-1.5 text-xs font-semibold disabled:opacity-35">Diviser</button>
+      {splitPoints.length > 0 && <span className="text-[10px] text-white/55">{splitPoints.length} division{splitPoints.length > 1 ? "s" : ""}</span>}
+    </div>
+    {splitPoints.length > 0 && <div className="px-3 pb-1 text-[10px] text-white/55">Les séparations sont placées à la position de lecture. Double-appuie aussi sur la timeline pour diviser.</div>}
     {cutSegments.length > 0 && <div className="px-3 pb-2 text-[10px] text-white/45">Les zones assombries seront retirées au montage.</div>}
   </section>;
 }
