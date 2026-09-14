@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Check, Play, Pause, Undo2, Redo2, Maximize2, Scissors, Trash2, Replace, Music2, Volume2, VolumeX, Gauge } from "lucide-react";
+import { ArrowLeft, Check, Play, Pause, Undo2, Redo2, Maximize2, Scissors, Trash2, Replace, Music2, Volume2, VolumeX, Gauge, Crop, RotateCw, SlidersHorizontal, Sparkles, FlipHorizontal2 } from "lucide-react";
 import { toast } from "sonner";
 import AudioSelector from "@/components/AudioSelector";
 import { useUpload } from "@/contexts/UploadContext";
@@ -28,6 +28,16 @@ export function ClipEditorFixed({ src, duration, trimStart, trimEnd, cuts, onTri
   const [speed, setSpeed] = useState(1);
   const [showSpeed, setShowSpeed] = useState(false);
   const [showAudio, setShowAudio] = useState(false);
+  const [showCrop, setShowCrop] = useState(false);
+  const [showAdjust, setShowAdjust] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [brightness, setBrightness] = useState(100);
+  const [contrast, setContrast] = useState(100);
+  const [saturation, setSaturation] = useState(100);
+  const [visualFilter, setVisualFilter] = useState("none");
+  const [cropRatio, setCropRatio] = useState<"original" | "square" | "portrait" | "landscape">("original");
+  const [rotation, setRotation] = useState(0);
+  const [flip, setFlip] = useState(false);
   const [history, setHistory] = useState<Range[][]>([]);
   const [future, setFuture] = useState<Range[][]>([]);
   const [thumbs, setThumbs] = useState<string[]>([]);
@@ -117,7 +127,7 @@ export function ClipEditorFixed({ src, duration, trimStart, trimEnd, cuts, onTri
   return <div className="fixed inset-0 z-[100] bg-black text-white flex flex-col">
     <header className="h-14 shrink-0 flex items-center justify-between px-3"><button onClick={onClose} className="w-10 h-10 rounded-full flex items-center justify-center" aria-label="Retour"><ArrowLeft size={26}/></button><span className="font-semibold text-sm">Modifier</span><button onClick={onClose} className="w-10 h-10 rounded-full flex items-center justify-center text-red-400" aria-label="Terminer"><Check size={26}/></button></header>
     <div className="flex-1 min-h-0 flex flex-col">
-      <div className="flex-1 min-h-0 flex items-center justify-center px-4"><video ref={videoRef} src={src} playsInline muted={muted} className="max-h-full max-w-full object-contain" onClick={()=>videoRef.current?.paused?videoRef.current.play():videoRef.current?.pause()}/></div>
+      <div className="flex-1 min-h-0 flex items-center justify-center px-4"><div className={`relative flex max-h-full max-w-full items-center justify-center overflow-hidden ${cropRatio === "square" ? "aspect-square" : cropRatio === "portrait" ? "aspect-[9/16]" : cropRatio === "landscape" ? "aspect-video" : "h-full w-full"}`}><video ref={videoRef} src={src} playsInline muted={muted} className="max-h-full max-w-full object-contain transition-transform" style={{ transform: `rotate(${rotation}deg) scaleX(${flip ? -1 : 1})`, filter: `${visualFilter} brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%)` }} onClick={()=>videoRef.current?.paused?videoRef.current.play():videoRef.current?.pause()}/></div></div>
       <div className="shrink-0">
         <div className="h-12 flex items-center justify-center gap-6 text-white/80"><span className="text-sm tabular-nums">{fmt(time)} / {fmt(Math.max(0,end-trimStart))}</span><button onClick={()=>videoRef.current?.paused?videoRef.current.play():videoRef.current?.pause()} aria-label="Lecture"><span>{playing?<Pause size={20}/>:<Play size={20} fill="white"/>}</span></button><button aria-label="Image clé"><span className="text-xl">◇</span></button><button onClick={undo} disabled={!history.length} className="disabled:opacity-25" aria-label="Annuler"><Undo2 size={20}/></button><button onClick={redo} disabled={!future.length} className="disabled:opacity-25" aria-label="Rétablir"><Redo2 size={20}/></button><button onClick={()=>videoRef.current?.requestFullscreen?.()} aria-label="Plein écran"><Maximize2 size={19}/></button></div>
         <div className="px-3 pb-2"><div ref={trackRef} className="relative h-[86px] rounded-lg overflow-hidden bg-white/10 touch-none">
@@ -137,11 +147,23 @@ export function ClipEditorFixed({ src, duration, trimStart, trimEnd, cuts, onTri
           <button onClick={()=>replaceRef.current?.click()} className="min-w-[88px] h-16 rounded-xl bg-[#202020] flex flex-col items-center justify-center gap-1"><Replace size={21}/><span className="text-xs">Remplacer</span></button>
           <button onClick={deleteSelected} className="min-w-[88px] h-16 rounded-xl bg-[#202020] flex flex-col items-center justify-center gap-1"><Trash2 size={21}/><span className="text-xs">Supprimer</span></button>
           <button onClick={()=>setShowSpeed(v=>!v)} className="min-w-[88px] h-16 rounded-xl bg-[#202020] flex flex-col items-center justify-center gap-1"><Gauge size={21}/><span className="text-xs">Vitesse</span></button>
+          <button onClick={()=>setShowCrop(v=>!v)} className={`min-w-[88px] h-16 rounded-xl flex flex-col items-center justify-center gap-1 ${showCrop ? "bg-white text-black" : "bg-[#202020]"}`}><Crop size={21}/><span className="text-xs">Recadrer</span></button>
+          <button onClick={()=>setRotation(value=> (value + 90) % 360)} className="min-w-[88px] h-16 rounded-xl bg-[#202020] flex flex-col items-center justify-center gap-1"><RotateCw size={21}/><span className="text-xs">Rotation</span></button>
+          <button onClick={()=>setFlip(value=>!value)} className={`min-w-[88px] h-16 rounded-xl flex flex-col items-center justify-center gap-1 ${flip ? "bg-white text-black" : "bg-[#202020]"}`}><FlipHorizontal2 size={21}/><span className="text-xs">Miroir</span></button>
+          <button onClick={()=>setShowAdjust(v=>!v)} className={`min-w-[88px] h-16 rounded-xl flex flex-col items-center justify-center gap-1 ${showAdjust ? "bg-white text-black" : "bg-[#202020]"}`}><SlidersHorizontal size={21}/><span className="text-xs">Ajuster</span></button>
+          <button onClick={()=>setShowFilters(v=>!v)} className={`min-w-[88px] h-16 rounded-xl flex flex-col items-center justify-center gap-1 ${showFilters ? "bg-white text-black" : "bg-[#202020]"}`}><Sparkles size={21}/><span className="text-xs">Filtres</span></button>
           <input ref={replaceRef} type="file" accept="video/*" className="hidden" onChange={e=>{const f=e.target.files?.[0];e.currentTarget.value="";if(f)void replaceSelected(f)}}/>
         </div>
+        {showCrop&&<div className="px-4 py-3 bg-[#151515] flex items-center gap-2 overflow-x-auto"><span className="text-xs text-white/60 shrink-0">Format</span>{(["original","portrait","square","landscape"] as const).map(value=><button key={value} onClick={()=>setCropRatio(value)} className={`px-3 py-2 rounded-full text-xs ${cropRatio===value?"bg-white text-black":"bg-white/10"}`}>{value === "original" ? "Original" : value === "portrait" ? "9:16" : value === "square" ? "1:1" : "16:9"}</button>)}</div>}
+        {showAdjust&&<div className="px-4 py-3 bg-[#151515] space-y-2"><AdjustControl label="Luminosité" value={brightness} onChange={setBrightness}/><AdjustControl label="Contraste" value={contrast} onChange={setContrast}/><AdjustControl label="Saturation" value={saturation} onChange={setSaturation}/></div>}
+        {showFilters&&<div className="px-4 py-3 bg-[#151515] flex gap-2 overflow-x-auto">{[{name:"Normal",value:"none"},{name:"Cinéma",value:"contrast(1.18) saturate(.9)"},{name:"Chaud",value:"sepia(.2) saturate(1.25)"},{name:"Vif",value:"saturate(1.5) contrast(1.08)"},{name:"Froid",value:"hue-rotate(180deg) saturate(.85)"}].map(filter=><button key={filter.name} onClick={()=>setVisualFilter(filter.value)} className={`px-3 py-2 rounded-full text-xs whitespace-nowrap ${visualFilter===filter.value?"bg-white text-black":"bg-white/10"}`}>{filter.name}</button>)}</div>}
         {showSpeed&&<div className="px-4 py-3 bg-[#151515] flex gap-2 justify-center">{[.5,1,1.5,2].map(v=><button key={v} onClick={()=>{setSpeed(v);if(videoRef.current)videoRef.current.playbackRate=v}} className={`px-4 py-2 rounded-full ${speed===v?"bg-white text-black":"bg-white/10"}`}>{v}x</button>)}</div>}
       </div>
     </div>
     {showAudio&&<AudioSelector onClose={()=>setShowAudio(false)} onSelectAudio={(url,name)=>{setSelectedMusic({url,name});setShowAudio(false)}}/>}
   </div>;
+}
+
+function AdjustControl({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+  return <label className="flex items-center gap-3 text-xs"><span className="w-20 text-white/70">{label}</span><input type="range" min="50" max="150" value={value} onChange={(event) => onChange(Number(event.target.value))} className="flex-1"/><span className="w-10 text-right tabular-nums">{value}%</span></label>;
 }
