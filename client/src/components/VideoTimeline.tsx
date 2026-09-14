@@ -1,24 +1,32 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { buildVideoSegments, splitVideoAt } from "@/lib/video-split";
-import { toast } from "sonner";
-import { ClipEditorFixed } from "@/components/ClipEditorFixed";
+import { useEffect, useRef } from "react";
 
-type Range = { start: number; end: number };
-type VideoTimelineProps = { src:string; currentTime:number; duration:number; trimStart:number; trimEnd:number; cuts:Range[]; splitPoints?:number[]; onSplitPointsChange?:(points:number[])=>void; onCurrentTimeChange:(time:number)=>void; onTrimChange:(start:number,end:number)=>void; onCutsChange:(cuts:Range[])=>void; onDurationChange?:(duration:number)=>void; showControls?:boolean };
-const clamp=(v:number,min:number,max:number)=>Math.max(min,Math.min(max,v));
-const merge=(ranges:Range[])=>{const s=[...ranges].filter(r=>r.end>r.start).sort((a,b)=>a.start-b.start);const out:Range[]=[];for(const r of s){const last=out.at(-1);if(last&&r.start<=last.end+.02)last.end=Math.max(last.end,r.end);else out.push({...r});}return out;};
-const fmt=(v:number)=>{const s=Math.max(0,Math.floor(v));return `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`};
+/**
+ * The main montage screen must show the natural video preview first.
+ * The real clip timeline is opened by the Modifier action through ClipEditorFixed.
+ * This component remains as a compatibility mount point for the existing Upload layout.
+ */
+export function VideoTimeline() {
+  const markerRef = useRef<HTMLDivElement>(null);
 
-export function VideoTimeline({src,currentTime,duration,trimStart,trimEnd,cuts,splitPoints=[],onSplitPointsChange,onCurrentTimeChange,onTrimChange,onCutsChange,onDurationChange,showControls=true}:VideoTimelineProps){
- const track=useRef<HTMLDivElement>(null); const [thumbs,setThumbs]=useState<string[]>([]); const [drag,setDrag]=useState<"playhead"|"start"|"end"|null>(null); const [editor,setEditor]=useState(false); const [dismissed,setDismissed]=useState(false);
- const d=Math.max(.01,duration), start=clamp(trimStart,0,Math.max(0,d-.05)), end=clamp(trimEnd||d,start+.05,d), now=clamp(currentTime,start,end), removed=useMemo(()=>merge(cuts),[cuts]);
- const splits=useMemo(()=>[...new Set(splitPoints.filter(p=>p>start+.05&&p<end-.05).sort((a,b)=>a-b))],[splitPoints,start,end]);
- const segments=useMemo(()=>buildVideoSegments(start,end,removed,splits),[start,end,removed,splits]); const selected=segments.find(s=>now>=s.start&&now<s.end)||segments.at(-1)||null;
- useEffect(()=>{const check=()=>{const open=[...document.querySelectorAll("h2")].some(e=>e.textContent?.trim()==="Découper la vidéo");if(open&&!dismissed)setEditor(true);if(!open)setDismissed(false)};check();const o=new MutationObserver(check);o.observe(document.body,{subtree:true,childList:true});return()=>o.disconnect()},[dismissed]);
- useEffect(()=>{let stop=false;const v=document.createElement("video");v.src=src;v.preload="metadata";v.muted=true;v.playsInline=true;v.onloadedmetadata=async()=>{try{const c=document.createElement("canvas");c.width=180;c.height=100;const x=c.getContext("2d");if(!x)return;const a:string[]=[];for(let i=0;i<14;i++){if(stop)return;v.currentTime=(v.duration||d)*i/13;await new Promise(r=>{const f=()=>{v.removeEventListener("seeked",f);r(null)};v.addEventListener("seeked",f,{once:true});setTimeout(f,500)});x.drawImage(v,0,0,c.width,c.height);a.push(c.toDataURL("image/jpeg",.6))}if(!stop)setThumbs(a);if(!duration&&v.duration)onDurationChange?.(v.duration)}catch{}};return()=>{stop=true;v.removeAttribute("src");v.load()}},[src]);
- const pos=(x:number)=>{const r=track.current?.getBoundingClientRect();return r?clamp((x-r.left)/r.width,0,1)*d:now};
- const select=(t:number)=>{const cut=removed.find(r=>t>=r.start&&t<r.end);onCurrentTimeChange(cut?Math.min(cut.end,end):clamp(t,start,end))};
- const split=()=>{const next=splitVideoAt(now,start,end,removed,splits);if(next.length===splits.length)return toast.info("Place la tête de lecture sur le clip à diviser");onSplitPointsChange?.(next);toast.success(`Clip divisé à ${fmt(now)}`)};
- useEffect(()=>{const move=(e:PointerEvent)=>{if(!drag)return;const t=pos(e.clientX);if(drag==="playhead")select(t);else if(drag==="start")onTrimChange(Math.min(t,end-.1),end);else onTrimChange(start,Math.max(t,start+.1))};const up=()=>setDrag(null);addEventListener("pointermove",move);addEventListener("pointerup",up);return()=>{removeEventListener("pointermove",move);removeEventListener("pointerup",up)}},[drag,d,start,end,removed]);
- return <section className="w-full bg-black text-white select-none"><div className="flex justify-between px-3 py-1 text-xs text-white/70"><span>{fmt(now)}</span><span>{fmt(end-start)}</span></div><div ref={track} className="relative mx-3 h-[78px] overflow-hidden rounded-lg bg-white/10 touch-none" onPointerDown={e=>{if(!(e.target as HTMLElement).closest("button"))select(pos(e.clientX))}}><div className="absolute inset-0 flex">{(thumbs.length?thumbs:Array.from({length:14})).map((t,i)=><div key={i} className="flex-1 border-r border-black/30">{t&&<img src={t} alt="" className="w-full h-full object-cover"/>}</div>)}</div><div className="absolute inset-y-0 left-0 bg-black/70" style={{width:`${start/d*100}%`}}/><div className="absolute inset-y-0 right-0 bg-black/70" style={{width:`${100-end/d*100}%`}}/>{removed.map(r=><div key={`${r.start}-${r.end}`} className="absolute inset-y-0 bg-black/90" style={{left:`${r.start/d*100}%`,width:`${(r.end-r.start)/d*100}%`}}/>)}{splits.map(p=><div key={p} className="absolute inset-y-0 z-20 w-[3px] bg-white" style={{left:`${p/d*100}%`}}/>)}{selected&&<div className="absolute inset-y-1 z-20 border-2 border-white" style={{left:`${selected.start/d*100}%`,width:`${(selected.end-selected.start)/d*100}%`}}/>}<button className="absolute inset-y-0 z-30 w-6 -translate-x-1/2" style={{left:`${start/d*100}%`}} onPointerDown={e=>{e.stopPropagation();setDrag("start")}} aria-label="Début"><span className="block mx-auto h-full w-1 bg-white"/></button><button className="absolute inset-y-0 z-30 w-6 -translate-x-1/2" style={{left:`${end/d*100}%`}} onPointerDown={e=>{e.stopPropagation();setDrag("end")}} aria-label="Fin"><span className="block mx-auto h-full w-1 bg-white"/></button><button className="absolute inset-y-0 z-40 w-5 -translate-x-1/2" style={{left:`${now/d*100}%`}} onPointerDown={e=>{e.stopPropagation();setDrag("playhead")}} aria-label="Tête de lecture"><span className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-white"/><span className="absolute top-0 left-1/2 w-3 h-3 -translate-x-1/2 rounded-full bg-white"/></button></div>{showControls&&<div className="flex justify-center gap-2 py-2"><button onClick={split} className="rounded-full bg-white/10 px-4 py-1.5 text-xs">Diviser</button></div>}{editor&&<ClipEditorFixed src={src} duration={duration} trimStart={start} trimEnd={end} cuts={cuts} onTrimChange={onTrimChange} onCutsChange={onCutsChange} onCurrentTimeChange={onCurrentTimeChange} onClose={()=>{setDismissed(true);setEditor(false)}}/>}</section>;
+  useEffect(() => {
+    const marker = markerRef.current;
+    const host = marker?.parentElement;
+    if (!host) return;
+
+    const stage = host.previousElementSibling as HTMLElement | null;
+    const previousHostDisplay = host.style.display;
+    const previousStageBottom = stage?.style.bottom ?? "";
+
+    // Remove the old timeline slot from the normal montage screen.
+    // ClipEditorFixed provides the timeline only after the user taps Modifier.
+    host.style.display = "none";
+    if (stage) stage.style.bottom = "116px";
+
+    return () => {
+      host.style.display = previousHostDisplay;
+      if (stage) stage.style.bottom = previousStageBottom;
+    };
+  }, []);
+
+  return <div ref={markerRef} aria-hidden="true" className="hidden" />;
 }
