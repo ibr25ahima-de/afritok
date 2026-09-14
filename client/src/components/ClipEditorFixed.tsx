@@ -21,6 +21,7 @@ export function ClipEditorFixed({ src, duration, trimStart, trimEnd, cuts, onTri
   const { setFile, setSelectedMusic } = useUpload();
   const videoRef = useRef<HTMLVideoElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
+  const timelineViewportRef = useRef<HTMLDivElement>(null);
   const replaceRef = useRef<HTMLInputElement>(null);
   const [time, setTime] = useState(trimStart);
   const [playing, setPlaying] = useState(true);
@@ -42,6 +43,7 @@ export function ClipEditorFixed({ src, duration, trimStart, trimEnd, cuts, onTri
   const [future, setFuture] = useState<Range[][]>([]);
   const [thumbs, setThumbs] = useState<string[]>([]);
   const [drag, setDrag] = useState<"playhead" | "start" | "end" | null>(null);
+  const pixelsPerSecond = 72;
   const end = trimEnd || duration;
   const removed = useMemo(() => [...cuts].sort((a, b) => a.start - b.start), [cuts]);
   const splitPoints = useMemo(() => removed.flatMap((r) => [r.start, r.end]).filter((p) => p > trimStart && p < end), [removed, trimStart, end]);
@@ -54,6 +56,16 @@ export function ClipEditorFixed({ src, duration, trimStart, trimEnd, cuts, onTri
     setTime(target); onCurrentTimeChange?.(target);
   };
 
+  const scrollTimelineTo = (value: number) => {
+    if (timelineViewportRef.current) timelineViewportRef.current.scrollLeft = Math.max(0, value - trimStart) * pixelsPerSecond;
+  };
+
+  const handleTimelineScroll = () => {
+    const viewport = timelineViewportRef.current;
+    if (!viewport) return;
+    setPosition(trimStart + viewport.scrollLeft / pixelsPerSecond);
+  };
+
   useEffect(() => {
     const v = videoRef.current; if (!v) return;
     const loaded = () => { v.currentTime = trimStart; v.play().then(() => setPlaying(true)).catch(() => setPlaying(false)); };
@@ -63,7 +75,7 @@ export function ClipEditorFixed({ src, duration, trimStart, trimEnd, cuts, onTri
       if (cut) { v.currentTime = Math.min(cut.end, end); return; }
       if (t >= end - 0.04) { v.pause(); setPlaying(false); v.currentTime = end; return; }
       if (t < trimStart) { v.currentTime = trimStart; return; }
-      setTime(t); onCurrentTimeChange?.(t);
+      setTime(t); onCurrentTimeChange?.(t); scrollTimelineTo(t);
     };
     const play = () => setPlaying(true); const pause = () => setPlaying(false);
     v.addEventListener("loadedmetadata", loaded); v.addEventListener("timeupdate", tick); v.addEventListener("play", play); v.addEventListener("pause", pause);
@@ -122,7 +134,7 @@ export function ClipEditorFixed({ src, duration, trimStart, trimEnd, cuts, onTri
     } catch(e){console.error(e);toast.error("Impossible de remplacer le clip sur cet appareil");} finally {URL.revokeObjectURL(url)}
   };
 
-  useEffect(() => { const move=(e:PointerEvent)=>{if(!drag||!trackRef.current)return; const r=trackRef.current.getBoundingClientRect(); const t=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width))*Math.max(.01,duration); if(drag==="playhead")setPosition(t); else if(drag==="start")onTrimChange(Math.min(t,end-.1),end); else onTrimChange(trimStart,Math.max(t,trimStart+.1));}; const up=()=>setDrag(null); window.addEventListener("pointermove",move);window.addEventListener("pointerup",up);return()=>{window.removeEventListener("pointermove",move);window.removeEventListener("pointerup",up)};},[drag,duration,end,trimStart]);
+  useEffect(() => { const move=(e:PointerEvent)=>{if(!drag||!trackRef.current)return; const r=trackRef.current.getBoundingClientRect(); const t=Math.max(0,Math.min(duration,(e.clientX-r.left)/r.width*duration)); if(drag==="start")onTrimChange(Math.min(t,end-.1),end); else if(drag==="end")onTrimChange(trimStart,Math.max(t,trimStart+.1));}; const up=()=>setDrag(null); window.addEventListener("pointermove",move);window.addEventListener("pointerup",up);return()=>{window.removeEventListener("pointermove",move);window.removeEventListener("pointerup",up)};},[drag,duration,end,trimStart]);
 
   return <div className="fixed inset-0 z-[100] bg-black text-white flex flex-col">
     <header className="h-14 shrink-0 flex items-center justify-between px-3"><button onClick={onClose} className="w-10 h-10 rounded-full flex items-center justify-center" aria-label="Retour"><ArrowLeft size={26}/></button><span className="font-semibold text-sm">Modifier</span><button onClick={onClose} className="w-10 h-10 rounded-full flex items-center justify-center text-red-400" aria-label="Terminer"><Check size={26}/></button></header>
@@ -130,17 +142,15 @@ export function ClipEditorFixed({ src, duration, trimStart, trimEnd, cuts, onTri
       <div className="flex-1 min-h-0 flex items-center justify-center px-4"><div className={`relative flex max-h-full max-w-full items-center justify-center overflow-hidden ${cropRatio === "square" ? "aspect-square" : cropRatio === "portrait" ? "aspect-[9/16]" : cropRatio === "landscape" ? "aspect-video" : "h-full w-full"}`}><video ref={videoRef} src={src} playsInline muted={muted} className="max-h-full max-w-full object-contain transition-transform" style={{ transform: `rotate(${rotation}deg) scaleX(${flip ? -1 : 1})`, filter: `${visualFilter} brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%)` }} onClick={()=>videoRef.current?.paused?videoRef.current.play():videoRef.current?.pause()}/></div></div>
       <div className="shrink-0">
         <div className="h-12 flex items-center justify-center gap-6 text-white/80"><span className="text-sm tabular-nums">{fmt(time)} / {fmt(Math.max(0,end-trimStart))}</span><button onClick={()=>videoRef.current?.paused?videoRef.current.play():videoRef.current?.pause()} aria-label="Lecture"><span>{playing?<Pause size={20}/>:<Play size={20} fill="white"/>}</span></button><button aria-label="Image clé"><span className="text-xl">◇</span></button><button onClick={undo} disabled={!history.length} className="disabled:opacity-25" aria-label="Annuler"><Undo2 size={20}/></button><button onClick={redo} disabled={!future.length} className="disabled:opacity-25" aria-label="Rétablir"><Redo2 size={20}/></button><button onClick={()=>videoRef.current?.requestFullscreen?.()} aria-label="Plein écran"><Maximize2 size={19}/></button></div>
-        <div className="px-3 pb-2"><div ref={trackRef} className="relative h-[86px] rounded-lg overflow-hidden bg-white/10 touch-none">
-          <div className="absolute inset-0 flex">{(thumbs.length?thumbs:Array.from({length:14})).map((t,i)=><div key={i} className="flex-1 border-r border-black/30">{t&&<img src={t} alt="" className="h-full w-full object-cover"/>}</div>)}</div>
+        <div className="px-3 pb-2"><div ref={timelineViewportRef} onScroll={handleTimelineScroll} className="relative h-[86px] overflow-x-auto overflow-y-hidden rounded-lg bg-white/10 touch-pan-x"><div ref={trackRef} className="relative h-full" style={{ width: `${Math.max(1, duration * pixelsPerSecond)}px`, marginLeft: "50%", marginRight: "50%" }}>
+          <div className="absolute inset-0 flex">{(thumbs.length?thumbs:Array.from({length:14})).map((t,i)=><div key={i} className="flex-1 min-w-0 border-r border-black/30">{t&&<img src={t} alt="" className="h-full w-full object-cover"/>}</div>)}</div>
           <div className="absolute inset-y-0 left-0 bg-black/65" style={{width:`${trimStart/Math.max(.01,duration)*100}%`}}/><div className="absolute inset-y-0 right-0 bg-black/65" style={{width:`${100-end/Math.max(.01,duration)*100}%`}}/>
           {removed.map(r=><div key={`${r.start}-${r.end}`} className="absolute inset-y-0 bg-black/85" style={{left:`${r.start/duration*100}%`,width:`${(r.end-r.start)/duration*100}%`}}/>)}
           {splitPoints.map(p=><div key={p} className="absolute inset-y-0 w-[3px] bg-white z-20" style={{left:`${p/duration*100}%`}}/>)}
           {selection!=null&&<div className="absolute inset-y-1 z-20 border-2 border-white" style={{left:`${Math.max(trimStart,selected?.start??selection)/duration*100}%`,width:`${((selected?.end??selection)-(selected?.start??selection))/duration*100}%`}}/>}
           <button className="absolute top-0 bottom-0 w-6 -translate-x-1/2 z-40" style={{left:`${trimStart/duration*100}%`}} onPointerDown={e=>{e.stopPropagation();setDrag("start")}} aria-label="Début"><span className="block mx-auto h-full w-1 bg-white"/></button>
           <button className="absolute top-0 bottom-0 w-6 -translate-x-1/2 z-40" style={{left:`${end/duration*100}%`}} onPointerDown={e=>{e.stopPropagation();setDrag("end")}} aria-label="Fin"><span className="block mx-auto h-full w-1 bg-white"/></button>
-          <button className="absolute top-0 bottom-0 w-5 -translate-x-1/2 z-50" style={{left:`${time/duration*100}%`}} onPointerDown={e=>{e.stopPropagation();setDrag("playhead")}} aria-label="Tête de lecture"><span className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-white"/><span className="absolute top-0 left-1/2 w-3 h-3 -translate-x-1/2 rounded-full bg-white"/></button>
-          <button className="absolute inset-0 z-10" onClick={e=>{const r=trackRef.current?.getBoundingClientRect();if(r)setPosition((e.clientX-r.left)/r.width*duration)}} aria-label="Positionner la lecture"/>
-        </div></div>
+        </div><div className="pointer-events-none absolute inset-y-0 left-1/2 z-50 -translate-x-1/2"><span className="absolute top-0 left-1/2 h-3 w-3 -translate-x-1/2 rounded-full bg-white"/><span className="absolute top-2 bottom-0 left-1/2 w-0.5 -translate-x-1/2 bg-white"/></div></div></div>
         <div className="h-12 flex items-center gap-3 px-4 border-t border-white/10"><button onClick={()=>setMuted(v=>!v)} aria-label={muted?"Activer le son":"Couper le son"}>{muted?<VolumeX size={20}/>:<Volume2 size={20}/>}</button><button onClick={()=>setShowAudio(true)} className="flex items-center gap-2 text-sm font-semibold"><Music2 size={18}/>Ajouter un son</button><span className="ml-auto text-xs text-white/45">{selected?`${fmt(selected.start)} → ${fmt(selected.end)}`:"Clip"}</span><button className="text-2xl" aria-label="Ajouter un clip">+</button></div>
         <div className="h-[82px] flex items-center gap-2 overflow-x-auto px-3 border-t border-white/10">
           <button onClick={split} className="min-w-[88px] h-16 rounded-xl bg-[#202020] flex flex-col items-center justify-center gap-1"><Scissors size={21}/><span className="text-xs">Diviser</span></button>
