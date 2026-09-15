@@ -5,16 +5,38 @@ import { toast } from "sonner";
 type Range = { start:number; end:number };
 type HistoryState = { cuts:Range[]; splits:number[]; start:number; end:number };
 type Props = { src:string; duration:number; trimStart:number; trimEnd:number; cuts:Range[]; onTrimChange:(start:number,end:number)=>void; onCutsChange:(cuts:Range[])=>void; onCurrentTimeChange?:(time:number)=>void; onClose:()=>void };
-const clamp=(n:number,a:number,b:number)=>Math.max(a,Math.min(n,b));
-const label=(v:number)=>{const s=Math.max(0,Math.floor(v));return `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`};
+const clamp = (n: number, a: number, b: number) => {
+  const safeA = Number.isFinite(a) ? a : 0;
+  const safeB = Number.isFinite(b) ? b : safeA;
+  const safeN = Number.isFinite(n) ? n : safeA;
+
+  const min = Math.min(safeA, safeB);
+  const max = Math.max(safeA, safeB);
+
+  return Math.max(min, Math.min(safeN, max));
+};
+const label = (v: number) => {
+  if (!Number.isFinite(v) || v < 0) {
+    return "00:00";
+  }
+
+  const s = Math.floor(v);
+
+  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(
+    s % 60
+  ).padStart(2, "0")}`;
+};
 const merge=(rs:Range[])=>rs.filter(r=>r.end-r.start>.05).sort((a,b)=>a.start-b.start).reduce<Range[]>((o,r)=>{const l=o[o.length-1];if(l&&r.start<=l.end+.03)l.end=Math.max(l.end,r.end);else o.push({...r});return o},[]);
 
 export function ClipEditorTouch(p:Props){
- const {src,duration,trimStart,trimEnd,cuts,onTrimChange,onCutsChange,onCurrentTimeChange,onClose}=p;
- const video=useRef<HTMLVideoElement>(null),timeline=useRef<HTMLDivElement>(null),dragging=useRef(false),timeRef=useRef(trimStart);
- const boundsRef=useRef({start:trimStart,end:trimEnd>0?trimEnd:duration});
- const [time,setTime]=useState(trimStart),[playing,setPlaying]=useState(false),[thumbs,setThumbs]=useState<string[]>([]),[splits,setSplits]=useState<number[]>([]),[selected,setSelected]=useState<Range|null>(null),[history,setHistory]=useState<HistoryState[]>([]),[future,setFuture]=useState<HistoryState[]>([]);
- const end=trimEnd>0?trimEnd:duration;
+	 const {src,duration,trimStart,trimEnd,cuts,onTrimChange,onCutsChange,onCurrentTimeChange,onClose}=p;
+	 const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 0;
+	 const safeTrimStart = Number.isFinite(trimStart) && trimStart >= 0 ? trimStart : 0;
+	 const safeTrimEnd = Number.isFinite(trimEnd) && trimEnd > 0 ? Math.min(trimEnd, safeDuration || trimEnd) : safeDuration;
+	 const end = Math.max(safeTrimStart, safeTrimEnd);
+	 const video=useRef<HTMLVideoElement>(null),timeline=useRef<HTMLDivElement>(null),dragging=useRef(false),timeRef=useRef(safeTrimStart);
+	 const boundsRef=useRef({start:safeTrimStart,end});
+	 const [time,setTime]=useState(safeTrimStart),[playing,setPlaying]=useState(false),[thumbs,setThumbs]=useState<string[]>([]),[splits,setSplits]=useState<number[]>([]),[selected,setSelected]=useState<Range|null>(null),[history,setHistory]=useState<HistoryState[]>([]),[future,setFuture]=useState<HistoryState[]>([]);
  const removed=useMemo(()=>merge(cuts),[cuts]);
  const boundaries=useMemo(()=>[trimStart,...splits.filter(x=>x>trimStart+.05&&x<end-.05),end].sort((a,b)=>a-b),[trimStart,end,splits]);
  const clips=useMemo(()=>boundaries.slice(0,-1).map((a,i)=>({start:a,end:boundaries[i+1]})).filter(c=>c.end-c.start>.05&&!removed.some(r=>c.start>=r.start-.02&&c.end<=r.end+.02)),[boundaries,removed]);
