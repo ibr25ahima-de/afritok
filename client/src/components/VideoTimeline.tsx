@@ -1,32 +1,67 @@
-import { useEffect, useRef } from "react";
+import { useState } from "react";
+import { Scissors } from "lucide-react";
+import { ClipEditorFixed } from "@/components/ClipEditorFixed";
+
+type Range = { start: number; end: number };
+
+type Props = {
+  src: string;
+  currentTime: number;
+  duration: number;
+  trimStart: number;
+  trimEnd: number;
+  cuts: Range[];
+  onCurrentTimeChange: (time: number) => void;
+  onTrimChange: (start: number, end: number) => void;
+  onCutsChange: (cuts: Range[]) => void;
+  onDurationChange: (duration: number) => void;
+};
 
 /**
- * The main montage screen must show the natural video preview first.
- * The real clip timeline is opened by the Modifier action through ClipEditorFixed.
- * This component remains as a compatibility mount point for the existing Upload layout.
+ * The main editor needs one obvious control to enter the real clip editor.
+ * The old component hid this area completely, which made the timeline
+ * impossible to activate on a phone.
  */
-export function VideoTimeline() {
-  const markerRef = useRef<HTMLDivElement>(null);
+export function VideoTimeline({
+  src,
+  duration,
+  trimStart,
+  trimEnd,
+  cuts,
+  onCurrentTimeChange,
+  onTrimChange,
+  onCutsChange,
+  onDurationChange,
+}: Props) {
+  const [open, setOpen] = useState(false);
 
-  useEffect(() => {
-    const marker = markerRef.current;
-    const host = marker?.parentElement;
-    if (!host) return;
+  if (open) {
+    return (
+      <ClipEditorFixed
+        src={src}
+        duration={duration}
+        trimStart={trimStart}
+        trimEnd={trimEnd}
+        cuts={cuts}
+        onTrimChange={onTrimChange}
+        onCutsChange={onCutsChange}
+        onCurrentTimeChange={onCurrentTimeChange}
+        onClose={() => setOpen(false)}
+      />
+    );
+  }
 
-    const stage = host.previousElementSibling as HTMLElement | null;
-    const previousHostDisplay = host.style.display;
-    const previousStageBottom = stage?.style.bottom ?? "";
-
-    // Remove the old timeline slot from the normal montage screen.
-    // ClipEditorFixed provides the timeline only after the user taps Modifier.
-    host.style.display = "none";
-    if (stage) stage.style.bottom = "116px";
-
-    return () => {
-      host.style.display = previousHostDisplay;
-      if (stage) stage.style.bottom = previousStageBottom;
-    };
-  }, []);
-
-  return <div ref={markerRef} aria-hidden="true" className="hidden" />;
+  return (
+    <div className="h-full w-full flex items-center justify-center bg-black">
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-bold text-black shadow-lg active:scale-95"
+        aria-label="Modifier la vidéo et ouvrir la timeline"
+      >
+        <Scissors size={19} />
+        <span>Modifier la vidéo</span>
+      </button>
+    </div>
+  );
 }
