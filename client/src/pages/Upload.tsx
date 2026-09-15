@@ -320,7 +320,21 @@ export default function Upload() {
     const selectedOverlay = overlays.find((item) => item.id === selectedOverlayId) || null;
     return <div className="h-screen bg-black text-white overflow-hidden relative">
       <div ref={stageRef} className="absolute inset-x-0 top-0 bottom-[235px] flex items-center justify-center bg-black touch-none">
-        {isImage ? <img src={preview || ""} alt="Aperçu" className="w-full h-full object-contain" style={{ filter: montageFilter(editFilter?.cssFilter, activeEffect) }} /> : <video ref={videoRef} src={preview || ""} autoPlay muted playsInline className="w-full h-full object-contain" style={{ filter: montageFilter(editFilter?.cssFilter, activeEffect) }} onLoadedMetadata={(e) => { const d = e.currentTarget.duration || 0; setDuration(d); setTrimEnd((value) => value > 0 ? Math.min(value, d) : d); }} onClick={togglePlayback} />}
+        {isImage ? <img src={preview || ""} alt="Aperçu" className="w-full h-full object-contain" style={{ filter: montageFilter(editFilter?.cssFilter, activeEffect) }} /> : <video ref={videoRef} src={preview || ""} autoPlay muted playsInline className="w-full h-full object-contain" style={{ filter: montageFilter(editFilter?.cssFilter, activeEffect) }} onLoadedMetadata={(e) => {
+          const rawDuration = e.currentTarget.duration;
+
+          if (!Number.isFinite(rawDuration) || rawDuration <= 0) {
+            return;
+          }
+
+          setDuration(rawDuration);
+
+          setTrimEnd(value =>
+            value > 0
+              ? Math.min(value, rawDuration)
+              : rawDuration
+          );
+        }} onClick={togglePlayback} />}
         {visibleOverlays.map((item) => <div key={item.id} onPointerDown={(event) => startDrag(event, item)} onClick={(event) => { event.stopPropagation(); setSelectedOverlayId(item.id); }} className={`absolute select-none font-bold text-center cursor-move ${selectedOverlayId === item.id ? "ring-2 ring-white/80 rounded-lg px-2 py-1" : ""}`} style={{ left: `${item.x}%`, top: `${item.y}%`, transform: "translate(-50%, -50%)", fontSize: item.size, color: item.color, textShadow: "0 2px 6px #000, 0 0 2px #000", whiteSpace: "pre-wrap", maxWidth: "85%", zIndex: 10, touchAction: "none" }}>{item.text}</div>)}
         {selectedOverlay && <div className="absolute left-1/2 top-16 -translate-x-1/2 z-30 flex items-center gap-2 rounded-full bg-black/70 px-2 py-1.5"><span className="text-[11px] px-2">{selectedOverlay.kind === "sticker" ? "Sticker" : selectedOverlay.kind === "subtitle" ? "Sous-titre" : "Texte"}</span><button onClick={() => deleteOverlay(selectedOverlay.id)} className="h-8 w-8 rounded-full bg-red-500 flex items-center justify-center" aria-label="Supprimer"><Trash2 size={15} /></button><button onClick={() => setSelectedOverlayId(null)} className="h-8 w-8 rounded-full bg-white/15 flex items-center justify-center" aria-label="Fermer"><Check size={15} /></button></div>}
         <div className="absolute top-0 left-0 right-0 p-4 flex items-center justify-between bg-gradient-to-b from-black/65 to-transparent z-20"><button onClick={() => setStep("capture")} className="p-2 rounded-full bg-black/35" aria-label="Retour"><ArrowLeft size={25} /></button><button onClick={() => setShowAudio(true)} className="rounded-full bg-black/50 px-5 py-2.5 text-sm font-bold flex items-center gap-2 max-w-[55%] truncate"><Music size={17} /><span className="truncate">{selectedMusic?.name || "Ajouter un son"}</span></button><button onClick={resetMontagePlayback} className="p-2 rounded-full bg-black/35" aria-label="Recommencer"><RotateCcw size={22} /></button></div>
