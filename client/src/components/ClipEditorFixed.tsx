@@ -1,1 +1,1 @@
-export { ClipEditorTouchV2 as ClipEditorFixed } from "./ClipEditorTouchV2";
+export { ClipEditorFunctional as ClipEditorFixed } from "./ClipEditorFunctional";
