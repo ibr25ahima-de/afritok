@@ -4,408 +4,47 @@ import { toast } from "sonner";
 
 type Range = { start: number; end: number };
 type HistoryState = { cuts: Range[]; splits: number[]; start: number; end: number };
-type Props = {
-  src: string;
-  duration: number;
-  trimStart: number;
-  trimEnd: number;
-  cuts: Range[];
-  onTrimChange: (start: number, end: number) => void;
-  onCutsChange: (cuts: Range[]) => void;
-  onCurrentTimeChange?: (time: number) => void;
-  onClose: () => void;
-};
+type Props = { src: string; duration: number; trimStart: number; trimEnd: number; cuts: Range[]; onTrimChange: (start: number, end: number) => void; onCutsChange: (cuts: Range[]) => void; onCurrentTimeChange?: (time: number) => void; onClose: () => void };
+const clamp=(n:number,a:number,b:number)=>Math.max(a,Math.min(n,b));
+const label=(v:number)=>{const s=Math.max(0,Math.floor(v));return `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`};
+const merge=(rs:Range[])=>rs.filter(r=>r.end-r.start>.05).sort((a,b)=>a.start-b.start).reduce<Range[]>((o,r)=>{const l=o.at(-1);if(l&&r.start<=l.end+.03)l.end=Math.max(l.end,r.end);else o.push({...r});return o},[]);
 
-const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
-const timeLabel = (value: number) => {
-  const s = Math.max(0, Math.floor(value));
-  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-};
-const merge = (ranges: Range[]) => ranges
-  .filter((r) => r.end - r.start > 0.05)
-  .sort((a, b) => a.start - b.start)
-  .reduce<Range[]>((out, r) => {
-    const last = out[out.length - 1];
-    if (last && r.start <= last.end + 0.03) last.end = Math.max(last.end, r.end);
-    else out.push({ ...r });
-    return out;
-  }, []);
-
-export function ClipEditorTouch({
-  src, duration, trimStart, trimEnd, cuts,
-  onTrimChange, onCutsChange, onCurrentTimeChange, onClose,
-}: Props) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const timelineRef = useRef<HTMLDivElement>(null);
-  const draggingRef = useRef(false);
-  const lastTouchRef = useRef(0);
-  const [time, setTime] = useState(trimStart);
-  const [playing, setPlaying] = useState(false);
-  const [thumbs, setThumbs] = useState<string[]>([]);
-  const [splits, setSplits] = useState<number[]>([]);
-  const [selected, setSelected] = useState<Range | null>(null);
-  const [history, setHistory] = useState<HistoryState[]>([]);
-  const [future, setFuture] = useState<HistoryState[]>([]);
-  const end = trimEnd > 0 ? trimEnd : duration;
-  const removed = useMemo(() => merge(cuts), [cuts]);
-
-  const boundaries = useMemo(
-    () => [trimStart, ...splits.filter((p) => p > trimStart + 0.05 && p < end - 0.05), end].sort((a, b) => a - b),
-    [trimStart, end, splits],
-  );
-  const clips = useMemo(() => {
-    const result: Range[] = [];
-    for (let i = 0; i < boundaries.length - 1; i++) {
-      const a = boundaries[i];
-      const b = boundaries[i + 1];
-      if (b - a > 0.05 && !removed.some((r) => a >= r.start - 0.02 && b <= r.end + 0.02)) {
-        result.push({ start: a, end: b });
-      }
-    }
-    return result;
-  }, [boundaries, removed]);
-
-  const remember = () => {
-    setHistory((h) => [...h.slice(-19), {
-      cuts: cuts.map((r) => ({ ...r })),
-      splits: [...splits],
-      start: trimStart,
-      end,
-    }]);
-    setFuture([]);
-  };
-
-  const seek = (raw: number) => {
-    const limit = clamp(raw, trimStart, end);
-    const cut = removed.find((r) => limit >= r.start && limit < r.end);
-    const target = cut ? clamp(cut.end + 0.001, trimStart, end) : limit;
-    setTime(target);
-    onCurrentTimeChange?.(target);
-    const video = videoRef.current;
-    if (video && Math.abs(video.currentTime - target) > 0.003) video.currentTime = target;
-  };
-
-  // This is the actual finger-controlled timeline. No horizontal scrolling and no invisible range input.
-  const timeFromClientX = (clientX: number) => {
-    const el = timelineRef.current;
-    if (!el) return trimStart;
-    const rect = el.getBoundingClientRect();
-    const x = clamp(clientX - rect.left, 0, rect.width);
-    return trimStart + (x / Math.max(1, rect.width)) * (end - trimStart);
-  };
-
-  const startDrag = (clientX: number) => {
-    draggingRef.current = true;
-    videoRef.current?.pause();
-    setPlaying(false);
-    seek(timeFromClientX(clientX));
-  };
-  const moveDrag = (clientX: number) => {
-    if (!draggingRef.current) return;
-    seek(timeFromClientX(clientX));
-  };
-  const finishDrag = () => {
-    if (!draggingRef.current) return;
-    draggingRef.current = false;
-    const current = clamp(time, trimStart, end);
-    const clip = clips.find((c) => current >= c.start - 0.001 && current <= c.end + 0.001);
-    if (clip) setSelected(clip);
-  };
-
-  // Native touch listeners are deliberately used here so Android keeps sending move events while the finger is sliding.
-  useEffect(() => {
-    const el = timelineRef.current;
-    if (!el) return;
-    const onTouchStart = (e: TouchEvent) => {
-      if (!e.touches[0]) return;
-      lastTouchRef.current = Date.now();
-      e.preventDefault();
-      startDrag(e.touches[0].clientX);
-    };
-    const onTouchMove = (e: TouchEvent) => {
-      if (!draggingRef.current || !e.touches[0]) return;
-      e.preventDefault();
-      moveDrag(e.touches[0].clientX);
-    };
-    const onTouchEnd = () => finishDrag();
-    el.addEventListener("touchstart", onTouchStart, { passive: false });
-    el.addEventListener("touchmove", onTouchMove, { passive: false });
-    el.addEventListener("touchend", onTouchEnd, { passive: true });
-    el.addEventListener("touchcancel", onTouchEnd, { passive: true });
-    return () => {
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchmove", onTouchMove);
-      el.removeEventListener("touchend", onTouchEnd);
-      el.removeEventListener("touchcancel", onTouchEnd);
-    };
-  }, [trimStart, end, removed, clips, time]);
-
-  // Mouse/stylus/desktop fallback.
-  useEffect(() => {
-    const onMove = (e: PointerEvent) => moveDrag(e.clientX);
-    const onUp = () => finishDrag();
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    return () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-  });
-
-  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.pointerType === "touch") return;
-    e.preventDefault();
-    startDrag(e.clientX);
-  };
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    const metadata = () => seek(video.currentTime || trimStart);
-    const tick = () => {
-      const t = video.currentTime;
-      const cut = removed.find((r) => t >= r.start && t < r.end);
-      if (cut) {
-        video.currentTime = clamp(cut.end + 0.001, trimStart, end);
-        return;
-      }
-      if (t >= end - 0.03) {
-        video.pause();
-        setPlaying(false);
-        setTime(end);
-        return;
-      }
-      if (!draggingRef.current && t >= trimStart) {
-        setTime(t);
-        onCurrentTimeChange?.(t);
-      }
-    };
-    const onPlay = () => setPlaying(true);
-    const onPause = () => setPlaying(false);
-    video.addEventListener("loadedmetadata", metadata);
-    video.addEventListener("timeupdate", tick);
-    video.addEventListener("play", onPlay);
-    video.addEventListener("pause", onPause);
-    return () => {
-      video.removeEventListener("loadedmetadata", metadata);
-      video.removeEventListener("timeupdate", tick);
-      video.removeEventListener("play", onPlay);
-      video.removeEventListener("pause", onPause);
-    };
-  }, [trimStart, end, removed, onCurrentTimeChange]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const video = document.createElement("video");
-    video.src = src;
-    video.muted = true;
-    video.playsInline = true;
-    video.preload = "metadata";
-    const waitMetadata = new Promise<void>((resolve, reject) => {
-      if (video.readyState >= 1) return resolve();
-      const ok = () => { cleanup(); resolve(); };
-      const bad = () => { cleanup(); reject(new Error("metadata")); };
-      const cleanup = () => {
-        video.removeEventListener("loadedmetadata", ok);
-        video.removeEventListener("error", bad);
-      };
-      video.addEventListener("loadedmetadata", ok, { once: true });
-      video.addEventListener("error", bad, { once: true });
-    });
-    const seekFrame = (t: number) => new Promise<void>((resolve) => {
-      let done = false;
-      const finish = () => {
-        if (done) return;
-        done = true;
-        video.removeEventListener("seeked", finish);
-        resolve();
-      };
-      video.addEventListener("seeked", finish, { once: true });
-      video.currentTime = t;
-      window.setTimeout(finish, 500);
-    });
-    (async () => {
-      try {
-        await waitMetadata;
-        const canvas = document.createElement("canvas");
-        canvas.width = 240;
-        canvas.height = 135;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-        const total = video.duration || duration;
-        const frames: string[] = [];
-        for (let i = 0; i < 18; i++) {
-          if (cancelled) return;
-          await seekFrame(total * i / 17);
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          frames.push(canvas.toDataURL("image/jpeg", 0.55));
-        }
-        if (!cancelled) setThumbs(frames);
-      } catch {}
-    })();
-    return () => {
-      cancelled = true;
-      video.removeAttribute("src");
-      video.load();
-    };
-  }, [src, duration]);
-
-  const split = () => {
-    const clip = clips.find((c) => time > c.start + 0.08 && time < c.end - 0.08);
-    if (!clip) return toast.info("Déplace la ligne blanche à l'endroit exact de la coupe");
-    if (splits.some((p) => Math.abs(p - time) < 0.08)) return toast.info("La vidéo est déjà divisée ici");
-    remember();
-    setSplits((p) => [...p, time].sort((a, b) => a - b));
-    setSelected(null);
-    toast.success("Vidéo divisée à " + timeLabel(time));
-  };
-
-  const deleteSelected = () => {
-    const clip = selected || clips.find((c) => time >= c.start && time <= c.end);
-    if (!clip) return toast.info("Sélectionne une partie de la vidéo");
-    if (clips.length <= 1) return toast.info("Garder au moins 1 clip");
-    remember();
-    onCutsChange(merge([...cuts, clip]));
-    setSplits((p) => p.filter((x) => x < clip.start - 0.05 || x > clip.end + 0.05));
-    setSelected(null);
-    const next = clips.find((c) => c.start > clip.end + 0.02)?.start ?? trimStart;
-    seek(next);
-    toast.success("Partie supprimée");
-  };
-
-  const deleteBefore = () => {
-    if (time <= trimStart + 0.05) return toast.info("Glisse la ligne vers la droite avant de supprimer le début");
-    remember();
-    onTrimChange(time, end);
-    onCutsChange(cuts.filter((r) => r.end > time));
-    setSplits((p) => p.filter((x) => x > time + 0.05));
-    seek(time);
-    toast.success("Tout ce qui est avant la ligne a été supprimé");
-  };
-
-  const deleteAfter = () => {
-    if (time >= end - 0.05) return toast.info("Glisse la ligne vers la gauche avant de supprimer la fin");
-    remember();
-    onTrimChange(trimStart, time);
-    onCutsChange(cuts.filter((r) => r.start < time));
-    setSplits((p) => p.filter((x) => x < time - 0.05));
-    seek(time - 0.01);
-    toast.success("Tout ce qui est après la ligne a été supprimé");
-  };
-
-  const undo = () => {
-    const h = history.at(-1);
-    if (!h) return;
-    setFuture((f) => [...f, { cuts: cuts.map((r) => ({ ...r })), splits: [...splits], start: trimStart, end }]);
-    setHistory((h2) => h2.slice(0, -1));
-    onCutsChange(h.cuts);
-    onTrimChange(h.start, h.end);
-    setSplits(h.splits);
-    setSelected(null);
-    seek(h.start);
-  };
-
-  const redo = () => {
-    const h = future.at(-1);
-    if (!h) return;
-    setHistory((h2) => [...h2, { cuts: cuts.map((r) => ({ ...r })), splits: [...splits], start: trimStart, end }]);
-    setFuture((f) => f.slice(0, -1));
-    onCutsChange(h.cuts);
-    onTrimChange(h.start, h.end);
-    setSplits(h.splits);
-    setSelected(null);
-    seek(h.start);
-  };
-
-  const playToggle = () => {
-    const video = videoRef.current;
-    if (!video) return;
-    if (video.paused) {
-      if (video.currentTime < trimStart || video.currentTime >= end) video.currentTime = trimStart;
-      video.play().catch(() => {});
-    } else {
-      video.pause();
-    }
-  };
-
-  const currentPercent = duration ? ((time - trimStart) / Math.max(0.001, end - trimStart)) * 100 : 0;
-  const selectedPercent = selected
-    ? ((selected.start - trimStart) / Math.max(0.001, end - trimStart)) * 100
-    : 0;
-  const selectedWidth = selected
-    ? ((selected.end - selected.start) / Math.max(0.001, end - trimStart)) * 100
-    : 0;
-
-  return (
-    <div className="fixed inset-0 z-[110] bg-black text-white flex flex-col overflow-hidden">
-      <header className="h-14 shrink-0 flex items-center justify-between px-3">
-        <button onClick={onClose} className="w-10 h-10 flex items-center justify-center" aria-label="Retour"><ArrowLeft size={26} /></button>
-        <span className="font-semibold text-sm">Modifier la vidéo</span>
-        <button onClick={onClose} className="w-10 h-10 flex items-center justify-center text-red-400" aria-label="Terminer"><Check size={27} /></button>
-      </header>
-
-      <div className="flex-1 min-h-0 flex flex-col">
-        <div className="flex-1 min-h-0 flex items-center justify-center px-4 py-2">
-          <video ref={videoRef} src={src} playsInline className="max-h-full max-w-full object-contain" onClick={playToggle} />
-        </div>
-
-        <div className="shrink-0 px-3">
-          <div className="h-11 flex items-center justify-center gap-6">
-            <span className="text-sm tabular-nums">{timeLabel(Math.max(0, time - trimStart))} / {timeLabel(Math.max(0, end - trimStart))}</span>
-            <button onClick={playToggle} aria-label={playing ? "Pause" : "Lire"}>{playing ? <Pause size={20} /> : <Play size={20} fill="white" />}</button>
-            <button onClick={undo} disabled={!history.length} className="disabled:opacity-25" aria-label="Annuler"><Undo2 size={20} /></button>
-            <button onClick={redo} disabled={!future.length} className="disabled:opacity-25" aria-label="Rétablir"><Redo2 size={20} /></button>
-            <button onClick={() => videoRef.current?.requestFullscreen?.()} aria-label="Plein écran"><Maximize2 size={19} /></button>
-          </div>
-
-          <div className="pb-3">
-            <div
-              ref={timelineRef}
-              className="relative h-[84px] rounded-md bg-white/10 overflow-visible select-none cursor-ew-resize"
-              style={{ touchAction: "none", WebkitUserSelect: "none", userSelect: "none" }}
-              onPointerDown={onPointerDown}
-            >
-              <div className="absolute inset-0 flex pointer-events-none overflow-hidden rounded-md">
-                {(thumbs.length ? thumbs : Array.from({ length: 18 })).map((frame, i) => (
-                  <div key={i} className="flex-1 min-w-0 border-r border-black/30 bg-white/5">
-                    {frame && <img src={frame} alt="" draggable={false} className="w-full h-full object-cover" />}
-                  </div>
-                ))}
-              </div>
-
-              {removed.map((r, i) => (
-                <div key={i} className="absolute inset-y-0 bg-black/75 pointer-events-none z-10" style={{ left: `${((r.start - trimStart) / Math.max(0.001, end - trimStart)) * 100}%`, width: `${((r.end - r.start) / Math.max(0.001, end - trimStart)) * 100}%` }} />
-              ))}
-
-              {selected && (
-                <div className="absolute inset-y-0 border-2 border-white/80 pointer-events-none z-20" style={{ left: `${selectedPercent}%`, width: `${selectedWidth}%` }} />
-              )}
-
-              {splits.map((p) => (
-                <div key={p} className="absolute inset-y-0 w-[2px] bg-white/70 pointer-events-none z-30" style={{ left: `${((p - trimStart) / Math.max(0.001, end - trimStart)) * 100}%` }} />
-              ))}
-
-              <div className="absolute top-0 bottom-0 w-[3px] bg-white z-40 pointer-events-none shadow" style={{ left: `${currentPercent}%` }} />
-              <div className="absolute -top-2 -translate-x-1/2 w-6 h-6 rounded-full bg-white z-50 pointer-events-none shadow" style={{ left: `${currentPercent}%` }} />
-            </div>
-            <div className="flex justify-between text-[11px] text-white/60 mt-1 px-1">
-              <span>{timeLabel(trimStart)}</span><span>{timeLabel(end)}</span>
-            </div>
-            <p className="text-center text-[11px] text-white/55 mt-1">Glisse la ligne blanche avec ton doigt jusqu'à l'endroit exact.</p>
-          </div>
-
-          <div className="h-10 border-t border-white/10 flex items-center text-sm text-white/80"><span className="mr-3">♫</span><span>Ajouter un son</span></div>
-        </div>
-      </div>
-
-      <div className="shrink-0 border-t border-white/10 bg-black px-2 py-3 pb-[max(12px,env(safe-area-inset-bottom))]">
-        <div className="grid grid-cols-4 gap-1">
-          <button onClick={split} className="flex flex-col items-center justify-center gap-1 py-2 rounded-lg active:bg-white/10" aria-label="Diviser"><Scissors size={20} /><span className="text-[11px]">Diviser</span></button>
-          <button onClick={deleteSelected} className="flex flex-col items-center justify-center gap-1 py-2 rounded-lg active:bg-white/10" aria-label="Supprimer le clip sélectionné"><Trash2 size={20} /><span className="text-[11px]">Supprimer</span></button>
-          <button onClick={deleteBefore} className="flex flex-col items-center justify-center gap-1 py-2 rounded-lg active:bg-white/10" aria-label="Supprimer avant"><span className="text-lg leading-none">◀</span><span className="text-[11px]">Avant</span></button>
-          <button onClick={deleteAfter} className="flex flex-col items-center justify-center gap-1 py-2 rounded-lg active:bg-white/10" aria-label="Supprimer après"><span className="text-lg leading-none">▶</span><span className="text-[11px]">Après</span></button>
-        </div>
-      </div>
-    </div>
-  );
+export function ClipEditorTouch(p:Props){
+ const {src,duration,trimStart,trimEnd,cuts,onTrimChange,onCutsChange,onCurrentTimeChange,onClose}=p;
+ const video=useRef<HTMLVideoElement>(null),timeline=useRef<HTMLDivElement>(null),drag=useRef(false),timeRef=useRef(trimStart);
+ const [time,setTime]=useState(trimStart),[playing,setPlaying]=useState(false),[thumbs,setThumbs]=useState<string[]>([]),[splits,setSplits]=useState<number[]>([]),[selected,setSelected]=useState<Range|null>(null),[history,setHistory]=useState<HistoryState[]>([]),[future,setFuture]=useState<HistoryState[]>([]);
+ const end=trimEnd>0?trimEnd:duration,removed=useMemo(()=>merge(cuts),[cuts]);
+ const boundaries=useMemo(()=>[trimStart,...splits.filter(x=>x>trimStart+.05&&x<end-.05),end].sort((a,b)=>a-b),[trimStart,end,splits]);
+ const clips=useMemo(()=>boundaries.slice(0,-1).map((a,i)=>({start:a,end:boundaries[i+1]})).filter(c=>c.end-c.start>.05&&!removed.some(r=>c.start>=r.start-.02&&c.end<=r.end+.02)),[boundaries,removed]);
+ useEffect(()=>{timeRef.current=clamp(time,trimStart,end)},[time,trimStart,end]);
+ const seek=(raw:number)=>{const safe=clamp(raw,trimStart,end),r=removed.find(x=>safe>=x.start&&safe<x.end),t=r?clamp(r.end+.001,trimStart,end):safe;timeRef.current=t;setTime(t);onCurrentTimeChange?.(t);if(video.current&&Math.abs(video.current.currentTime-t)>.003)video.current.currentTime=t};
+ const fromX=(x:number)=>{const el=timeline.current;if(!el)return timeRef.current;const r=el.getBoundingClientRect();return trimStart+clamp(x-r.left,0,r.width)/Math.max(1,r.width)*(end-trimStart)};
+ const selectAt=(t:number)=>{const c=clips.find(x=>t>=x.start-.01&&t<=x.end+.01);if(c)setSelected(c)};
+ const begin=(x:number,id:number)=>{drag.current=true;timeline.current?.setPointerCapture?.(id);video.current?.pause();setPlaying(false);const t=fromX(x);seek(t);selectAt(t)};
+ const move=(x:number)=>{if(drag.current)seek(fromX(x))}; const finish=()=>{if(drag.current){drag.current=false;selectAt(timeRef.current)}};
+ useEffect(()=>{const mv=(e:PointerEvent)=>move(e.clientX),up=()=>finish();window.addEventListener("pointermove",mv);window.addEventListener("pointerup",up);window.addEventListener("pointercancel",up);return()=>{window.removeEventListener("pointermove",mv);window.removeEventListener("pointerup",up);window.removeEventListener("pointercancel",up)}},[]);
+ useEffect(()=>{const v=video.current;if(!v)return;const tick=()=>{const t=v.currentTime,r=removed.find(x=>t>=x.start&&t<x.end);if(r){v.currentTime=clamp(r.end+.001,trimStart,end);return}if(t>=end-.03){v.pause();setPlaying(false);timeRef.current=end;setTime(end);return}if(!drag.current&&t>=trimStart){timeRef.current=t;setTime(t);onCurrentTimeChange?.(t)}};const pl=()=>setPlaying(true),pa=()=>setPlaying(false);v.addEventListener("timeupdate",tick);v.addEventListener("play",pl);v.addEventListener("pause",pa);return()=>{v.removeEventListener("timeupdate",tick);v.removeEventListener("play",pl);v.removeEventListener("pause",pa)}},[trimStart,end,removed,onCurrentTimeChange]);
+ useEffect(()=>{let dead=false;const v=document.createElement("video");v.src=src;v.muted=true;v.playsInline=true;v.preload="metadata";const ok=()=>new Promise<void>(res=>{if(v.readyState>=1)return res();v.addEventListener("loadedmetadata",()=>res(),{once:true})});const seekFrame=(t:number)=>new Promise<void>(res=>{const f=()=>{v.removeEventListener("seeked",f);res()};v.addEventListener("seeked",f,{once:true});v.currentTime=t;setTimeout(f,500)});(async()=>{try{await ok();const c=document.createElement("canvas");c.width=240;c.height=135;const ctx=c.getContext("2d");if(!ctx)return;const out:string[]=[];for(let i=0;i<18;i++){if(dead)return;await seekFrame((v.duration||duration)*i/17);ctx.drawImage(v,0,0,240,135);out.push(c.toDataURL("image/jpeg",.55))}if(!dead)setThumbs(out)}catch{}})();return()=>{dead=true;v.removeAttribute("src");v.load()}},[src,duration]);
+ const remember=()=>{setHistory(h=>[...h.slice(-19),{cuts:cuts.map(r=>({...r})),splits:[...splits],start:trimStart,end}]);setFuture([])};
+ const split=()=>{const t=timeRef.current,c=clips.find(x=>t>x.start+.08&&t<x.end-.08);if(!c)return toast.info("Déplace la ligne blanche à l'endroit exact de la coupe");if(splits.some(x=>Math.abs(x-t)<.08))return toast.info("La vidéo est déjà divisée ici");remember();setSplits(s=>[...s,t].sort((a,b)=>a-b));setSelected(null);toast.success(`Vidéo divisée à ${label(t)}`)};
+ const del=()=>{const t=timeRef.current,c=selected||clips.find(x=>t>=x.start&&t<=x.end);if(!c)return toast.info("Sélectionne la partie à supprimer");if(clips.length<=1)return toast.info("Garder au moins 1 clip");remember();onCutsChange(merge([...cuts,c]));setSplits(s=>s.filter(x=>x<c!.start-.05||x>c!.end+.05));setSelected(null);seek(clips.find(x=>x.start>c!.end+.02)?.start??trimStart);toast.success("Partie supprimée")};
+ const before=()=>{const t=timeRef.current;if(t<=trimStart+.05)return toast.info("Glisse la ligne vers la droite");remember();onTrimChange(t,end);onCutsChange(cuts.filter(r=>r.end>t));setSplits(s=>s.filter(x=>x>t+.05));seek(t);toast.success("Début supprimé")};
+ const after=()=>{const t=timeRef.current;if(t>=end-.05)return toast.info("Glisse la ligne vers la gauche");remember();onTrimChange(trimStart,t);onCutsChange(cuts.filter(r=>r.start<t));setSplits(s=>s.filter(x=>x<t-.05));seek(t-.01);toast.success("Fin supprimée")};
+ const undo=()=>{const h=history.at(-1);if(!h)return;setFuture(f=>[...f,{cuts:cuts.map(r=>({...r})),splits:[...splits],start:trimStart,end}]);setHistory(x=>x.slice(0,-1));onCutsChange(h.cuts);onTrimChange(h.start,h.end);setSplits(h.splits);setSelected(null);seek(h.start)};
+ const redo=()=>{const h=future.at(-1);if(!h)return;setHistory(x=>[...x,{cuts:cuts.map(r=>({...r})),splits:[...splits],start:trimStart,end}]);setFuture(x=>x.slice(0,-1));onCutsChange(h.cuts);onTrimChange(h.start,h.end);setSplits(h.splits);setSelected(null);seek(h.start)};
+ const toggle=()=>{const v=video.current;if(!v)return;if(v.paused){if(v.currentTime<trimStart||v.currentTime>=end)v.currentTime=trimStart;v.play().catch(()=>{})}else v.pause()};
+ const pct=duration?((time-trimStart)/Math.max(.001,end-trimStart))*100:0,sp=selected?((selected.start-trimStart)/Math.max(.001,end-trimStart))*100:0,sw=selected?((selected.end-selected.start)/Math.max(.001,end-trimStart))*100:0;
+ return <div className="fixed inset-0 z-[110] bg-black text-white flex flex-col overflow-hidden">
+  <header className="h-14 shrink-0 flex items-center justify-between px-3"><button onClick={onClose} className="w-10 h-10 flex items-center justify-center" aria-label="Retour"><ArrowLeft size={26}/></button><span className="font-semibold text-sm">Modifier la vidéo</span><button onClick={onClose} className="w-10 h-10 flex items-center justify-center text-red-400" aria-label="Terminer"><Check size={27}/></button></header>
+  <div className="flex-1 min-h-0 flex flex-col"><div className="flex-1 min-h-0 flex items-center justify-center px-4 py-2"><video ref={video} src={src} playsInline className="max-h-full max-w-full object-contain" onClick={toggle}/></div>
+   <div className="shrink-0 px-3"><div className="h-11 flex items-center justify-center gap-6"><span className="text-sm tabular-nums">{label(Math.max(0,time-trimStart))} / {label(Math.max(0,end-trimStart))}</span><button onClick={toggle} aria-label={playing?"Pause":"Lire"}>{playing?<Pause size={20}/>:<Play size={20} fill="white"/>}</button><button onClick={undo} disabled={!history.length} className="disabled:opacity-25" aria-label="Annuler"><Undo2 size={20}/></button><button onClick={redo} disabled={!future.length} className="disabled:opacity-25" aria-label="Rétablir"><Redo2 size={20}/></button><button onClick={()=>video.current?.requestFullscreen?.()} aria-label="Plein écran"><Maximize2 size={19}/></button></div>
+    <div className="pb-3"><div ref={timeline} className="relative h-[84px] rounded-md bg-white/10 overflow-visible select-none cursor-ew-resize" style={{touchAction:"none",WebkitUserSelect:"none",userSelect:"none"}} onPointerDown={e=>{if(e.button!==0&&e.pointerType!=="touch")return;e.preventDefault();begin(e.clientX,e.pointerId)}} onPointerMove={e=>{if(drag.current){e.preventDefault();move(e.clientX)}}} onPointerUp={finish} onPointerCancel={finish}>
+      <div className="absolute inset-0 flex pointer-events-none overflow-hidden rounded-md">{(thumbs.length?thumbs:Array.from({length:18})).map((f,i)=><div key={i} className="flex-1 min-w-0 border-r border-black/30 bg-white/5">{f&&<img src={f} alt="" draggable={false} className="w-full h-full object-cover"/>}</div>)}</div>
+      {removed.map((r,i)=><div key={i} className="absolute inset-y-0 bg-black/75 pointer-events-none z-10" style={{left:`${((r.start-trimStart)/Math.max(.001,end-trimStart))*100}%`,width:`${((r.end-r.start)/Math.max(.001,end-trimStart))*100}%`}}/>)}
+      {selected&&<div className="absolute inset-y-0 border-2 border-white/80 pointer-events-none z-20" style={{left:`${sp}%`,width:`${sw}%`}}/>}{splits.map(x=><div key={x} className="absolute inset-y-0 w-[2px] bg-white/70 pointer-events-none z-30" style={{left:`${((x-trimStart)/Math.max(.001,end-trimStart))*100}%`}}/>)}
+      <div className="absolute top-0 bottom-0 w-[3px] bg-white z-40 pointer-events-none shadow" style={{left:`${pct}%`}}/><div className="absolute -top-2 -translate-x-1/2 w-6 h-6 rounded-full bg-white z-50 pointer-events-none shadow" style={{left:`${pct}%`}}/>
+    </div><div className="flex justify-between text-[11px] text-white/60 mt-1 px-1"><span>{label(trimStart)}</span><span>{label(end)}</span></div><p className="text-center text-[11px] text-white/55 mt-1">Glisse la ligne blanche avec ton doigt pour choisir l'endroit de coupe.</p></div>
+    <div className="h-10 border-t border-white/10 flex items-center text-sm text-white/80"><span className="mr-3">♫</span><span>Ajouter un son</span></div></div></div>
+  <div className="shrink-0 border-t border-white/10 bg-black px-2 py-3 pb-[max(12px,env(safe-area-inset-bottom))]"><div className="grid grid-cols-4 gap-1"><button onClick={split} className="flex flex-col items-center justify-center gap-1 py-2 rounded-lg active:bg-white/10" aria-label="Diviser"><Scissors size={20}/><span className="text-[11px]">Diviser</span></button><button onClick={del} className="flex flex-col items-center justify-center gap-1 py-2 rounded-lg active:bg-white/10" aria-label="Supprimer"><Trash2 size={20}/><span className="text-[11px]">Supprimer</span></button><button onClick={before} className="flex flex-col items-center justify-center gap-1 py-2 rounded-lg active:bg-white/10" aria-label="Supprimer avant"><span className="text-lg leading-none">◀</span><span className="text-[11px]">Avant</span></button><button onClick={after} className="flex flex-col items-center justify-center gap-1 py-2 rounded-lg active:bg-white/10" aria-label="Supprimer après"><span className="text-lg leading-none">▶</span><span className="text-[11px]">Après</span></button></div></div>
+ </div>;
 }
