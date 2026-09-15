@@ -37,6 +37,7 @@ export default function Upload() {
   const [, navigate] = useLocation();
   const { isAuthenticated } = useAuth();
   const { file, setFile, preview, setPreview, selectedMusic, setSelectedMusic } = useUpload();
+  const [editorClips, setEditorClips] = useState<File[]>([]);
   const [step, setStep] = useState<Step>("capture");
   const [showAudio, setShowAudio] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -314,7 +315,7 @@ export default function Upload() {
   };
 
   if (!isAuthenticated) return <div className="h-screen bg-black flex items-center justify-center text-white">Connexion requise</div>;
-  if (step === "capture") return <><CameraRecorder onVideoRecorded={(blob, recordedDuration) => { if (blob.size < 1024) return toast.error("La vidéo enregistrée est vide. Réessaie."); setFile(new File([blob], "video.webm", { type: blob.type || "video/webm" })); setStep("edit"); toast.success(`Vidéo prête pour le montage · ${recordedDuration}s`); }} onPhotoTaken={(blob) => { setFile(new File([blob], "photo.jpg", { type: "image/jpeg" })); setStep("edit"); }} onClose={() => navigate("/feed")} onOpenMusic={() => setShowAudio(true)} selectedMusic={selectedMusic} />{showAudio && <AudioSelector onClose={() => setShowAudio(false)} onSelectAudio={(url, name) => { setSelectedMusic({ url, name }); setShowAudio(false); }} />}</>;
+  if (step === "capture") return <><CameraRecorder onVideoRecorded={(blob, recordedDuration) => { if (blob.size < 1024) return toast.error("La vidéo enregistrée est vide. Réessaie."); const recordedFile = new File([blob], "video.webm", { type: blob.type || "video/webm" }); setFile(recordedFile); setEditorClips([recordedFile]); setStep("edit"); toast.success(`Vidéo prête pour le montage · ${recordedDuration}s`); }} onPhotoTaken={(blob) => { setFile(new File([blob], "photo.jpg", { type: "image/jpeg" })); setStep("edit"); }} onClose={() => navigate("/feed")} onOpenMusic={() => setShowAudio(true)} selectedMusic={selectedMusic} />{showAudio && <AudioSelector onClose={() => setShowAudio(false)} onSelectAudio={(url, name) => { setSelectedMusic({ url, name }); setShowAudio(false); }} />}</>;
   if (step === "edit") {
     const isImage = isImageFile(file);
     const selectedOverlay = overlays.find((item) => item.id === selectedOverlayId) || null;
@@ -351,7 +352,7 @@ export default function Upload() {
       {showEffects && <div className="absolute inset-0 z-50 bg-black/95 p-4 overflow-y-auto"><div className="flex justify-between items-center mb-5"><div><h2 className="font-bold">Effets</h2><p className="text-xs text-white/55 mt-1">L’effet choisi s’applique à l’aperçu et à la vidéo exportée.</p></div><button onClick={() => setShowEffects(false)} aria-label="Fermer les effets"><X /></button></div><div className="mb-4 flex items-center justify-between rounded-xl bg-white/10 px-3 py-2 text-sm"><span>{activeEffect ? `Actif : ${activeEffect}` : "Aucun effet actif"}</span>{activeEffect && <button onClick={() => setActiveEffect(null)} className="text-red-300">Réinitialiser</button>}</div><EffectsLibrary onEffectSelect={(effect) => { setActiveEffect(effect.id); toast.success(`Effet « ${effect.name} » appliqué`); }} selectedEffects={activeEffect ? [activeEffect] : []} onEffectRemove={(effectId) => { if (effectId === activeEffect) setActiveEffect(null); }} /></div>}
       {showAudio && <AudioSelector onClose={() => setShowAudio(false)} onSelectAudio={(url, name) => { setSelectedMusic({ url, name }); setShowAudio(false); }} />}
       {selectedMusic && <audio ref={musicRef} src={selectedMusic.url} preload="auto" />}
-      {showModifierEditor && preview && !isImage && <ClipEditorFixed src={preview} duration={duration} trimStart={trimStart} trimEnd={trimEnd || duration} cuts={cuts} onTrimChange={setTimelineTrim} onCutsChange={setCuts} onCurrentTimeChange={setTimelineTime} onClose={() => setShowModifierEditor(false)} />}
+      {showModifierEditor && preview && !isImage && <ClipEditorFixed src={preview} onAddClip={(newClip) => { setEditorClips((previous) => [...previous, newClip]); }} duration={duration} trimStart={trimStart} trimEnd={trimEnd || duration} cuts={cuts} onTrimChange={setTimelineTrim} onCutsChange={setCuts} onCurrentTimeChange={setTimelineTime} onClose={() => setShowModifierEditor(false)} />}
     </div>;
   }
   return <Publish />;
