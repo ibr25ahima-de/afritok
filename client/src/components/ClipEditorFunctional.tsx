@@ -16,7 +16,53 @@ export function ClipEditorFunctional({src,duration,trimStart,trimEnd,cuts,onTrim
  const pct=((t-start)/Math.max(.001,end-start))*100;
  const seek=(raw:number,notify=true)=>{const safe=Math.max(start,Math.min(raw,end));const cut=removed.find(r=>safe>=r.start&&safe<r.end);const target=cut?Math.min(cut.end+.001,end):safe;tRef.current=target;setT(target);if(notify)onCurrentTimeChange?.(target);const v=vref.current;if(v&&Math.abs(v.currentTime-target)>.01){try{v.currentTime=target}catch{}}};
  useEffect(()=>{const v=vref.current;if(!v)return;const readyFn=()=>{if(!Number.isFinite(v.duration)||v.duration<=0)return;setD(v.duration);setReady(true);if(trimEnd<=0)onTrimChange(trimStart||0,v.duration);const initial=Math.min(Math.max(tRef.current||trimStart||0,trimStart||0),trimEnd>0?trimEnd:v.duration);try{v.currentTime=initial}catch{};tRef.current=initial;setT(initial)};const time=()=>{const x=v.currentTime;const cut=removed.find(r=>x>=r.start&&x<r.end);if(cut){try{v.currentTime=Math.min(cut.end+.001,end)}catch{};return}if(end>start&&x>=end-.03){v.pause();setPlaying(false);seek(end,false);return}if(!dragRef.current){tRef.current=x;setT(x)}};const play=()=>setPlaying(true),pause=()=>setPlaying(false),err=()=>{setReady(false);toast.error("La vidéo ne peut pas être lue dans le montage")};v.addEventListener("loadedmetadata",readyFn);v.addEventListener("loadeddata",readyFn);v.addEventListener("canplay",readyFn);v.addEventListener("timeupdate",time);v.addEventListener("play",play);v.addEventListener("pause",pause);v.addEventListener("error",err);if(v.readyState>=1)readyFn();return()=>{v.removeEventListener("loadedmetadata",readyFn);v.removeEventListener("loadeddata",readyFn);v.removeEventListener("canplay",readyFn);v.removeEventListener("timeupdate",time);v.removeEventListener("play",play);v.removeEventListener("pause",pause);v.removeEventListener("error",err)}},[src,end,removed,trimEnd,trimStart,onTrimChange]);
- useEffect(()=>{let stop=false;const v=document.createElement("video");v.src=src;v.muted=true;v.playsInline=true;v.preload="auto";const readyP=new Promise<void>(r=>{if(v.readyState>=1)r();else v.addEventListener("loadedmetadata",()=>r(),{once:true})});const seekThumb=(x:number)=>new Promise<void>(r=>{let done=false;const f=()=>{if(done)return;done=true;v.removeEventListener("seeked",f);r()};v.addEventListener("seeked",f,{once:true});try{v.currentTime=x}catch{};setTimeout(f,800)});(async()=>{try{await readyP;if(stop)return;const c=document.createElement("canvas"),ctx=c.getContext("2d");if(!ctx)return;c.width=120;c.height=68;const out:string[]=[];for(let i=0;i<18&&!stop;i++){await seekThumb(v.duration*i/17);ctx.drawImage(v,0,0,c.width,c.height);out.push(c.toDataURL("image/jpeg",.55))}if(!stop)setThumbs(out)}catch{}})();return()=>{stop=true;v.removeAttribute("src");v.load()}},[src]);
+ useEffect(() => {
+  let stop = false;
+  const v = document.createElement("video");
+  v.src = src; v.muted = true; v.playsInline = true; v.preload = "auto";
+  v.style.position = "fixed";
+  v.style.width = "2px";
+  v.style.height = "2px";
+  v.style.opacity = "0";
+  v.style.pointerEvents = "none";
+  v.style.left = "-9999px";
+  document.body.appendChild(v);
+  const readyP = new Promise<void>((r) => {
+    if (v.readyState >= 1) r();
+    else v.addEventListener("loadedmetadata", () => r(), { once: true });
+  });
+  const seekThumb = (x: number) => new Promise<void>((r) => {
+    let done = false;
+    const f = () => { if (done) return; done = true; v.removeEventListener("seeked", f); r(); };
+    v.addEventListener("seeked", f, { once: true });
+    try { v.currentTime = x; } catch {}
+    setTimeout(f, 800);
+  });
+  (async () => {
+    try {
+      await readyP;
+      if (stop) return;
+      const c = document.createElement("canvas"), ctx = c.getContext("2d");
+      if (!ctx) return;
+      c.width = 120; c.height = 68;
+      const out: string[] = [];
+      const span = Math.max(0.1, end - start);
+      for (let i = 0; i < 18 && !stop; i++) {
+        await seekThumb(start + (span * i) / 17);
+        ctx.drawImage(v, 0, 0, c.width, c.height);
+        out.push(c.toDataURL("image/jpeg", 0.55));
+      }
+      if (!stop) setThumbs(out);
+    } catch {}
+  })();
+  return () => {
+    stop = true;
+    v.pause();
+    v.removeAttribute("src");
+    v.load();
+    document.body.removeChild(v);
+  };
+ }, [src, start, end]);
  const remember=()=>{setHistory(h=>[...h,{cuts:cuts.map(x=>({...x})),splits:[...splits],start,end}]);setFuture([])};
  const split=()=>{const x=tRef.current;if(x<=start+.08||x>=end-.08)return toast.info("Place la ligne blanche à l'endroit de la coupe");if(splits.some(s=>Math.abs(s-x)<.08))return;remember();setSplits(s=>[...s,x].sort((a,b)=>a-b));seek(x);toast.success("Vidéo divisée")};
  const del=()=>{const x=tRef.current;const c=clips.find(q=>x>=q.start-.001&&x<q.end-.001);if(!c)return toast.info("Place la ligne blanche sur la partie à supprimer");if(clips.length<=1)return toast.info("Garde au moins une partie de la vidéo");remember();onCutsChange(merge([...cuts,c]));setSplits(s=>s.filter(x=>x<=c.start+.05||x>=c.end-.05));const next=clips.find(q=>q.start>=c.end-.02);const target=next?.start??start;seek(target);toast.success("Partie supprimée")};
