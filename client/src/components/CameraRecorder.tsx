@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Music, Pause, Play, RefreshCw, X } from "lucide-react";
+import { Check, Music, Pause, Play, RefreshCw, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 
 interface CameraRecorderProps {
@@ -14,6 +14,14 @@ interface CameraRecorderProps {
 
 const LIMITS: Record<string, number> = { "10 s": 10, "15 s": 15, "60 s": 60, "10 min": 600 };
 
+const FACE_EFFECTS: { id: string; name: string; cssFilter: string }[] = [
+  { id: "none", name: "Normal", cssFilter: "none" },
+  { id: "smooth", name: "Doux", cssFilter: "brightness(1.08) contrast(1.05) blur(0.4px)" },
+  { id: "vivid", name: "Éclat", cssFilter: "saturate(1.5) contrast(1.12) brightness(1.05)" },
+  { id: "warm", name: "Chaud", cssFilter: "sepia(0.2) saturate(1.3) brightness(1.03)" },
+  { id: "cool", name: "Frais", cssFilter: "hue-rotate(-8deg) saturate(1.15) brightness(1.05)" },
+];
+
 type FacingMode = "user" | "environment";
 
 export const CameraRecorder: React.FC<CameraRecorderProps> = ({
@@ -21,6 +29,8 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
   onPhotoTaken,
   onClose,
   onOpenMusic,
+  onOpenEffects,
+  onPublish,
   selectedMusic,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -42,6 +52,10 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
   const [seconds, setSeconds] = useState(0);
   const [timer, setTimer] = useState(0);
   const [switchingCamera, setSwitchingCamera] = useState(false);
+  const [effectsOpen, setEffectsOpen] = useState(false);
+  const [selectedEffectId, setSelectedEffectId] = useState("none");
+  const [faceSnapshot, setFaceSnapshot] = useState<string | null>(null);
+  const selectedEffectRef = useRef("none");
 
   const stopTracks = useCallback((stream: MediaStream | null) => {
     stream?.getTracks().forEach((track) => track.stop());
@@ -115,6 +129,27 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
     };
   }, [startCamera, stopTracks, clearLimitTimeout]);
 
+  useEffect(() => {
+    selectedEffectRef.current = selectedEffectId;
+  }, [selectedEffectId]);
+
+  useEffect(() => {
+    if (!effectsOpen) return;
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    const grab = () => {
+      const video = videoRef.current;
+      if (!video?.videoWidth || !video.videoHeight || !ctx) return;
+      canvas.width = 160;
+      canvas.height = Math.round((160 * video.videoHeight) / video.videoWidth);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      setFaceSnapshot(canvas.toDataURL("image/jpeg", 0.7));
+    };
+    grab();
+    const interval = window.setInterval(grab, 1200);
+    return () => window.clearInterval(interval);
+  }, [effectsOpen]);
+
   const switchCamera = useCallback(async () => {
     if (switchingCamera) return;
 
@@ -140,7 +175,13 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
     const canvas = document.createElement("canvas");
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
-    canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const context = canvas.getContext("2d");
+    if (context) {
+      const effect = FACE_EFFECTS.find((e) => e.id === selectedEffectRef.current);
+      context.filter = effect?.cssFilter || "none";
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      context.filter = "none";
+    }
     canvas.toBlob((blob) => {
       if (blob) onPhotoTaken?.(blob);
     }, "image/jpeg", 0.95);
@@ -204,7 +245,10 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       const draw = () => {
         const currentVideo = videoRef.current;
         if (currentVideo && currentVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+          const effect = FACE_EFFECTS.find((e) => e.id === selectedEffectRef.current);
+          context.filter = effect?.cssFilter || "none";
           context.drawImage(currentVideo, 0, 0, canvas.width, canvas.height);
+          context.filter = "none";
         }
         drawFrameRef.current = requestAnimationFrame(draw);
       };
@@ -377,6 +421,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
         muted
         playsInline
         className="absolute inset-0 w-full h-full object-cover"
+        style={{ filter: FACE_EFFECTS.find((e) => e.id === selectedEffectId)?.cssFilter || "none" }}
       />
 
       {timer > 0 && (
@@ -413,12 +458,50 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
         </button>
       </div>
 
+      <div className="relative z-30 flex justify-end px-4">
+        <button
+          onClick={() => setEffectsOpen((v) => !v)}
+          className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center"
+          aria-label="Effets de visage"
+        >
+          <Sparkles size={22} className={selectedEffectId !== "none" ? "text-yellow-300" : ""} />
+        </button>
+      </div>
+
       {recording && (
         <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 rounded-full bg-black/75 px-4 py-1.5 font-bold tabular-nums">
           <span className="text-red-400">●</span>{" "}
           {formatTime(seconds)}{" "}
           <span className="text-white/60">/ {durationLabel}</span>
           {paused && <span className="ml-2 text-yellow-300">PAUSE</span>}
+        </div>
+      )}
+
+      {effectsOpen && (
+        <div className="relative z-30 flex items-center gap-3 px-5 pb-3 overflow-x-auto">
+          {FACE_EFFECTS.map((effect) => (
+            <button
+              key={effect.id}
+              onClick={() => setSelectedEffectId(effect.id)}
+              className={`shrink-0 flex flex-col items-center gap-1 ${selectedEffectId === effect.id ? "opacity-100" : "opacity-70"}`}
+            >
+              <span
+                className={`h-14 w-14 rounded-full overflow-hidden border-2 ${selectedEffectId === effect.id ? "border-white" : "border-white/30"} bg-white/10 flex items-center justify-center`}
+              >
+                {faceSnapshot ? (
+                  <img
+                    src={faceSnapshot}
+                    alt={effect.name}
+                    className="h-full w-full object-cover"
+                    style={{ filter: effect.cssFilter }}
+                  />
+                ) : (
+                  <Sparkles size={18} />
+                )}
+              </span>
+              <span className="text-[10px] font-semibold">{effect.name}</span>
+            </button>
+          ))}
         </div>
       )}
 
