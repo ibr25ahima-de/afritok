@@ -12,7 +12,7 @@ interface CameraRecorderProps {
   selectedMusic?: { name: string; url: string } | null;
 }
 
-const LIMITS: Record<string, number> = { "15 s": 15, "60 s": 60, "10 min": 600 };
+const LIMITS: Record<string, number> = { "10 s": 10, "15 s": 15, "60 s": 60, "10 min": 600 };
 
 type FacingMode = "user" | "environment";
 
@@ -27,11 +27,13 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const startedAtRef = useRef(0);
   const drawFrameRef = useRef<number | null>(null);
   const recordingCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const recordingStreamRef = useRef<MediaStream | null>(null);
   const mountedRef = useRef(true);
+  const activeRecordingStartedAtRef = useRef(0);
+  const accumulatedRecordingMsRef = useRef(0);
+  const limitTimeoutRef = useRef<number | null>(null);
 
   const [facingMode, setFacingMode] = useState<FacingMode>("user");
   const [durationMode, setDurationMode] = useState("15 s");
@@ -43,6 +45,20 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
 
   const stopTracks = useCallback((stream: MediaStream | null) => {
     stream?.getTracks().forEach((track) => track.stop());
+  }, []);
+
+  const clearLimitTimeout = useCallback(() => {
+    if (limitTimeoutRef.current !== null) {
+      window.clearTimeout(limitTimeoutRef.current);
+      limitTimeoutRef.current = null;
+    }
+  }, []);
+
+  const getRecordedMs = useCallback(() => {
+    const activeMs = activeRecordingStartedAtRef.current > 0
+      ? performance.now() - activeRecordingStartedAtRef.current
+      : 0;
+    return accumulatedRecordingMsRef.current + Math.max(0, activeMs);
   }, []);
 
   const startCamera = useCallback(async (mode: FacingMode) => {
@@ -85,6 +101,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
 
     return () => {
       mountedRef.current = false;
+      clearLimitTimeout();
       if (drawFrameRef.current !== null) cancelAnimationFrame(drawFrameRef.current);
       stopTracks(streamRef.current);
       stopTracks(recordingStreamRef.current);
@@ -96,7 +113,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
         }
       }
     };
-  }, [startCamera, stopTracks]);
+  }, [startCamera, stopTracks, clearLimitTimeout]);
 
   const switchCamera = useCallback(async () => {
     if (switchingCamera) return;
@@ -104,8 +121,8 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
     const nextMode: FacingMode = facingMode === "user" ? "environment" : "user";
     setSwitchingCamera(true);
     try {
-      // Le canvas d'enregistrement reste le même : seule la source caméra change.
-      // Cela permet de continuer le même enregistrement après le changement de caméra.
+      // Le MediaRecorder et le canvas restent actifs : changer de caméra ne crée
+      // pas un deuxième enregistrement et ne supprime pas le premier segment.
       await startCamera(nextMode);
       setFacingMode(nextMode);
     } finally {
@@ -133,6 +150,13 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
     const recorder = recorderRef.current;
     if (!recorder || recorder.state === "inactive") return;
 
+    clearLimitTimeout();
+
+    if (recorder.state === "recording") {
+      accumulatedRecordingMsRef.current += Math.max(0, performance.now() - activeRecordingStartedAtRef.current);
+    }
+    activeRecordingStartedAtRef.current = 0;
+
     try {
       recorder.stop();
     } catch (error) {
@@ -140,7 +164,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
     }
     setRecording(false);
     setPaused(false);
-  }, []);
+  }, [clearLimitTimeout]);
 
   const startRecording = async () => {
     const video = videoRef.current;
@@ -164,8 +188,6 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
     ].find((type) => MediaRecorder.isTypeSupported(type));
 
     try {
-      // On enregistre un canvas dont le flux reste stable pendant un changement
-      // de caméra. La vidéo affichée devient simplement la nouvelle source du canvas.
       const canvas = document.createElement("canvas");
       canvas.width = video.videoWidth || 720;
       canvas.height = video.videoHeight || 1280;
@@ -194,7 +216,8 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
 
       chunksRef.current = [];
       recorderRef.current = recorder;
-      startedAtRef.current = performance.now();
+      accumulatedRecordingMsRef.current = 0;
+      activeRecordingStartedAtRef.current = performance.now();
 
       recorder.ondataavailable = (event) => {
         if (event.data.size) chunksRef.current.push(event.data);
@@ -203,6 +226,8 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       recorder.onerror = (event) => {
         const error = (event as Event & { error?: DOMException }).error;
         console.error("[CameraRecorder] recorder error", error);
+        clearLimitTimeout();
+        activeRecordingStartedAtRef.current = 0;
         setRecording(false);
         setPaused(false);
         toast.error(`ERREUR ENREGISTREMENT: ${error?.message || "aucun détail"}`, {
@@ -211,6 +236,8 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       };
 
       recorder.onstop = () => {
+        clearLimitTimeout();
+
         if (drawFrameRef.current !== null) {
           cancelAnimationFrame(drawFrameRef.current);
           drawFrameRef.current = null;
@@ -218,12 +245,16 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
 
         const actualMime = recorder.mimeType || mime || "video/webm";
         const blob = new Blob(chunksRef.current, { type: actualMime });
-        const duration = Math.max(1, Math.round((performance.now() - startedAtRef.current) / 1000));
+        const duration = Math.max(1, Math.min(
+          LIMITS[durationMode] || 600,
+          Math.round(accumulatedRecordingMsRef.current / 1000),
+        ));
 
         stopTracks(recordingStreamRef.current);
         recordingStreamRef.current = null;
         recordingCanvasRef.current = null;
         recorderRef.current = null;
+        activeRecordingStartedAtRef.current = 0;
 
         console.info("[CameraRecorder] FINAL RECORDED BLOB", {
           mime: actualMime,
@@ -241,15 +272,25 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
         onVideoRecorded?.(blob, duration);
       };
 
-      recorder.start(1000);
+      recorder.start(250);
       setSeconds(0);
       setPaused(false);
       setRecording(true);
+
+      const limitMs = (LIMITS[durationMode] || 15) * 1000;
+      clearLimitTimeout();
+      limitTimeoutRef.current = window.setTimeout(() => {
+        if (recorderRef.current === recorder && recorder.state !== "inactive") {
+          stopRecording();
+        }
+      }, limitMs);
     } catch (error) {
       console.error("[CameraRecorder] recorder", error);
       const err = error instanceof DOMException ? `${error.name}: ${error.message}` : String(error);
       toast.error(`ERREUR CRÉATION ENREGISTREUR: ${err}`, { duration: 12000 });
 
+      clearLimitTimeout();
+      activeRecordingStartedAtRef.current = 0;
       if (drawFrameRef.current !== null) cancelAnimationFrame(drawFrameRef.current);
       drawFrameRef.current = null;
       stopTracks(recordingStreamRef.current);
@@ -262,7 +303,10 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
     const recorder = recorderRef.current;
     if (!recorder || recorder.state !== "recording") return;
 
+    accumulatedRecordingMsRef.current += Math.max(0, performance.now() - activeRecordingStartedAtRef.current);
+    activeRecordingStartedAtRef.current = 0;
     recorder.pause();
+    clearLimitTimeout();
     setPaused(true);
   };
 
@@ -270,7 +314,20 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
     const recorder = recorderRef.current;
     if (!recorder || recorder.state !== "paused") return;
 
+    const remainingMs = Math.max(0, (LIMITS[durationMode] || 15) * 1000 - accumulatedRecordingMsRef.current);
+    if (remainingMs <= 0) {
+      stopRecording();
+      return;
+    }
+
     recorder.resume();
+    activeRecordingStartedAtRef.current = performance.now();
+    clearLimitTimeout();
+    limitTimeoutRef.current = window.setTimeout(() => {
+      if (recorderRef.current === recorder && recorder.state !== "inactive") {
+        stopRecording();
+      }
+    }, remainingMs);
     setPaused(false);
   };
 
@@ -290,23 +347,27 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
   };
 
   useEffect(() => {
-    if (!recording || paused) return;
-    const interval = window.setInterval(() => setSeconds((value) => value + 1), 1000);
-    return () => window.clearInterval(interval);
-  }, [recording, paused]);
+    if (!recording) return;
 
-  useEffect(() => {
-    if (recording && !paused && seconds >= LIMITS[durationMode]) {
-      stopRecording();
-    }
-  }, [recording, paused, seconds, durationMode, stopRecording]);
+    const interval = window.setInterval(() => {
+      const limitMs = (LIMITS[durationMode] || 15) * 1000;
+      const elapsed = getRecordedMs();
+      setSeconds(Math.min(LIMITS[durationMode] || 15, Math.floor(elapsed / 1000)));
+
+      if (!paused && elapsed >= limitMs) stopRecording();
+    }, 100);
+
+    return () => window.clearInterval(interval);
+  }, [recording, paused, durationMode, getRecordedMs, stopRecording]);
 
   const formatTime = (value: number) =>
     `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
 
   const progress = durationMode === "PHOTO"
     ? 0
-    : Math.min(1, seconds / LIMITS[durationMode]);
+    : Math.min(1, seconds / (LIMITS[durationMode] || 15));
+
+  const durationLabel = durationMode === "10 min" ? "10:00" : durationMode === "60 s" ? "01:00" : durationMode === "15 s" ? "00:15" : "00:10";
 
   return (
     <div className="h-screen bg-black text-white relative overflow-hidden flex flex-col">
@@ -356,16 +417,14 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
         <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 rounded-full bg-black/75 px-4 py-1.5 font-bold tabular-nums">
           <span className="text-red-400">●</span>{" "}
           {formatTime(seconds)}{" "}
-          <span className="text-white/60">
-            / {durationMode === "10 min" ? "10:00" : durationMode === "60 s" ? "01:00" : "00:15"}
-          </span>
+          <span className="text-white/60">/ {durationLabel}</span>
           {paused && <span className="ml-2 text-yellow-300">PAUSE</span>}
         </div>
       )}
 
       <div className="relative z-20 mt-auto bg-gradient-to-t from-black/95 via-black/55 to-transparent px-5 pb-7 pt-12">
         <div className="flex justify-center gap-3 mb-5">
-          {["PHOTO", "15 s", "60 s", "10 min"].map((mode) => (
+          {["PHOTO", "10 s", "15 s", "60 s", "10 min"].map((mode) => (
             <button
               key={mode}
               onClick={() => !recording && setDurationMode(mode)}
@@ -429,7 +488,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
         {recording && (
           <div className="mt-4 h-1.5 rounded-full bg-white/25 overflow-hidden">
             <div
-              className="h-full bg-red-500 transition-[width] duration-500"
+              className="h-full bg-red-500 transition-[width] duration-100"
               style={{ width: `${progress * 100}%` }}
             />
           </div>
