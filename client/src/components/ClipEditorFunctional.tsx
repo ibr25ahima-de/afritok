@@ -9,7 +9,7 @@ const merge=(a:Range[])=>a.filter(r=>r.end-r.start>.05).sort((x,y)=>x.start-y.st
 
 export function ClipEditorFunctional({src,duration,trimStart,trimEnd,cuts,onTrimChange,onCutsChange,onCurrentTimeChange,onClose}:Props){
  const vref=useRef<HTMLVideoElement>(null);const tref=useRef<HTMLDivElement>(null);const tRef=useRef(trimStart||0);const dragRef=useRef(false);
- const [d,setD]=useState(duration>0?duration:0),[t,setT]=useState(trimStart||0),[playing,setPlaying]=useState(false),[splits,setSplits]=useState<number[]>([]),[thumbs,setThumbs]=useState<string[]>([]),[history,setHistory]=useState<any[]>([]),[future,setFuture]=useState<any[]>([]),[ready,setReady]=useState(false),[selecting,setSelecting]=useState(false);
+ const [d,setD]=useState(duration>0?duration:0),[t,setT]=useState(trimStart||0),[playing,setPlaying]=useState(false),[splits,setSplits]=useState<number[]>([]),[thumbs,setThumbs]=useState<string[]>([]),[history,setHistory]=useState<any[]>([]),[future,setFuture]=useState<any[]>([]),[ready,setReady]=useState(false),[selecting,setSelecting]=useState(true);
  const total=d>0?d:duration;const start=Math.max(0,Math.min(trimStart||0,total||0));const end=Math.max(start,Math.min(trimEnd>0?trimEnd:total,total||trimEnd||start));const removed=useMemo(()=>merge(cuts),[cuts]);
  const bounds=useMemo(()=>[start,...splits.filter(x=>x>start+.05&&x<end-.05),end].sort((a,b)=>a-b),[start,end,splits]);
  const clips=useMemo(()=>bounds.slice(0,-1).map((a,i)=>({start:a,end:bounds[i+1]})).filter(c=>c.end-c.start>.05&&!removed.some(r=>c.start>=r.start-.02&&c.end<=r.end+.02)),[bounds,removed]);
@@ -20,48 +20,12 @@ export function ClipEditorFunctional({src,duration,trimStart,trimEnd,cuts,onTrim
   let stop = false;
   const v = document.createElement("video");
   v.src = src; v.muted = true; v.playsInline = true; v.preload = "auto";
-  v.style.position = "fixed";
-  v.style.width = "2px";
-  v.style.height = "2px";
-  v.style.opacity = "0";
-  v.style.pointerEvents = "none";
-  v.style.left = "-9999px";
+  v.style.position = "fixed"; v.style.width = "2px"; v.style.height = "2px"; v.style.opacity = "0"; v.style.pointerEvents = "none"; v.style.left = "-9999px";
   document.body.appendChild(v);
-  const readyP = new Promise<void>((r) => {
-    if (v.readyState >= 1) r();
-    else v.addEventListener("loadedmetadata", () => r(), { once: true });
-  });
-  const seekThumb = (x: number) => new Promise<void>((r) => {
-    let done = false;
-    const f = () => { if (done) return; done = true; v.removeEventListener("seeked", f); r(); };
-    v.addEventListener("seeked", f, { once: true });
-    try { v.currentTime = x; } catch {}
-    setTimeout(f, 800);
-  });
-  (async () => {
-    try {
-      await readyP;
-      if (stop) return;
-      const c = document.createElement("canvas"), ctx = c.getContext("2d");
-      if (!ctx) return;
-      c.width = 120; c.height = 68;
-      const out: string[] = [];
-      const span = Math.max(0.1, end - start);
-      for (let i = 0; i < 18 && !stop; i++) {
-        await seekThumb(start + (span * i) / 17);
-        ctx.drawImage(v, 0, 0, c.width, c.height);
-        out.push(c.toDataURL("image/jpeg", 0.55));
-      }
-      if (!stop) setThumbs(out);
-    } catch {}
-  })();
-  return () => {
-    stop = true;
-    v.pause();
-    v.removeAttribute("src");
-    v.load();
-    document.body.removeChild(v);
-  };
+  const readyP = new Promise<void>((r) => { if (v.readyState >= 1) r(); else v.addEventListener("loadedmetadata", () => r(), { once: true }); });
+  const seekThumb = (x: number) => new Promise<void>((r) => { let done = false; const f = () => { if (done) return; done = true; v.removeEventListener("seeked", f); r(); }; v.addEventListener("seeked", f, { once: true }); try { v.currentTime = x; } catch {} setTimeout(f, 800); });
+  (async () => { try { await readyP; if (stop) return; const c = document.createElement("canvas"), ctx = c.getContext("2d"); if (!ctx) return; c.width = 120; c.height = 68; const out: string[] = []; const span = Math.max(0.1, end - start); for (let i = 0; i < 18 && !stop; i++) { await seekThumb(start + (span * i) / 17); ctx.drawImage(v, 0, 0, c.width, c.height); out.push(c.toDataURL("image/jpeg", 0.55)); } if (!stop) setThumbs(out); } catch {} })();
+  return () => { stop = true; v.pause(); v.removeAttribute("src"); v.load(); document.body.removeChild(v); };
  }, [src, start, end]);
  const remember=()=>{setHistory(h=>[...h,{cuts:cuts.map(x=>({...x})),splits:[...splits],start,end}]);setFuture([])};
  const split=()=>{const x=tRef.current;if(x<=start+.08||x>=end-.08)return toast.info("Place la ligne blanche à l'endroit de la coupe");if(splits.some(s=>Math.abs(s-x)<.08))return;remember();setSplits(s=>[...s,x].sort((a,b)=>a-b));seek(x);toast.success("Vidéo divisée")};
