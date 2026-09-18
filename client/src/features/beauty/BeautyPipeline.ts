@@ -75,30 +75,35 @@ function retouchSkin(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: 
   const mask = createSkinMask(l, w, h, Math.max(8, face.width * .045));
   if (!mask) return;
 
-  // Le flou est proportionnel à la taille du visage à l'écran, pas une valeur
-  // fixe en pixels — sinon il devient invisible en haute résolution.
-  const blurPx = Math.max(3, face.width * (0.012 + amount * 0.028));
-  const softened = maskedImage(ctx.canvas, mask, `blur(${blurPx.toFixed(1)}px) saturate(.99)`);
-  if (!softened) return;
+  // Photo de référence non modifiée, utilisée comme calque "net".
+  const original = document.createElement("canvas");
+  original.width = w;
+  original.height = h;
+  original.getContext("2d")!.drawImage(ctx.canvas, 0, 0);
+
+  // Calque lissé (basse fréquence) : enterre les petits défauts locaux
+  // (boutons, points noirs) dans le ton de peau environnant.
+  const lowBlur = Math.max(6, face.width * (0.02 + amount * 0.05));
+  const low = maskedImage(original, mask, `blur(${lowBlur.toFixed(1)}px)`);
+  if (!low) return;
 
   ctx.save();
-  ctx.globalAlpha = 0.20 + amount * 0.65; // jusqu'à 85% d'opacité à fond
-  ctx.drawImage(softened, 0, 0);
+  ctx.globalAlpha = 0.45 + amount * 0.45;
+  ctx.drawImage(low, 0, 0);
   ctx.restore();
 
-  // Deuxième passe, plus douce, pour bien fondre les micro-taches
-  // sans donner un effet "plastique" — surtout utile à amount élevé.
-  if (amount > 0.5) {
-    const softer = maskedImage(ctx.canvas, mask, `blur(${(blurPx * 1.8).toFixed(1)}px)`);
-    if (softer) {
-      ctx.save();
-      ctx.globalAlpha = (amount - 0.5) * 0.4;
-      ctx.drawImage(softer, 0, 0);
-      ctx.restore();
-    }
+  // Réinjection légère du calque net d'origine par-dessus : ça redonne les
+  // reflets/ombres naturels de la peau (évite l'effet "tache floue plate"
+  // sur le front) sans faire réapparaître les petits défauts, qui restent
+  // noyés sous le calque flouté au-dessus.
+  const sharpSkin = maskedImage(original, mask, "none");
+  if (sharpSkin) {
+    ctx.save();
+    ctx.globalAlpha = Math.max(0.08, 0.22 - amount * 0.12);
+    ctx.drawImage(sharpSkin, 0, 0);
+    ctx.restore();
   }
 }
-
 function tone(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: number, h: number, amount: number) {
   amount = clamp01(amount);
   if (amount <= 0) return;
