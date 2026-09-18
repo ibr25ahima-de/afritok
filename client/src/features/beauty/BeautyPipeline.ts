@@ -6,21 +6,11 @@ import { normalizeBeautyConfig } from "./BeautyConfig";
 type Point = { x: number; y: number };
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
-function polygon(ctx: CanvasRenderingContext2D, points: Point[]) {
-  if (points.length < 3) return false;
+function fillPath(ctx: CanvasRenderingContext2D, pointsList: Point[][]) {
   ctx.beginPath();
-  points.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
-  ctx.closePath();
-  return true;
-}
-
-function addProtectedRegions(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: number, h: number) {
-  // Eyes and lips remain sharp while the skin around them is retouched.
-  for (const ids of [LM.leftEye, LM.rightEye, LM.outerLips]) {
-    const p = getPoints(l, ids, w, h);
-    if (p.length < 3) continue;
-    ctx.moveTo(p[0].x, p[0].y);
-    for (let i = 1; i < p.length; i++) ctx.lineTo(p[i].x, p[i].y);
+  for (const points of pointsList) {
+    if (points.length < 3) continue;
+    points.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
     ctx.closePath();
   }
 }
@@ -35,20 +25,14 @@ function createSkinMask(l: NormalizedLandmark[], w: number, h: number, feather: 
   const oval = getPoints(l, LM.faceOval, w, h);
   if (oval.length < 3) return null;
 
-  m.fillStyle = "black";
-  m.fillRect(0, 0, w, h);
+  const holes = [LM.leftEye, LM.rightEye, LM.outerLips]
+    .map((ids) => getPoints(l, ids, w, h))
+    .filter((p) => p.length >= 3);
+
+  // Un seul tracé : l'ovale du visage + les contours yeux/lèvres comme "trous".
+  fillPath(m, [oval, ...holes]);
   m.fillStyle = "white";
-  polygon(m, oval);
-  addProtectedRegions(m, l, w, h);
-  try { m.clip("evenodd"); } catch { /* mask path is still useful below */ }
-  // Rebuild the actual fill after clip so the holes are reliable on browsers
-  // where CanvasRenderingContext2D.clip('evenodd') is not implemented.
-  m.clearRect(0, 0, w, h);
-  m.fillStyle = "white";
-  polygon(m, oval);
-  m.globalCompositeOperation = "destination-out";
-  addProtectedRegions(m, l, w, h);
-  m.globalCompositeOperation = "source-over";
+  m.fill("evenodd");
 
   if (feather > 0) {
     const softened = document.createElement("canvas");
@@ -63,7 +47,6 @@ function createSkinMask(l: NormalizedLandmark[], w: number, h: number, feather: 
   }
   return mask;
 }
-
 function maskedImage(
   source: HTMLCanvasElement,
   mask: HTMLCanvasElement,
