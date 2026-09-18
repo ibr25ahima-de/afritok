@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Music, Pause, Play, RefreshCw, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
+import AREngineMobile from "./AREngineMobile";
+import EffectsPanel, { AR_EFFECTS, type AREffect } from "./EffectsPanel";
 
 interface CameraRecorderProps {
   onVideoRecorded?: (blob: Blob, duration: number) => void;
@@ -13,14 +15,6 @@ interface CameraRecorderProps {
 }
 
 const LIMITS: Record<string, number> = { "10 s": 10, "15 s": 15, "60 s": 60, "10 min": 600 };
-
-const FACE_EFFECTS: { id: string; name: string; cssFilter: string }[] = [
-  { id: "none", name: "Normal", cssFilter: "none" },
-  { id: "smooth", name: "Doux", cssFilter: "brightness(1.08) contrast(1.05) blur(0.4px)" },
-  { id: "vivid", name: "Éclat", cssFilter: "saturate(1.5) contrast(1.12) brightness(1.05)" },
-  { id: "warm", name: "Chaud", cssFilter: "sepia(0.2) saturate(1.3) brightness(1.03)" },
-  { id: "cool", name: "Frais", cssFilter: "hue-rotate(-8deg) saturate(1.15) brightness(1.05)" },
-];
 
 type FacingMode = "user" | "environment";
 
@@ -53,9 +47,9 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
   const [timer, setTimer] = useState(0);
   const [switchingCamera, setSwitchingCamera] = useState(false);
   const [effectsOpen, setEffectsOpen] = useState(false);
-  const [selectedEffectId, setSelectedEffectId] = useState("none");
-  const [faceSnapshot, setFaceSnapshot] = useState<string | null>(null);
-  const selectedEffectRef = useRef("none");
+  const [selectedEffect, setSelectedEffect] = useState<AREffect | null>(null);
+  const selectedEffectRef = useRef<AREffect | null>(null);
+  const arCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const stopTracks = useCallback((stream: MediaStream | null) => {
     stream?.getTracks().forEach((track) => track.stop());
@@ -130,25 +124,8 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
   }, [startCamera, stopTracks, clearLimitTimeout]);
 
   useEffect(() => {
-    selectedEffectRef.current = selectedEffectId;
-  }, [selectedEffectId]);
-
-  useEffect(() => {
-    if (!effectsOpen) return;
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
-    const grab = () => {
-      const video = videoRef.current;
-      if (!video?.videoWidth || !video.videoHeight || !ctx) return;
-      canvas.width = 160;
-      canvas.height = Math.round((160 * video.videoHeight) / video.videoWidth);
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      setFaceSnapshot(canvas.toDataURL("image/jpeg", 0.7));
-    };
-    grab();
-    const interval = window.setInterval(grab, 1200);
-    return () => window.clearInterval(interval);
-  }, [effectsOpen]);
+    selectedEffectRef.current = selectedEffect;
+  }, [selectedEffect]);
 
   const switchCamera = useCallback(async () => {
     if (switchingCamera) return;
@@ -166,22 +143,16 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
   }, [facingMode, startCamera, switchingCamera]);
 
   const takePhoto = () => {
-    const video = videoRef.current;
-    if (!video?.videoWidth || !video.videoHeight) {
+    const source = arCanvasRef.current;
+    if (!source || !source.width || !source.height) {
       toast.error("La caméra n'est pas encore prête");
       return;
     }
-
     const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    canvas.width = source.width;
+    canvas.height = source.height;
     const context = canvas.getContext("2d");
-    if (context) {
-      const effect = FACE_EFFECTS.find((e) => e.id === selectedEffectRef.current);
-      context.filter = effect?.cssFilter || "none";
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      context.filter = "none";
-    }
+    context?.drawImage(source, 0, 0);
     canvas.toBlob((blob) => {
       if (blob) onPhotoTaken?.(blob);
     }, "image/jpeg", 0.95);
@@ -243,12 +214,9 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       recordingStreamRef.current = canvasStream;
 
       const draw = () => {
-        const currentVideo = videoRef.current;
-        if (currentVideo && currentVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-          const effect = FACE_EFFECTS.find((e) => e.id === selectedEffectRef.current);
-          context.filter = effect?.cssFilter || "none";
-          context.drawImage(currentVideo, 0, 0, canvas.width, canvas.height);
-          context.filter = "none";
+        const source = arCanvasRef.current;
+        if (source && source.width && source.height) {
+          context.drawImage(source, 0, 0, canvas.width, canvas.height);
         }
         drawFrameRef.current = requestAnimationFrame(draw);
       };
@@ -421,7 +389,11 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
         muted
         playsInline
         className="absolute inset-0 w-full h-full object-cover"
-        style={{ filter: FACE_EFFECTS.find((e) => e.id === selectedEffectId)?.cssFilter || "none" }}
+      />
+      <AREngineMobile
+        videoRef={videoRef}
+        activeEffect={selectedEffect}
+        canvasRef={arCanvasRef}
       />
 
       {timer > 0 && (
@@ -460,11 +432,11 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
 
       <div className="relative z-30 flex justify-end px-4">
         <button
-          onClick={() => setEffectsOpen((v) => !v)}
+          onClick={() => setEffectsOpen(true)}
           className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center"
           aria-label="Effets de visage"
         >
-          <Sparkles size={22} className={selectedEffectId !== "none" ? "text-yellow-300" : ""} />
+          <Sparkles size={22} className={selectedEffect ? "text-yellow-300" : ""} />
         </button>
       </div>
 
@@ -477,33 +449,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
         </div>
       )}
 
-      {effectsOpen && (
-        <div className="relative z-30 flex items-center gap-3 px-5 pb-3 overflow-x-auto">
-          {FACE_EFFECTS.map((effect) => (
-            <button
-              key={effect.id}
-              onClick={() => setSelectedEffectId(effect.id)}
-              className={`shrink-0 flex flex-col items-center gap-1 ${selectedEffectId === effect.id ? "opacity-100" : "opacity-70"}`}
-            >
-              <span
-                className={`h-14 w-14 rounded-full overflow-hidden border-2 ${selectedEffectId === effect.id ? "border-white" : "border-white/30"} bg-white/10 flex items-center justify-center`}
-              >
-                {faceSnapshot ? (
-                  <img
-                    src={faceSnapshot}
-                    alt={effect.name}
-                    className="h-full w-full object-cover"
-                    style={{ filter: effect.cssFilter }}
-                  />
-                ) : (
-                  <Sparkles size={18} />
-                )}
-              </span>
-              <span className="text-[10px] font-semibold">{effect.name}</span>
-            </button>
-          ))}
-        </div>
-      )}
+
 
       <div className="relative z-20 mt-auto bg-gradient-to-t from-black/95 via-black/55 to-transparent px-5 pb-7 pt-12">
         <div className="flex justify-center gap-3 mb-5">
@@ -583,6 +529,16 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
           </p>
         )}
       </div>
+      <EffectsPanel
+        isOpen={effectsOpen}
+        onClose={() => setEffectsOpen(false)}
+        selectedEffect={selectedEffect}
+        onSelectEffect={(effect) => {
+          setSelectedEffect(effect);
+          setEffectsOpen(false);
+        }}
+      />
+
     </div>
   );
 };
