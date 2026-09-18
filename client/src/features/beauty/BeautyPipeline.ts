@@ -89,17 +89,31 @@ function retouchSkin(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: 
   const face = getFaceGeometry(l, w, h);
   if (face.width < 20) return;
 
-  // Blur the image itself, then use a feathered facial mask to blend it in.
-  // This avoids the hard oval edge that previously looked like a gray/white mask.
   const mask = createSkinMask(l, w, h, Math.max(8, face.width * .045));
   if (!mask) return;
-  const softened = maskedImage(ctx.canvas, mask, `blur(${(1.4 + amount * 2.2).toFixed(1)}px) saturate(.995)`);
+
+  // Le flou est proportionnel à la taille du visage à l'écran, pas une valeur
+  // fixe en pixels — sinon il devient invisible en haute résolution.
+  const blurPx = Math.max(3, face.width * (0.012 + amount * 0.028));
+  const softened = maskedImage(ctx.canvas, mask, `blur(${blurPx.toFixed(1)}px) saturate(.99)`);
   if (!softened) return;
 
   ctx.save();
-  ctx.globalAlpha = 0.10 + amount * 0.20;
+  ctx.globalAlpha = 0.20 + amount * 0.65; // jusqu'à 85% d'opacité à fond
   ctx.drawImage(softened, 0, 0);
   ctx.restore();
+
+  // Deuxième passe, plus douce, pour bien fondre les micro-taches
+  // sans donner un effet "plastique" — surtout utile à amount élevé.
+  if (amount > 0.5) {
+    const softer = maskedImage(ctx.canvas, mask, `blur(${(blurPx * 1.8).toFixed(1)}px)`);
+    if (softer) {
+      ctx.save();
+      ctx.globalAlpha = (amount - 0.5) * 0.4;
+      ctx.drawImage(softer, 0, 0);
+      ctx.restore();
+    }
+  }
 }
 
 function tone(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: number, h: number, amount: number) {
