@@ -41,7 +41,8 @@ export const helmetConfig = helmet({
     directives: {
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
-      scriptSrc: ["'self'"],
+      scriptSrc: ["'self'", "'wasm-unsafe-eval'"],
+      workerSrc: ["'self'", "blob:"],
       imgSrc: ["'self'", "data:", "https:"],
       mediaSrc: ["'self'", "https:", "blob:"],
       connectSrc: ["'self'", "https:"],
@@ -88,8 +89,6 @@ export const corsConfig = cors({
     const normalizedOrigin = origin.trim().replace(/\/$/, "");
     const allowed = configuredAllowedOrigins();
     if (allowed.includes(normalizedOrigin)) return callback(null, true);
-    // Allow the browser's same-origin request even if Render's environment
-    // variables have not been configured yet.
     return callback(null, false);
   },
   credentials: true,
@@ -97,12 +96,6 @@ export const corsConfig = cors({
   allowedHeaders: ["Content-Type", "Authorization"],
 });
 
-/**
- * Protection CSRF/origin pour les requêtes qui utilisent le cookie de session.
- * Les requêtes cross-site ne doivent jamais pouvoir déclencher une mutation
- * authentifiée simplement parce que le navigateur joint automatiquement le cookie.
- * Les clients natifs/server-to-server sans Origin/Referer restent autorisés.
- */
 export const csrfProtection = (req: Request, res: Response, next: NextFunction) => {
   const method = req.method.toUpperCase();
   if (["GET", "HEAD", "OPTIONS"].includes(method)) return next();
@@ -141,8 +134,6 @@ export const csrfProtection = (req: Request, res: Response, next: NextFunction) 
 };
 
 export const validateInput = (req: Request, res: Response, next: NextFunction) => {
-  // /api/upload-video uses multer with its own 100 MB file-size limit.
-  // Do not apply the generic 10 MB JSON/body guard to that multipart upload.
   if (req.path === "/api/upload-video") {
     return next();
   }
