@@ -48,6 +48,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
   const [switchingCamera, setSwitchingCamera] = useState(false);
   const [effectsOpen, setEffectsOpen] = useState(false);
   const [selectedEffect, setSelectedEffect] = useState<AREffect | null>(null);
+  const [arStatus, setArStatus] = useState<string>("—");
   const selectedEffectRef = useRef<AREffect | null>(null);
   const arCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -394,6 +395,10 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
         videoRef={videoRef}
         activeEffect={selectedEffect}
         canvasRef={arCanvasRef}
+        onStatusChange={(s, e) => {
+          console.log("[AR STATUS]", s, e);
+          setArStatus(e ? `${s}: ${String((e as Error)?.message || e)}` : s);
+        }}
       />
 
       {timer > 0 && (
@@ -401,6 +406,10 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
           {timer}
         </div>
       )}
+
+      <div className="absolute top-24 left-1/2 -translate-x-1/2 z-50 rounded bg-black/80 px-3 py-1 text-[11px] font-mono text-lime-300">
+        AR: {arStatus} | vidéo: {videoRef.current?.videoWidth || 0}×{videoRef.current?.videoHeight || 0}
+      </div>
 
       <div className="relative z-30 flex items-center justify-between p-4">
         <button
