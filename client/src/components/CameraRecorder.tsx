@@ -203,8 +203,9 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
 
     try {
       const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth || 720;
-      canvas.height = video.videoHeight || 1280;
+      const arSource = arCanvasRef.current;
+      canvas.width = arSource?.width || video.videoWidth || 720;
+      canvas.height = arSource?.height || video.videoHeight || 1280;
       const context = canvas.getContext("2d");
       if (!context) {
         toast.error("Impossible de préparer l'enregistrement vidéo");
@@ -212,17 +213,13 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       }
 
       recordingCanvasRef.current = canvas;
+
+      if (arSource && arSource.width === canvas.width && arSource.height === canvas.height) {
+        context.drawImage(arSource, 0, 0);
+      }
+
       const canvasStream = canvas.captureStream(30);
       recordingStreamRef.current = canvasStream;
-
-      const draw = () => {
-        const source = arCanvasRef.current;
-        if (source && source.width && source.height) {
-          context.drawImage(source, 0, 0, canvas.width, canvas.height);
-        }
-        drawFrameRef.current = requestAnimationFrame(draw);
-      };
-      draw();
 
       const recorder = mime
         ? new MediaRecorder(canvasStream, { mimeType: mime })
@@ -397,6 +394,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
         videoRef={videoRef}
         activeEffect={selectedEffect}
         canvasRef={arCanvasRef}
+        recordingCanvasRef={recordingCanvasRef}
         onStatusChange={(s, e) => {
           console.log("[AR STATUS]", s, e);
           setArStatus(e ? `${s}: ${String((e as Error)?.message || e)}` : s);
@@ -461,8 +459,6 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
           {paused && <span className="ml-2 text-yellow-300">PAUSE</span>}
         </div>
       )}
-
-
 
       <div className="relative z-20 mt-auto bg-gradient-to-t from-black/95 via-black/55 to-transparent px-5 pb-7 pt-12">
         <div className="flex justify-center gap-3 mb-5">
@@ -551,7 +547,6 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
           setEffectsOpen(false);
         }}
       />
-
     </div>
   );
 };
