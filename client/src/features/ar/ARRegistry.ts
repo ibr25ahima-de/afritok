@@ -10,6 +10,7 @@ export interface AREffect {
   thumbnail: string;
   description: string;
   beautyConfig?: BeautyConfig;
+  filterCss?: string;
 }
 
 // Real photographic previews. These are deliberately real portraits rather than
@@ -54,8 +55,8 @@ const NO_BEAUTY: BeautyConfig = {
   symmetry: 0,
 };
 
-const B = (id: string, name: string, config: BeautyConfig, thumbnail: string, description: string) => ({
-  id, name, category: "beauty" as const, renderer: "none" as const, beautyConfig: config, thumbnail, description,
+const B = (id: string, name: string, config: BeautyConfig, thumbnail: string, description: string, filterCss?: string) => ({
+  id, name, category: "beauty" as const, renderer: "none" as const, beautyConfig: config, thumbnail, description, filterCss,
 });
 const C = (id: string, name: string, renderer: EffectRenderer, thumbnail: string, description: string) => ({
   id, name, category: "creative" as const, renderer, thumbnail, description,
@@ -63,16 +64,16 @@ const C = (id: string, name: string, renderer: EffectRenderer, thumbnail: string
 
 export const AR_EFFECTS: AREffect[] = [
   B("beauty-none", "Naturel", NO_BEAUTY, PHOTO.natural, "Aucune retouche : rendu caméra naturel."),
-  B("beauty-natural", "Doux", { smoothSkin: .62, skinTexture: .58, brightenSkin: .03, darkCircles: .22, eyeBrilliance: .18, smileLines: .16 }, PHOTO.soft, "Adoucissement léger et naturel du visage."),
-  B("beauty-foundation", "Fond de teint", { smoothSkin: .82, skinTexture: .72, brightenSkin: .04, darkCircles: .38, smileLines: .32, eyeBrilliance: .14 }, PHOTO.foundation, "Peau plus uniforme avec correction renforcée."),
+  B("beauty-natural", "Doux", { smoothSkin: .62, skinTexture: .58, brightenSkin: .03, darkCircles: .22, eyeBrilliance: .18, smileLines: .16 }, PHOTO.soft, "Adoucissement léger et naturel du visage.", "brightness(1.03) saturate(1.05) contrast(1.01)"),
+  B("beauty-foundation", "Fond de teint", { smoothSkin: .82, skinTexture: .72, brightenSkin: .04, darkCircles: .38, smileLines: .32, eyeBrilliance: .14 }, PHOTO.foundation, "Peau plus uniforme avec correction renforcée.", "brightness(1.08) saturate(1.15) contrast(1.03)"),
   // Porcelain means smooth/even skin, not whitening the person's complexion.
-  B("beauty-porcelain", "Porcelaine", { smoothSkin: .78, skinTexture: .62, brightenSkin: .04, darkCircles: .22, smileLines: .18, eyeBrilliance: .16 }, PHOTO.porcelain, "Peau lissée et uniforme sans blanchir le teint."),
-  B("beauty-glow", "Glow", { smoothSkin: .72, skinTexture: .68, brightenSkin: .28, darkCircles: .28, eyeBrilliance: .38, smileLines: .20 }, PHOTO.glow, "Éclat renforcé et regard lumineux."),
-  B("beauty-big-eyes", "Grands yeux", { smoothSkin: .52, skinTexture: .50, enlargeEyes: 1, eyeBrilliance: .45, darkCircles: .24 }, PHOTO.eyes, "Accentuation du regard et des yeux."),
-  B("beauty-slim", "Visage fin", { smoothSkin: .55, skinTexture: .54, slimFace: 1, symmetry: .20, darkCircles: .22 }, PHOTO.slim, "Sculpt du visage avec contour plus fin."),
-  B("beauty-full-lips", "Lèvres", { smoothSkin: .52, skinTexture: .50, enlargeLips: 1, brightenSkin: .03 }, PHOTO.lips, "Accentuation des lèvres."),
-  B("beauty-retouch", "Retouche", { smoothSkin: .80, skinTexture: .70, darkCircles: .40, eyeBrilliance: .38, smileLines: .34, brightenSkin: .22 }, PHOTO.retouch, "Retouche complète du visage."),
-  B("beauty-symmetry", "Harmonie", { smoothSkin: .58, skinTexture: .56, symmetry: 1, eyeBrilliance: .20, darkCircles: .25 }, PHOTO.harmony, "Harmonisation légère des traits."),
+  B("beauty-porcelain", "Porcelaine", { smoothSkin: .78, skinTexture: .62, brightenSkin: .04, darkCircles: .22, smileLines: .18, eyeBrilliance: .16 }, PHOTO.porcelain, "Peau lissée et uniforme sans blanchir le teint.", "brightness(1.06) saturate(1.08) contrast(1.03)"),
+  B("beauty-glow", "Glow", { smoothSkin: .72, skinTexture: .68, brightenSkin: .28, darkCircles: .28, eyeBrilliance: .38, smileLines: .20 }, PHOTO.glow, "Éclat renforcé et regard lumineux.", "brightness(1.18) saturate(1.3) contrast(1.05)"),
+  B("beauty-big-eyes", "Grands yeux", { smoothSkin: .52, skinTexture: .50, enlargeEyes: 1, eyeBrilliance: .45, darkCircles: .24 }, PHOTO.eyes, "Accentuation du regard et des yeux.", "brightness(1.06) saturate(1.12) contrast(1.04)"),
+  B("beauty-slim", "Visage fin", { smoothSkin: .55, skinTexture: .54, slimFace: 1, symmetry: .20, darkCircles: .22 }, PHOTO.slim, "Sculpt du visage avec contour plus fin.", "brightness(1.04) saturate(1.08) contrast(1.05)"),
+  B("beauty-full-lips", "Lèvres", { smoothSkin: .52, skinTexture: .50, enlargeLips: 1, brightenSkin: .03 }, PHOTO.lips, "Accentuation des lèvres.", "brightness(1.05) saturate(1.12) contrast(1.02)"),
+  B("beauty-retouch", "Retouche", { smoothSkin: .80, skinTexture: .70, darkCircles: .40, eyeBrilliance: .38, smileLines: .34, brightenSkin: .22 }, PHOTO.retouch, "Retouche complète du visage.", "brightness(1.12) saturate(1.25) contrast(1.08)"),
+  B("beauty-symmetry", "Harmonie", { smoothSkin: .58, skinTexture: .56, symmetry: 1, eyeBrilliance: .20, darkCircles: .25 }, PHOTO.harmony, "Harmonisation légère des traits.", "brightness(1.04) saturate(1.08) contrast(1.02)"),
   C("effect-cat", "Chat", "cat", PHOTO.cat, "Oreilles, yeux, nez et moustaches suivent le visage."),
   C("effect-bunny", "Lapin", "bunny", PHOTO.bunny, "Oreilles et nez de lapin suivent le mouvement de la tête."),
   C("effect-sunglasses", "Lunettes", "sunglasses", PHOTO.glasses, "Lunettes verrouillées sur les yeux et orientées avec la tête."),
