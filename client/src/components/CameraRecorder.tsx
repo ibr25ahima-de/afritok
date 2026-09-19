@@ -145,6 +145,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
 
   const takePhoto = () => {
     const source = arCanvasRef.current;
+    console.log("[takePhoto] source size", source?.width, source?.height, "durationMode", durationMode);
     if (!source || !source.width || !source.height) {
       toast.error("La caméra n'est pas encore prête");
       return;
@@ -345,6 +346,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
   };
 
   const capture = async () => {
+    console.log("[capture] durationMode =", durationMode, "recording =", recording);
     if (timer > 0 && !recording) {
       for (let n = timer; n > 0; n -= 1) {
         setTimer(n);
@@ -407,8 +409,10 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
         </div>
       )}
 
-      <div className="absolute top-24 left-1/2 -translate-x-1/2 z-50 rounded bg-black/80 px-3 py-1 text-[11px] font-mono text-lime-300">
-        AR: {arStatus} | vidéo: {videoRef.current?.videoWidth || 0}×{videoRef.current?.videoHeight || 0}
+      <div className="absolute top-24 left-1/2 -translate-x-1/2 z-50 rounded bg-black/80 px-3 py-1 text-[10px] font-mono text-lime-300 text-center leading-tight">
+        AR: {arStatus}<br/>
+        mode: {durationMode} | rec: {recording ? "OUI" : "non"}<br/>
+        arCanvas: {arCanvasRef.current?.width || 0}×{arCanvasRef.current?.height || 0}
       </div>
 
       <div className="relative z-30 flex items-center justify-between p-4">
