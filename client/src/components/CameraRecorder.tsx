@@ -3,7 +3,6 @@ import { Check, Music, Pause, Play, RefreshCw, Sparkles, X } from "lucide-react"
 import { toast } from "sonner";
 import AREngineMobile from "./AREngineMobile";
 import EffectsPanel, { AR_EFFECTS, type AREffect } from "./EffectsPanel";
-import { FILTERS, type Filter } from "./FilterLibrary";
 
 interface CameraRecorderProps {
   onVideoRecorded?: (blob: Blob, duration: number) => void;
@@ -49,8 +48,6 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
   const [switchingCamera, setSwitchingCamera] = useState(false);
   const [effectsOpen, setEffectsOpen] = useState(false);
   const [selectedEffect, setSelectedEffect] = useState<AREffect | null>(null);
-  const [selectedFilter, setSelectedFilter] = useState<Filter | null>(null);
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const [arStatus, setArStatus] = useState<string>("—");
   const selectedEffectRef = useRef<AREffect | null>(null);
   const arCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -399,7 +396,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       <AREngineMobile
         videoRef={videoRef}
         activeEffect={selectedEffect}
-        filterCss={selectedFilter?.cssFilter}
+        filterCss={selectedEffect?.filterCss}
         canvasRef={arCanvasRef}
         recordingCanvasRef={recordingCanvasRef}
         onStatusChange={handleArStatus}
@@ -427,20 +424,13 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
         </button>
       </div>
 
-      <div className="relative z-30 flex justify-end px-4 gap-2">
+      <div className="relative z-30 flex justify-end px-4">
         <button
           onClick={() => setEffectsOpen(true)}
           className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center"
           aria-label="Effets de visage"
         >
           <Sparkles size={22} className={selectedEffect ? "text-yellow-300" : ""} />
-        </button>
-        <button
-          onClick={() => setFiltersOpen(true)}
-          className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center mt-2"
-          aria-label="Filtres de couleur"
-        >
-          🎨
         </button>
       </div>
 
@@ -481,25 +471,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
         {recording && <p className="text-center text-[11px] text-white/65 mt-2">{paused ? "Vidéo en pause — appuie au centre pour continuer" : "Pause au centre • ✓ pour terminer et passer au montage"}</p>}
       </div>
 
-      {filtersOpen && (
-        <div className="fixed inset-x-0 bottom-0 z-[70] bg-black/90 backdrop-blur-sm p-4 pb-8">
-          <div className="flex justify-between items-center mb-3">
-            <h3 className="text-white text-sm font-bold">Filtre</h3>
-            <button onClick={() => setFiltersOpen(false)} className="text-white/80"><X size={18} /></button>
-          </div>
-          <div className="flex gap-3 overflow-x-auto no-scrollbar">
-            <button onClick={() => { setSelectedFilter(null); setFiltersOpen(false); }} className={`shrink-0 h-14 w-14 rounded-full border-2 ${!selectedFilter ? "border-white" : "border-white/25"} bg-white/10 flex items-center justify-center text-[10px] text-white`}>Normal</button>
-            {FILTERS.filter(f => f.category === "beauty" || f.category === "color").map((f) => (
-              <button key={f.id} onClick={() => { setSelectedFilter(f); setFiltersOpen(false); }} className="shrink-0 flex flex-col items-center gap-1">
-                <span className={`h-14 w-14 rounded-full border-2 ${selectedFilter?.id === f.id ? "border-white" : "border-white/25"} overflow-hidden block`}>
-                  <span className="block h-full w-full" style={{ filter: f.cssFilter, background: "linear-gradient(135deg,#c98a5b,#7a4a2b)" }} />
-                </span>
-                <span className="text-[9px] text-white/80">{f.name}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+
 
       <EffectsPanel
         isOpen={effectsOpen}
