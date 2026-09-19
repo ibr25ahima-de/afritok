@@ -3,6 +3,7 @@ import { Check, Music, Pause, Play, RefreshCw, Sparkles, X } from "lucide-react"
 import { toast } from "sonner";
 import AREngineMobile from "./AREngineMobile";
 import EffectsPanel, { AR_EFFECTS, type AREffect } from "./EffectsPanel";
+import { FILTERS, type Filter } from "./FilterLibrary";
 
 interface CameraRecorderProps {
   onVideoRecorded?: (blob: Blob, duration: number) => void;
@@ -48,6 +49,8 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
   const [switchingCamera, setSwitchingCamera] = useState(false);
   const [effectsOpen, setEffectsOpen] = useState(false);
   const [selectedEffect, setSelectedEffect] = useState<AREffect | null>(null);
+  const [selectedFilter, setSelectedFilter] = useState<Filter | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [arStatus, setArStatus] = useState<string>("—");
   const selectedEffectRef = useRef<AREffect | null>(null);
   const arCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -139,8 +142,6 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
     const nextMode: FacingMode = facingMode === "user" ? "environment" : "user";
     setSwitchingCamera(true);
     try {
-      // Le MediaRecorder et le canvas restent actifs : changer de caméra ne crée
-      // pas un deuxième enregistrement et ne supprime pas le premier segment.
       await startCamera(nextMode);
       setFacingMode(nextMode);
     } finally {
@@ -398,6 +399,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       <AREngineMobile
         videoRef={videoRef}
         activeEffect={selectedEffect}
+        filterCss={selectedFilter?.cssFilter}
         canvasRef={arCanvasRef}
         recordingCanvasRef={recordingCanvasRef}
         onStatusChange={handleArStatus}
@@ -416,40 +418,29 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       </div>
 
       <div className="relative z-30 flex items-center justify-between p-4">
-        <button
-          onClick={onClose}
-          className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center"
-          aria-label="Fermer"
-        >
-          <X size={25} />
+        <button onClick={onClose} className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center" aria-label="Fermer"><X size={25} /></button>
+        <button onClick={onOpenMusic} className="rounded-full bg-black/55 px-4 py-2 text-xs max-w-[55%] truncate" disabled={recording && switchingCamera}>
+          <Music size={15} className="inline mr-2" />{selectedMusic?.name || "Ajouter un son"}
         </button>
-
-        <button
-          onClick={onOpenMusic}
-          className="rounded-full bg-black/55 px-4 py-2 text-xs max-w-[55%] truncate"
-          disabled={recording && switchingCamera}
-        >
-          <Music size={15} className="inline mr-2" />
-          {selectedMusic?.name || "Ajouter un son"}
-        </button>
-
-        <button
-          onClick={switchCamera}
-          disabled={switchingCamera}
-          className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center disabled:opacity-50"
-          aria-label="Changer de caméra"
-        >
+        <button onClick={switchCamera} disabled={switchingCamera} className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center disabled:opacity-50" aria-label="Changer de caméra">
           <RefreshCw size={24} className={switchingCamera ? "animate-spin" : ""} />
         </button>
       </div>
 
-      <div className="relative z-30 flex justify-end px-4">
+      <div className="relative z-30 flex justify-end px-4 gap-2">
         <button
           onClick={() => setEffectsOpen(true)}
           className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center"
           aria-label="Effets de visage"
         >
           <Sparkles size={22} className={selectedEffect ? "text-yellow-300" : ""} />
+        </button>
+        <button
+          onClick={() => setFiltersOpen(true)}
+          className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center mt-2"
+          aria-label="Filtres de couleur"
+        >
+          🎨
         </button>
       </div>
 
@@ -465,14 +456,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       <div className="relative z-20 mt-auto bg-gradient-to-t from-black/95 via-black/55 to-transparent px-5 pb-7 pt-12">
         <div className="flex justify-center gap-3 mb-5">
           {["PHOTO", "10 s", "15 s", "60 s", "10 min"].map((mode) => (
-            <button
-              key={mode}
-              onClick={() => !recording && setDurationMode(mode)}
-              disabled={recording}
-              className={`rounded-full px-3 py-2 text-xs font-bold transition ${
-                durationMode === mode ? "bg-white text-black" : "bg-black/55 text-white"
-              } ${recording ? "opacity-50" : ""}`}
-            >
+            <button key={mode} onClick={() => !recording && setDurationMode(mode)} disabled={recording} className={`rounded-full px-3 py-2 text-xs font-bold transition ${durationMode === mode ? "bg-white text-black" : "bg-black/55 text-white"} ${recording ? "opacity-50" : ""}`}>
               {mode === "PHOTO" ? "Photo" : mode}
             </button>
           ))}
@@ -480,74 +464,48 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
 
         <div className="flex items-center justify-center gap-7">
           <div className="w-16 flex justify-center">
-            {recording && (
-              <button
-                onClick={pauseRecording}
-                disabled={paused}
-                className="h-11 w-11 rounded-full bg-black/60 flex items-center justify-center disabled:opacity-40"
-                aria-label="Mettre en pause"
-              >
-                <Pause size={20} />
-              </button>
-            )}
+            {recording && <button onClick={pauseRecording} disabled={paused} className="h-11 w-11 rounded-full bg-black/60 flex items-center justify-center disabled:opacity-40" aria-label="Mettre en pause"><Pause size={20} /></button>}
           </div>
 
-          <button
-            onClick={capture}
-            disabled={timer > 0}
-            aria-label={!recording ? "Enregistrer" : paused ? "Continuer" : "Mettre en pause"}
-            className="relative h-20 w-20 rounded-full border-4 border-white p-1.5 disabled:opacity-70"
-          >
+          <button onClick={capture} disabled={timer > 0} aria-label={!recording ? "Enregistrer" : paused ? "Continuer" : "Mettre en pause"} className="relative h-20 w-20 rounded-full border-4 border-white p-1.5 disabled:opacity-70">
             <span className="absolute inset-0 rounded-full bg-red-500" />
-            {recording && !paused ? (
-              <span className="absolute inset-0 m-auto h-7 w-7 rounded-md bg-white" />
-            ) : recording && paused ? (
-              <Play className="absolute inset-0 m-auto" size={30} fill="white" />
-            ) : (
-              <span className="absolute inset-0 m-2 rounded-full bg-red-500" />
-            )}
+            {recording && !paused ? <span className="absolute inset-0 m-auto h-7 w-7 rounded-md bg-white" /> : recording && paused ? <Play className="absolute inset-0 m-auto" size={30} fill="white" /> : <span className="absolute inset-0 m-2 rounded-full bg-red-500" />}
           </button>
 
           <div className="w-16 flex justify-center">
-            {recording ? (
-              <button
-                onClick={stopRecording}
-                className="h-12 w-12 rounded-full bg-white text-black flex items-center justify-center shadow-lg"
-                aria-label="Terminer et monter la vidéo"
-              >
-                <Check size={27} strokeWidth={3} />
-              </button>
-            ) : (
-              <button onClick={onOpenMusic} className="text-xs text-white/90">
-                Audio
-              </button>
-            )}
+            {recording ? <button onClick={stopRecording} className="h-12 w-12 rounded-full bg-white text-black flex items-center justify-center shadow-lg" aria-label="Terminer et monter la vidéo"><Check size={27} strokeWidth={3} /></button> : <button onClick={onOpenMusic} className="text-xs text-white/90">Audio</button>}
           </div>
         </div>
 
-        {recording && (
-          <div className="mt-4 h-1.5 rounded-full bg-white/25 overflow-hidden">
-            <div
-              className="h-full bg-red-500 transition-[width] duration-100"
-              style={{ width: `${progress * 100}%` }}
-            />
-          </div>
-        )}
-
-        {recording && (
-          <p className="text-center text-[11px] text-white/65 mt-2">
-            {paused ? "Vidéo en pause — appuie au centre pour continuer" : "Pause au centre • ✓ pour terminer et passer au montage"}
-          </p>
-        )}
+        {recording && <div className="mt-4 h-1.5 rounded-full bg-white/25 overflow-hidden"><div className="h-full bg-red-500 transition-[width] duration-100" style={{ width: `${progress * 100}%` }} /></div>}
+        {recording && <p className="text-center text-[11px] text-white/65 mt-2">{paused ? "Vidéo en pause — appuie au centre pour continuer" : "Pause au centre • ✓ pour terminer et passer au montage"}</p>}
       </div>
+
+      {filtersOpen && (
+        <div className="fixed inset-x-0 bottom-0 z-[70] bg-black/90 backdrop-blur-sm p-4 pb-8">
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="text-white text-sm font-bold">Filtre</h3>
+            <button onClick={() => setFiltersOpen(false)} className="text-white/80"><X size={18} /></button>
+          </div>
+          <div className="flex gap-3 overflow-x-auto no-scrollbar">
+            <button onClick={() => { setSelectedFilter(null); setFiltersOpen(false); }} className={`shrink-0 h-14 w-14 rounded-full border-2 ${!selectedFilter ? "border-white" : "border-white/25"} bg-white/10 flex items-center justify-center text-[10px] text-white`}>Normal</button>
+            {FILTERS.filter(f => f.category === "beauty" || f.category === "color").map((f) => (
+              <button key={f.id} onClick={() => { setSelectedFilter(f); setFiltersOpen(false); }} className="shrink-0 flex flex-col items-center gap-1">
+                <span className={`h-14 w-14 rounded-full border-2 ${selectedFilter?.id === f.id ? "border-white" : "border-white/25"} overflow-hidden block`}>
+                  <span className="block h-full w-full" style={{ filter: f.cssFilter, background: "linear-gradient(135deg,#c98a5b,#7a4a2b)" }} />
+                </span>
+                <span className="text-[9px] text-white/80">{f.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <EffectsPanel
         isOpen={effectsOpen}
         onClose={() => setEffectsOpen(false)}
         selectedEffect={selectedEffect}
-        onSelectEffect={(effect) => {
-          setSelectedEffect(effect);
-          setEffectsOpen(false);
-        }}
+        onSelectEffect={(effect) => { setSelectedEffect(effect); setEffectsOpen(false); }}
       />
     </div>
   );
