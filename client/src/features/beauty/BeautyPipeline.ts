@@ -15,6 +15,14 @@ function fillPath(ctx: CanvasRenderingContext2D, pointsList: Point[][]) {
   }
 }
 
+function extendForeheadUp(points: Point[], cx: number, cy: number, factor: number): Point[] {
+  return points.map((p) => {
+    if (p.y >= cy) return p; // partie basse du visage : inchangée
+    const above = cy - p.y;
+    return { x: p.x, y: p.y - above * factor };
+  });
+}
+
 function createSkinMask(l: NormalizedLandmark[], w: number, h: number, feather: number) {
   const mask = document.createElement("canvas");
   mask.width = w;
@@ -23,6 +31,8 @@ function createSkinMask(l: NormalizedLandmark[], w: number, h: number, feather: 
   if (!m) return null;
 
   const oval = getPoints(l, LM.faceOval, w, h);
+  const geo = getFaceGeometry(l, w, h);
+  const ovalExtended = extendForeheadUp(oval, geo.cx, geo.cy, 0.35);
   if (oval.length < 3) return null;
 
   const holes = [LM.leftEye, LM.rightEye, LM.outerLips]
@@ -30,7 +40,7 @@ function createSkinMask(l: NormalizedLandmark[], w: number, h: number, feather: 
     .filter((p) => p.length >= 3);
 
   // Un seul tracé : l'ovale du visage + les contours yeux/lèvres comme "trous".
-  fillPath(m, [oval, ...holes]);
+  fillPath(m, [ovalExtended, ...holes]);
   m.fillStyle = "white";
   m.fill("evenodd");
 
