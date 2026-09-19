@@ -70,6 +70,11 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
     return accumulatedRecordingMsRef.current + Math.max(0, activeMs);
   }, []);
 
+  const handleArStatus = useCallback((s: string, e?: unknown) => {
+    console.log("[AR STATUS]", s, e);
+    setArStatus(e ? `${s}: ${String((e as Error)?.message || e)}` : s);
+  }, []);
+
   const startCamera = useCallback(async (mode: FacingMode) => {
     const oldStream = streamRef.current;
     streamRef.current = null;
@@ -395,10 +400,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
         activeEffect={selectedEffect}
         canvasRef={arCanvasRef}
         recordingCanvasRef={recordingCanvasRef}
-        onStatusChange={(s, e) => {
-          console.log("[AR STATUS]", s, e);
-          setArStatus(e ? `${s}: ${String((e as Error)?.message || e)}` : s);
-        }}
+        onStatusChange={handleArStatus}
       />
 
       {timer > 0 && (
