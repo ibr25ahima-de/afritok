@@ -117,30 +117,41 @@ function retouchSkin(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: 
 function tone(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: number, h: number, amount: number) {
   amount = clamp01(amount);
   if (amount <= 0) return;
-  const f = getFaceGeometry(l, w, h);
-  const mask = createSkinMask(l, w, h, Math.max(8, f.width * .05));
+  const face = getFaceGeometry(l, w, h);
+  const mask = createSkinMask(l, w, h, Math.max(8, face.width * .05));
   if (!mask) return;
 
+  // Couche "éclat" : la peau elle-même, rendue plus lumineuse/saturée,
+  // fusionnée en mode "screen" pour un effet brillant sans cramer les ombres.
+  const glowFilter = `brightness(${(1 + 0.4 * amount).toFixed(3)}) saturate(${(1 + 0.2 * amount).toFixed(3)}) contrast(${(1 + 0.08 * amount).toFixed(3)})`;
+  const glow = maskedImage(ctx.canvas, mask, glowFilter);
+  if (glow) {
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    ctx.globalAlpha = 0.20 + amount * 0.40;
+    ctx.drawImage(glow, 0, 0);
+    ctx.restore();
+  }
+
+  // Reflet doux façon "lumière naturelle" sur le front/pommettes/nez.
   const overlay = document.createElement("canvas");
-  overlay.width = w;
-  overlay.height = h;
-  const o = overlay.getContext("2d");
-  if (!o) return;
-  const g = o.createRadialGradient(f.cx, f.cy - f.height * .12, f.width * .05, f.cx, f.cy, f.width * .72);
-  g.addColorStop(0, `rgba(255,255,255,${0.035 * amount})`);
-  g.addColorStop(.65, `rgba(255,255,255,${0.012 * amount})`);
-  g.addColorStop(1, "rgba(255,255,255,0)");
+  overlay.width = w; overlay.height = h;
+  const o = overlay.getContext("2d")!;
+  const g = o.createRadialGradient(face.cx, face.cy - face.height * .18, face.width * .05, face.cx, face.cy, face.width * .75);
+  g.addColorStop(0, `rgba(255,250,240,${0.16 * amount})`);
+  g.addColorStop(.6, `rgba(255,250,240,${0.06 * amount})`);
+  g.addColorStop(1, "rgba(255,250,240,0)");
   o.fillStyle = g;
   o.fillRect(0, 0, w, h);
   o.globalCompositeOperation = "destination-in";
   o.drawImage(mask, 0, 0);
 
   ctx.save();
-  ctx.globalAlpha = 0.55;
+  ctx.globalCompositeOperation = "screen";
+  ctx.globalAlpha = 0.65;
   ctx.drawImage(overlay, 0, 0);
   ctx.restore();
 }
-
 function eyePolish(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: number, h: number, c: Required<BeautyConfig>) {
   const f = getFaceGeometry(l, w, h), eyes = [LM.leftEye, LM.rightEye];
   for (const ids of eyes) {
