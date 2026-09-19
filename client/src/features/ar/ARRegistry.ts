@@ -71,7 +71,7 @@ export const AR_EFFECTS: AREffect[] = [
   B("beauty-big-eyes", "Grands yeux", { smoothSkin: .52, skinTexture: .50, enlargeEyes: 1, eyeBrilliance: .45, darkCircles: .24 }, PHOTO.eyes, "Accentuation du regard et des yeux."),
   B("beauty-slim", "Visage fin", { smoothSkin: .55, skinTexture: .54, slimFace: 1, symmetry: .20, darkCircles: .22 }, PHOTO.slim, "Sculpt du visage avec contour plus fin."),
   B("beauty-full-lips", "Lèvres", { smoothSkin: .52, skinTexture: .50, enlargeLips: 1, brightenSkin: .03 }, PHOTO.lips, "Accentuation des lèvres."),
-  B("beauty-retouch", "Retouche", { smoothSkin: .80, skinTexture: .70, darkCircles: .40, eyeBrilliance: .38, smileLines: .34, brightenSkin: .04 }, PHOTO.retouch, "Retouche complète du visage."),
+  B("beauty-retouch", "Retouche", { smoothSkin: .80, skinTexture: .70, darkCircles: .40, eyeBrilliance: .38, smileLines: .34, brightenSkin: .22 }, PHOTO.retouch, "Retouche complète du visage."),
   B("beauty-symmetry", "Harmonie", { smoothSkin: .58, skinTexture: .56, symmetry: 1, eyeBrilliance: .20, darkCircles: .25 }, PHOTO.harmony, "Harmonisation légère des traits."),
   C("effect-cat", "Chat", "cat", PHOTO.cat, "Oreilles, yeux, nez et moustaches suivent le visage."),
   C("effect-bunny", "Lapin", "bunny", PHOTO.bunny, "Oreilles et nez de lapin suivent le mouvement de la tête."),
