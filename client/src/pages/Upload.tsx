@@ -65,6 +65,7 @@ export default function Upload() {
   const musicRef = useRef<HTMLAudioElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef<{ id: string; offsetX: number; offsetY: number } | null>(null);
+  const resizingRef = useRef<{ id: string; centerX: number; centerY: number; startDist: number; startSize: number } | null>(null);
 
   useEffect(() => {
     if (!file) return;
@@ -112,6 +113,13 @@ export default function Upload() {
 
   useEffect(() => {
     const move = (event: PointerEvent) => {
+      const resize = resizingRef.current;
+      if (resize) {
+        const dist = Math.max(10, Math.hypot(event.clientX - resize.centerX, event.clientY - resize.centerY));
+        const nextSize = Math.max(12, Math.min(160, resize.startSize * (dist / resize.startDist)));
+        setOverlays((items) => items.map((item) => item.id === resize.id ? { ...item, size: nextSize } : item));
+        return;
+      }
       const drag = draggingRef.current;
       const stage = stageRef.current;
       if (!drag || !stage) return;
@@ -120,11 +128,15 @@ export default function Upload() {
       const y = Math.max(5, Math.min(95, ((event.clientY - rect.top) / rect.height) * 100 - drag.offsetY));
       setOverlays((items) => items.map((item) => item.id === drag.id ? { ...item, x, y } : item));
     };
-    const up = () => { draggingRef.current = null; };
+    const up = () => { draggingRef.current = null; resizingRef.current = null; };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
     return () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
   }, []);
+
+  useEffect(() => {
+    if (tool || selectedOverlayId) videoRef.current?.pause();
+  }, [tool, selectedOverlayId]);
 
   const currentSeconds = useMemo(() => progress * duration, [progress, duration]);
   const visibleOverlays = overlays.filter((item) => currentSeconds >= item.start && currentSeconds <= item.end);
@@ -166,8 +178,8 @@ export default function Upload() {
   };
 
   const overlayTiming = () => {
-    const start = Math.max(trimStart, Math.min(currentSeconds, trimEnd || duration || currentSeconds));
-    const end = Math.min(trimEnd || duration || 9999, Math.max(start + 1, trimEnd || duration || start + 1));
+    const start = trimStart;
+    const end = trimEnd || duration || start + 9999;
     return { start, end };
   };
 
@@ -205,6 +217,18 @@ export default function Upload() {
     draggingRef.current = { id: item.id, offsetX: ((event.clientX - rect.left) / rect.width) * 100 - item.x, offsetY: ((event.clientY - rect.top) / rect.height) * 100 - item.y };
     setSelectedOverlayId(item.id);
   };
+  const startResize = (event: ReactPointerEvent<HTMLDivElement>, item: Overlay) => {
+    event.preventDefault(); event.stopPropagation();
+    const stage = stageRef.current;
+    if (!stage) return;
+    const rect = stage.getBoundingClientRect();
+    const centerX = rect.left + (item.x / 100) * rect.width;
+    const centerY = rect.top + (item.y / 100) * rect.height;
+    const startDist = Math.max(10, Math.hypot(event.clientX - centerX, event.clientY - centerY));
+    resizingRef.current = { id: item.id, centerX, centerY, startDist, startSize: item.size };
+    setSelectedOverlayId(item.id);
+  };
+
 
   const mergeCuts = (ranges: CutRange[]) => ranges.filter((r) => r.end > r.start).sort((a, b) => a.start - b.start).reduce<CutRange[]>((acc, range) => {
     const last = acc[acc.length - 1];
@@ -336,7 +360,21 @@ export default function Upload() {
               : rawDuration
           );
         }} onClick={togglePlayback} />}
-        {visibleOverlays.map((item) => <div key={item.id} onPointerDown={(event) => startDrag(event, item)} onClick={(event) => { event.stopPropagation(); setSelectedOverlayId(item.id); }} className={`absolute select-none font-bold text-center cursor-move ${selectedOverlayId === item.id ? "ring-2 ring-white/80 rounded-lg px-2 py-1" : ""}`} style={{ left: `${item.x}%`, top: `${item.y}%`, transform: "translate(-50%, -50%)", fontSize: item.size, color: item.color, textShadow: "0 2px 6px #000, 0 0 2px #000", whiteSpace: "pre-wrap", maxWidth: "85%", zIndex: 10, touchAction: "none" }}>{item.text}</div>)}
+        {visibleOverlays.map((item) => (
+          <div key={item.id} onPointerDown={(event) => startDrag(event, item)} onClick={(event) => { event.stopPropagation(); setSelectedOverlayId(item.id); }} className={`absolute select-none font-bold text-center cursor-move ${selectedOverlayId === item.id ? "ring-2 ring-white/80 rounded-lg px-2 py-1" : ""}`} style={{ left: `${item.x}%`, top: `${item.y}%`, transform: "translate(-50%, -50%)", fontSize: item.size, color: item.color, textShadow: "0 2px 6px #000, 0 0 2px #000", whiteSpace: "pre-wrap", maxWidth: "85%", zIndex: 10, touchAction: "none" }}>
+            {item.text}
+            {selectedOverlayId === item.id && (
+              <div
+                onPointerDown={(event) => startResize(event, item)}
+                className="absolute -bottom-3 -right-3 h-7 w-7 rounded-full bg-white border-2 border-black/30 flex items-center justify-center cursor-nwse-resize"
+                style={{ touchAction: "none" }}
+                aria-label="Redimensionner"
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12"><path d="M1 11L11 1M5 11L11 5M9 11L11 9" stroke="black" strokeWidth="1.5"/></svg>
+              </div>
+            )}
+          </div>
+        ))}
         {tool === "text" && (
           <input
             autoFocus
