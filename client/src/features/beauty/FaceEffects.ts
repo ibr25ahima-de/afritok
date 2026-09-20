@@ -231,27 +231,72 @@ function drawCrown(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: nu
   ctx.restore();
 }
 
+function upperLid(eyePoints: Point[]): Point[] {
+  if (eyePoints.length < 16) return eyePoints;
+  return [...eyePoints.slice(8), eyePoints[0]];
+}
+
+function featheredFill(
+  w: number, h: number, shape: Point[], fill: string | CanvasGradient, feather: number,
+): HTMLCanvasElement | null {
+  if (shape.length < 3) return null;
+  const mask = document.createElement("canvas");
+  mask.width = w; mask.height = h;
+  const m = mask.getContext("2d");
+  if (!m) return null;
+  polygon(m, shape, "white");
+  if (feather > 0) {
+    const soft = document.createElement("canvas");
+    soft.width = w; soft.height = h;
+    const s = soft.getContext("2d")!;
+    s.filter = `blur(${feather}px)`;
+    s.drawImage(mask, 0, 0);
+    const layer = document.createElement("canvas");
+    layer.width = w; layer.height = h;
+    const lctx = layer.getContext("2d")!;
+    lctx.fillStyle = fill;
+    lctx.fillRect(0, 0, w, h);
+    lctx.globalCompositeOperation = "destination-in";
+    lctx.drawImage(soft, 0, 0);
+    return layer;
+  }
+  const layer = document.createElement("canvas");
+  layer.width = w; layer.height = h;
+  const lctx = layer.getContext("2d")!;
+  lctx.fillStyle = fill;
+  lctx.fillRect(0, 0, w, h);
+  lctx.globalCompositeOperation = "destination-in";
+  lctx.drawImage(mask, 0, 0);
+  return layer;
+}
+
 function drawMakeup(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: number, h: number, strong = false) {
-  const f = getFaceGeometry(l, w, h), eyes = eyeCenters(l, w, h), a = headAngle(l, w, h), power = strong ? .86 : .68;
-  eyes.forEach((e) => {
+  const f = getFaceGeometry(l, w, h), power = strong ? .8 : .55;
+
+  [LM.leftEye, LM.rightEye].forEach((ids) => {
+    const eyePts = points(l, ids, w, h);
+    if (eyePts.length < 16) return;
+    const lid = upperLid(eyePts);
+    const c = center(eyePts);
+    const puffed = lid.map((p) => ({ x: p.x + (p.x - c.x) * 0.18, y: p.y + (p.y - c.y) * 0.5 - f.height * .012 }));
+    const shape = [...lid, ...puffed.reverse()];
+    const layer = featheredFill(w, h, shape, `rgba(183,68,221,${power * .5})`, Math.max(3, f.width * .02));
+    if (layer) ctx.drawImage(layer, 0, 0);
+  });
+
+  [LM.leftEye, LM.rightEye].forEach((ids) => {
+    const eyePts = points(l, ids, w, h);
+    if (eyePts.length < 16) return;
+    const lid = upperLid(eyePts);
+    const outer = lid[lid.length - 1];
+    const prev = lid[lid.length - 2];
+    const dir = { x: outer.x - prev.x, y: outer.y - prev.y };
+    const mag = Math.hypot(dir.x, dir.y) || 1;
+    const wing = { x: outer.x + (dir.x / mag) * f.width * .045, y: outer.y + (dir.y / mag) * f.width * .045 - f.height * .01 };
     ctx.save();
-    ctx.translate(e.x, e.y);
-    ctx.rotate(a);
-    const shadow = ctx.createRadialGradient(0, -f.height * .008, f.width * .015, 0, 0, f.width * .14);
-    shadow.addColorStop(0, `rgba(183,68,221,${power * .56})`);
-    shadow.addColorStop(.55, `rgba(255,85,177,${power * .34})`);
-    shadow.addColorStop(1, "rgba(255,90,170,0)");
-    ctx.fillStyle = shadow;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, f.width * .125, f.height * .065, 0, 0, Math.PI * 2);
-    ctx.fill();
-    line(ctx, [
-      { x: -f.width * .115, y: -f.height * .005 },
-      { x: -f.width * .055, y: -f.height * .038 },
-      { x: f.width * .035, y: -f.height * .028 },
-      { x: f.width * .12, y: -f.height * .002 },
-    ], `rgba(24,12,35,${strong ? .98 : .86})`, Math.max(2, f.width * .007));
-    ellipse(ctx, { x: 0, y: f.height * .008 }, f.width * .035, f.height * .019, "rgba(255,255,255,.30)");
+    ctx.shadowBlur = 1.2;
+    ctx.shadowColor = "rgba(0,0,0,.5)";
+    line(ctx, [...lid, wing], `rgba(20,12,28,${strong ? .92 : .78})`, Math.max(1.4, f.width * .0055));
     ctx.restore();
   });
 
@@ -260,19 +305,23 @@ function drawMakeup(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: n
     const c = { x: f.cx + side * f.width * .255, y: cheekY };
     ctx.save();
     ctx.filter = `blur(${Math.max(5, f.width * .035)}px)`;
-    ellipse(ctx, c, f.width * .12, f.height * .065, `rgba(255,48,119,${strong ? .38 : .29})`);
+    ellipse(ctx, c, f.width * .12, f.height * .065, `rgba(255,48,119,${strong ? .30 : .20})`);
     ctx.restore();
   });
 
   const lips = points(l, LM.outerLips, w, h);
   if (lips.length >= 3) {
     const g = ctx.createLinearGradient(f.cx, f.cy + f.height * .15, f.cx, f.cy + f.height * .28);
-    g.addColorStop(0, `rgba(255,78,139,${strong ? .82 : .64})`);
-    g.addColorStop(.55, `rgba(224,36,101,${strong ? .74 : .57})`);
-    g.addColorStop(1, `rgba(155,16,66,${strong ? .64 : .48})`);
-    polygon(ctx, lips, g, "rgba(255,255,255,.30)", 1.1);
-    const inner = points(l, LM.innerLips, w, h);
-    if (inner.length >= 3) polygon(ctx, inner, "rgba(90,8,35,.32)");
+    g.addColorStop(0, `rgba(255,78,139,${strong ? .8 : .55})`);
+    g.addColorStop(.55, `rgba(224,36,101,${strong ? .72 : .48})`);
+    g.addColorStop(1, `rgba(155,16,66,${strong ? .62 : .40})`);
+    const layer = featheredFill(w, h, lips, g, Math.max(1.5, f.width * .01));
+    if (layer) {
+      ctx.save();
+      ctx.globalCompositeOperation = "multiply";
+      ctx.drawImage(layer, 0, 0);
+      ctx.restore();
+    }
   }
 }
 
