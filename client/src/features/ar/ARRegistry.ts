@@ -58,8 +58,9 @@ const NO_BEAUTY: BeautyConfig = {
 const B = (id: string, name: string, config: BeautyConfig, thumbnail: string, description: string, filterCss?: string) => ({
   id, name, category: "beauty" as const, renderer: "none" as const, beautyConfig: config, thumbnail, description, filterCss,
 });
+const CREATIVE_SKIN: BeautyConfig = { smoothSkin: .5, skinTexture: .48, brightenSkin: .08, darkCircles: .18, eyeBrilliance: .15, smileLines: .12 };
 const C = (id: string, name: string, renderer: EffectRenderer, thumbnail: string, description: string) => ({
-  id, name, category: "creative" as const, renderer, thumbnail, description,
+  id, name, category: "creative" as const, renderer, thumbnail, description, beautyConfig: CREATIVE_SKIN,
 });
 
 export const AR_EFFECTS: AREffect[] = [
