@@ -53,7 +53,7 @@ function Router() { const { loading } = useAuth(); if (loading) return <div clas
 function GlobalAdvertisingButton() {
   const [location] = useLocation();
   const [position, setPosition] = React.useState<{ x: number; y: number } | null>(null);
-  const dragRef = React.useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
+  const dragRef = React.useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);\n  const suppressClickRef = React.useRef(false);
 
   React.useEffect(() => {
     try {
