@@ -1,4 +1,5 @@
-import * as React from "react";\nimport { Toaster } from "@/components/ui/sonner";
+import * as React from "react";
+import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch, Redirect } from "wouter";
@@ -53,7 +54,8 @@ function Router() { const { loading } = useAuth(); if (loading) return <div clas
 function GlobalAdvertisingButton() {
   const [location] = useLocation();
   const [position, setPosition] = React.useState<{ x: number; y: number } | null>(null);
-  const dragRef = React.useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);\n  const suppressClickRef = React.useRef(false);
+  const dragRef = React.useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
+  const suppressClickRef = React.useRef(false);
 
   React.useEffect(() => {
     try {
