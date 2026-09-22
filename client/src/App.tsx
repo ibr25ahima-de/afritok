@@ -1,4 +1,4 @@
-import { Toaster } from "@/components/ui/sonner";
+import * as React from "react";\nimport { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch, Redirect } from "wouter";
@@ -50,7 +50,86 @@ import { useLocation } from "wouter";
 
 function AdminRoute({ component: Component, ...rest }: any) { const { user, loading } = useAuth(); if (loading) return null; if (user?.role !== "admin") return <Redirect to="/feed" />; return <Component {...rest} />; }
 function Router() { const { loading } = useAuth(); if (loading) return <div className="flex items-center justify-center min-h-screen bg-black text-white"><Loader2 className="animate-spin w-12 h-12" /></div>; return <Switch><Route path="/" component={Home} /><Route path="/login" component={Login} /><Route path="/feed" component={Feed} /><Route path="/discover" component={Discover} /><Route path="/upload/:videoId?" component={Upload} /><Route path="/publish" component={Publish} /><Route path="/inbox" component={Inbox} /><Route path="/live" component={LiveCreate} /><Route path="/live/:sessionId" component={Live} /><Route path="/profile/:userId" component={ProfileDashboard} /><Route path="/profile" component={ProfileDashboard} /><Route path="/gifts" component={Gifts} /><Route path="/audio/:videoId" component={AudioDetail} /><Route path="/advertising" component={Advertising} /><Route path="/premium" component={AfritokPremium} /><Route path="/premium/analytics" component={PremiumAnalytics} /><Route path="/monetization" component={Monetization} /><Route path="/search" component={Search} /><Route path="/trending" component={Trending} /><Route path="/edit-profile" component={EditProfile} /><Route path="/my-videos" component={MyVideos} /><Route path="/notifications" component={Notifications} /><Route path="/settings" component={Settings} /><Route path="/instant-withdraw" component={InstantWithdraw} /><Route path="/afritok-studio" component={AfritokStudio} /><Route path="/balance" component={Balance} /><Route path="/wallet" component={Wallet} /><Route path="/coins" component={Coins} /><Route path="/qr-code" component={QRCode} /><Route path="/admin/users/:userId">{(params) => <AdminRoute component={UserDetails} {...params} />}</Route><Route path="/admin/music">{(params) => <AdminRoute component={AdminMusic} {...params} />}</Route><Route path="/admin/finance">{(params) => <AdminRoute component={PlatformFinance} {...params} />}</Route><Route path="/admin">{(params) => <AdminRoute component={AdminDashboard} {...params} />}</Route><Route path="/404" component={NotFound} /><Route component={NotFound} /></Switch>; }
-function GlobalAdvertisingButton() { const [location] = useLocation(); if (location === "/advertising" || location.startsWith("/admin")) return null; return <div className="fixed bottom-24 right-4 z-[90]"><AdvertisingButton /></div>; }
+function GlobalAdvertisingButton() {
+  const [location] = useLocation();
+  const [position, setPosition] = React.useState<{ x: number; y: number } | null>(null);
+  const dragRef = React.useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
+
+  React.useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("afritok-advertising-button-position");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Number.isFinite(parsed?.x) && Number.isFinite(parsed?.y)) setPosition({ x: parsed.x, y: parsed.y });
+      }
+    } catch {}
+  }, []);
+
+  const clamp = React.useCallback((x: number, y: number) => {
+    const margin = 8;
+    const width = 220;
+    const height = 48;
+    return {
+      x: Math.max(margin, Math.min(window.innerWidth - width - margin, x)),
+      y: Math.max(margin, Math.min(window.innerHeight - height - margin, y)),
+    };
+  }, []);
+
+  const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    dragRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: rect.left,
+      originY: rect.top,
+      moved: false,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    if (!drag.moved && Math.hypot(dx, dy) < 6) return;
+    drag.moved = true;
+    const next = clamp(drag.originX + dx, drag.originY + dy);
+    setPosition(next);
+    event.preventDefault();
+  };
+
+  const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    dragRef.current = null;
+    if (!drag) return;
+    if (drag.moved && position) {
+      try { window.localStorage.setItem("afritok-advertising-button-position", JSON.stringify(position)); } catch {}
+    }
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+  };
+
+  if (location === "/advertising" || location.startsWith("/admin")) return null;
+
+  const style = position
+    ? { left: position.x, top: position.y, right: "auto", bottom: "auto" }
+    : { right: 16, bottom: 96 };
+
+  return (
+    <div
+      className="fixed z-[90] touch-none select-none"
+      style={style}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      aria-label="Déplacer le bouton Faire de la publicité"
+    >
+      <AdvertisingButton />
+    </div>
+  );
+}
 function GlobalPremiumButton() { const [location] = useLocation(); if (!location.startsWith("/profile") || location.startsWith("/admin")) return null; return <div className="fixed bottom-24 left-4 z-[90]"><PremiumButton /></div>; }
 function GlobalAdvertisingDisplay() { const [location] = useLocation(); if (location === "/advertising" || location.startsWith("/admin")) return null; return <GlobalAdSlot />; }
 function GlobalLiveStrip() { const [location] = useLocation(); if (location !== "/feed") return null; return <ActiveLiveStrip />; }
