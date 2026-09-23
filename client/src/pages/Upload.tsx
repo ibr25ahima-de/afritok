@@ -268,73 +268,194 @@ export default function Upload() {
     setTimelineTrim(start, start + length); setTool(null);
   };
 
+  const montageNeedsExport = () => {
+    if (!file || isImageFile(file)) return false;
+    const fullStart = trimStart <= 0.05;
+    const fullEnd = duration <= 0 || (trimEnd || duration) >= duration - 0.05;
+    return !(fullStart && fullEnd && cuts.length === 0 && overlays.length === 0 && !editFilter && !activeEffect && !selectedMusic?.url);
+  };
+
   const exportMontage = async (): Promise<boolean> => {
     const video = videoRef.current;
     if (!video || !file || isImageFile(file)) return true;
+    if (!montageNeedsExport()) return true;
     if (isExporting) return false;
+
     const start = Math.max(0, Math.min(trimStart, duration));
     const end = Math.max(start + 0.2, Math.min(trimEnd || duration, duration));
-    if (end <= start) return false;
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+      toast.error("La plage de montage est invalide");
+      return false;
+    }
+
+    if (typeof HTMLCanvasElement === "undefined" || !HTMLCanvasElement.prototype.captureStream || typeof MediaRecorder === "undefined") {
+      toast.error("L'enregistrement vidéo n'est pas compatible avec ce navigateur");
+      return false;
+    }
+
     setIsExporting(true);
+    let stream: MediaStream | null = null;
+    let audioContext: AudioContext | null = null;
+    let audio: HTMLAudioElement | null = null;
+
     try {
-      video.pause(); video.currentTime = start;
-      await waitForSeek(video);
-      const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth || 720; canvas.height = video.videoHeight || 1280;
-      const ctx = canvas.getContext("2d"); if (!ctx) throw new Error("Canvas indisponible");
-      const stream = canvas.captureStream(30);
-      let audioContext: AudioContext | null = null;
-      let audio: HTMLAudioElement | null = null;
-      if (selectedMusic?.url) {
-        audio = new Audio(selectedMusic.url); audio.crossOrigin = "anonymous"; audio.preload = "auto"; audio.currentTime = start;
-        audioContext = new AudioContext();
-        const source = audioContext.createMediaElementSource(audio);
-        const destination = audioContext.createMediaStreamDestination();
-        source.connect(destination); const track = destination.stream.getAudioTracks()[0]; if (track) stream.addTrack(track);
-        await audioContext.resume(); await audio.play().catch(() => {});
+      video.pause();
+      if (video.readyState < 2) {
+        await new Promise<void>((resolve, reject) => {
+          const onReady = () => { cleanup(); resolve(); };
+          const onError = () => { cleanup(); reject(new Error("Vidéo indisponible")); };
+          const cleanup = () => {
+            video.removeEventListener("loadeddata", onReady);
+            video.removeEventListener("canplay", onReady);
+            video.removeEventListener("error", onError);
+          };
+          video.addEventListener("loadeddata", onReady, { once: true });
+          video.addEventListener("canplay", onReady, { once: true });
+          video.addEventListener("error", onError, { once: true });
+        });
       }
-      const mime = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"].find((type) => MediaRecorder.isTypeSupported(type));
-      const recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+
+      video.currentTime = start;
+      await waitForSeek(video);
+
+      const sourceWidth = video.videoWidth || 720;
+      const sourceHeight = video.videoHeight || 1280;
+      const scale = Math.min(1, 1080 / Math.max(sourceWidth, sourceHeight));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(2, Math.round(sourceWidth * scale));
+      canvas.height = Math.max(2, Math.round(sourceHeight * scale));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Canvas indisponible");
+      ctx.imageSmoothingEnabled = true;
+
+      stream = canvas.captureStream(30);
+
+      if (selectedMusic?.url) {
+        try {
+          audio = new Audio(selectedMusic.url);
+          audio.crossOrigin = "anonymous";
+          audio.preload = "auto";
+          audio.currentTime = start;
+          audioContext = new AudioContext();
+          const source = audioContext.createMediaElementSource(audio);
+          const destination = audioContext.createMediaStreamDestination();
+          source.connect(destination);
+          const track = destination.stream.getAudioTracks()[0];
+          if (track) stream.addTrack(track);
+          await audioContext.resume();
+          await audio.play();
+        } catch (audioError) {
+          console.warn("[Upload] music export unavailable", audioError);
+          audio?.pause();
+          audio = null;
+          if (audioContext) {
+            await audioContext.close().catch(() => {});
+            audioContext = null;
+          }
+        }
+      }
+
+      const mimeCandidates = [
+        "video/webm;codecs=vp8",
+        "video/webm;codecs=vp9",
+        "video/webm",
+      ];
+      const supportedMime = mimeCandidates.find((type) => {
+        try { return typeof MediaRecorder.isTypeSupported !== "function" || MediaRecorder.isTypeSupported(type); }
+        catch { return false; }
+      });
+      const recorder = supportedMime
+        ? new MediaRecorder(stream, { mimeType: supportedMime })
+        : new MediaRecorder(stream);
+
       const chunks: Blob[] = [];
-      const finished = new Promise<Blob>((resolve) => { recorder.onstop = () => resolve(new Blob(chunks, { type: recorder.mimeType || "video/webm" })); });
-      recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
+      let recorderError: unknown = null;
+      const finished = new Promise<Blob>((resolve, reject) => {
+        recorder.ondataavailable = (event) => { if (event.data?.size) chunks.push(event.data); };
+        recorder.onerror = (event) => { recorderError = event; };
+        recorder.onstop = () => {
+          if (recorderError) reject(new Error("MediaRecorder"));
+          else resolve(new Blob(chunks, { type: recorder.mimeType || "video/webm" }));
+        };
+      });
+
       const activeCuts = mergeCuts(cuts.filter((range) => range.end > start && range.start < end));
       let drawing = true;
       const draw = () => {
-        if (!drawing || video.currentTime >= end || video.ended) return;
+        if (!drawing) return;
+        if (video.currentTime >= end || video.ended) return;
+
         const cut = activeCuts.find((range) => video.currentTime >= range.start && video.currentTime < range.end);
-        if (cut) { video.currentTime = Math.min(cut.end, end); requestAnimationFrame(draw); return; }
+        if (cut) {
+          video.currentTime = Math.min(cut.end, end);
+          requestAnimationFrame(draw);
+          return;
+        }
+
         ctx.filter = montageFilter(editFilter?.cssFilter, activeEffect);
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         ctx.filter = "none";
+
         for (const item of overlays) {
           if (video.currentTime < item.start || video.currentTime > item.end) continue;
-          ctx.save(); ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.save();
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
           ctx.font = `${item.kind === "sticker" ? "normal" : "bold"} ${item.size}px sans-serif`;
-          ctx.lineWidth = item.kind === "subtitle" ? 8 : 5; ctx.strokeStyle = "rgba(0,0,0,.75)";
+          ctx.lineWidth = item.kind === "subtitle" ? 8 : 5;
+          ctx.strokeStyle = "rgba(0,0,0,.75)";
           ctx.strokeText(item.text, canvas.width * item.x / 100, canvas.height * item.y / 100);
-          ctx.fillStyle = item.color; ctx.fillText(item.text, canvas.width * item.x / 100, canvas.height * item.y / 100); ctx.restore();
+          ctx.fillStyle = item.color;
+          ctx.fillText(item.text, canvas.width * item.x / 100, canvas.height * item.y / 100);
+          ctx.restore();
         }
+
         requestAnimationFrame(draw);
       };
-      recorder.start(250); drawing = true; draw(); await video.play();
-      await new Promise<void>((resolve) => {
+
+      recorder.start(250);
+      drawing = true;
+      draw();
+
+      await video.play();
+
+      await new Promise<void>((resolve, reject) => {
+        const timeout = window.setTimeout(() => reject(new Error("Export timeout")), Math.max(15000, (end - start) * 4000));
         const check = () => {
-          if (video.currentTime >= end || video.ended) return resolve();
+          if (video.currentTime >= end || video.ended) {
+            window.clearTimeout(timeout);
+            resolve();
+            return;
+          }
           const cut = activeCuts.find((range) => video.currentTime >= range.start && video.currentTime < range.end);
           if (cut) video.currentTime = Math.min(cut.end, end);
           requestAnimationFrame(check);
-        }; check();
+        };
+        check();
       });
-      drawing = false; video.pause(); recorder.stop();
+
+      drawing = false;
+      video.pause();
+      if (recorder.state !== "inactive") recorder.stop();
       const blob = await finished;
-      audio?.pause(); audio?.removeAttribute("src"); audio?.load(); if (audioContext) await audioContext.close().catch(() => {});
-      if (blob.size < 1024) throw new Error("Export vide");
+
+      if (blob.size < 1024) throw new Error("Export vide vide");
+
       setFile(new File([blob], "afritok-montage.webm", { type: blob.type || "video/webm" }));
-      toast.success("Montage exporté"); return true;
+      toast.success("Montage enregistré");
+      return true;
     } catch (error) {
-      console.error("[Upload] montage export", error); toast.error("Impossible d'exporter le montage sur cet appareil"); return false;
-    } finally { setIsExporting(false); }
+      console.error("[Upload] montage export", error);
+      toast.error("Impossible d'enregistrer le montage sur cet appareil");
+      return false;
+    } finally {
+      stream?.getTracks().forEach((track) => track.stop());
+      audio?.pause();
+      audio?.removeAttribute("src");
+      audio?.load();
+      if (audioContext) await audioContext.close().catch(() => {});
+      setIsExporting(false);
+    }
   };
 
   if (!isAuthenticated) return <div className="h-screen bg-black flex items-center justify-center text-white">Connexion requise</div>;
@@ -397,7 +518,7 @@ export default function Upload() {
       </div>
 
       {!isImage && <div className="absolute bottom-[116px] left-0 right-0 h-[119px] z-30 bg-black"><VideoTimeline src={preview || ""} currentTime={currentSeconds} duration={duration} trimStart={trimStart} trimEnd={trimEnd || duration} cuts={cuts} onCurrentTimeChange={setTimelineTime} onTrimChange={setTimelineTrim} onCutsChange={setCuts} onDurationChange={setDuration} /></div>}
-      <div className="absolute bottom-0 left-0 right-0 h-[116px] bg-black px-4 py-3 z-40"><div className="flex items-center gap-2 mb-3 overflow-x-auto"><button onClick={() => setTool("autocut")} className="text-xs flex items-center gap-1.5 bg-white/10 px-3 py-2 rounded-full whitespace-nowrap"><Wand2 size={14} /> AutoCut</button><button onClick={() => setShowAudio(true)} className="text-xs flex items-center gap-1.5 bg-white/10 px-3 py-2 rounded-full whitespace-nowrap"><Music size={14} /> Son</button><span className="text-[11px] text-white/50 whitespace-nowrap">{cuts.length} coupe(s) · {overlays.length} élément(s)</span></div><div className="flex gap-3"><button onClick={() => navigate("/feed")} className="flex-1 py-3 rounded-full bg-white/10 font-bold text-sm">Annuler</button><button onClick={exportMontage} disabled={isExporting} className="flex-1 py-3 rounded-full bg-red-500 font-bold text-sm disabled:opacity-60 flex items-center justify-center gap-2">{isExporting ? <><Loader2 size={17} className="animate-spin" /> Export...</> : "Enregistrer"}</button><button onClick={async () => { const ok = await exportMontage(); if (ok) setStep("publish"); }} disabled={isExporting} className="flex-1 py-3 rounded-full bg-white font-bold text-sm text-black">Suivant</button></div></div>
+      <div className="absolute bottom-0 left-0 right-0 h-[116px] bg-black px-4 py-3 z-40"><div className="flex items-center gap-2 mb-3 overflow-x-auto"><button onClick={() => setTool("autocut")} className="text-xs flex items-center gap-1.5 bg-white/10 px-3 py-2 rounded-full whitespace-nowrap"><Wand2 size={14} /> AutoCut</button><button onClick={() => setShowAudio(true)} className="text-xs flex items-center gap-1.5 bg-white/10 px-3 py-2 rounded-full whitespace-nowrap"><Music size={14} /> Son</button><span className="text-[11px] text-white/50 whitespace-nowrap">{cuts.length} coupe(s) · {overlays.length} élément(s)</span></div><div className="flex gap-3"><button onClick={() => navigate("/feed")} className="flex-1 py-3 rounded-full bg-white/10 font-bold text-sm">Annuler</button><button onClick={async () => { const ok = await exportMontage(); if (ok) toast.success(montageNeedsExport() ? "Montage enregistré" : "Montage prêt"); }} disabled={isExporting} className="flex-1 py-3 rounded-full bg-red-500 font-bold text-sm disabled:opacity-60 flex items-center justify-center gap-2">{isExporting ? <><Loader2 size={17} className="animate-spin" /> Export...</> : "Enregistrer"}</button><button onClick={async () => { const ok = await exportMontage(); if (ok) setStep("publish"); }} disabled={isExporting} className="flex-1 py-3 rounded-full bg-white font-bold text-sm text-black">Suivant</button></div></div>
 
       {tool && <div className="absolute left-0 right-0 bottom-[116px] z-50 w-full max-w-full min-w-0 max-h-[calc(100dvh-235px)] overflow-y-auto overflow-x-hidden rounded-t-3xl bg-[#101010] border-t border-white/10 p-4 pb-6"><div className="flex justify-between items-center mb-4"><button onClick={() => setTool(null)} className="h-9 w-9 rounded-full bg-white/10 flex items-center justify-center" aria-label="Retour"><ArrowLeft /></button><h2 className="font-bold text-lg flex-1 text-center">{toolTitle(tool)}</h2><div className="w-9" /></div>{tool === "trim" && <TrimPanel duration={duration} start={trimStart} end={trimEnd || duration} current={currentSeconds} cutStart={cutStart} cutEnd={cutEnd || Math.min(duration, 5)} cuts={cuts} onCutStart={setCutStart} onCutEnd={setCutEnd} onRemoveFront={removeFront} onRemoveBack={removeBack} onRemoveMiddle={removeMiddle} onDeleteCut={deleteCut} onPreview={() => { setTimelineTime(trimStart); videoRef.current?.play().catch(() => {}); setTool(null); }} />}{tool === "text" && <InlineTextPanel value={textDraft} setValue={setTextDraft} size={overlaySize} setSize={setOverlaySize} color={overlayColor} setColor={setOverlayColor} onAdd={addText} items={overlays.filter((o) => o.kind === "text")} onDelete={deleteOverlay} onDone={() => setTool(null)} />}{tool === "stickers" && <InlineStickerPanel onAdd={addSticker} items={overlays.filter((o) => o.kind === "sticker")} onDelete={deleteOverlay} onDone={() => setTool(null)} />}{tool === "subtitles" && <InlineSubtitlePanel value={subtitleDraft} setValue={setSubtitleDraft} onAdd={addSubtitle} items={overlays.filter((o) => o.kind === "subtitle")} onDelete={deleteOverlay} onDone={() => setTool(null)} />}{tool === "models" && <ModelPanel onApply={applyModel} />}{tool === "autocut" && <div className="space-y-4"><p className="text-white/70 text-sm">AutoCut sélectionne automatiquement un passage court.</p><button onClick={applyAutoCut} className="w-full py-3 rounded-xl bg-red-500 font-bold">Appliquer AutoCut</button></div>}</div>}
 
