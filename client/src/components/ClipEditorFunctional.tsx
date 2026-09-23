@@ -33,7 +33,34 @@ export function ClipEditorFunctional({src,duration,trimStart,trimEnd,cuts,onTrim
  const removeSide=()=>{const x=tRef.current;const origin=lastDragOriginRef.current??start;if(x<=start+.05||x>=end-.05)return toast.info("Glisse d'abord le doigt jusqu'à l'endroit où couper");if(x>=origin){remember();onTrimChange(x,end);onCutsChange(cuts.filter(r=>r.end>x));setSplits(s=>s.filter(q=>q>x+.05));seek(x)}else{remember();onTrimChange(start,x);onCutsChange(cuts.filter(r=>r.start<x));setSplits(s=>s.filter(q=>q<x-.05));seek(Math.max(start,x-.01))}toast.success("Partie supprimée")};
  const front=()=>{const x=tRef.current;if(x<=start+.05||x>=end-.05)return toast.info("Place la ligne blanche après le début");remember();onTrimChange(x,end);onCutsChange(cuts.filter(r=>r.end>x));setSplits(s=>s.filter(q=>q>x+.05));seek(x);toast.success("Début supprimé")};
  const back=()=>{const x=tRef.current;if(x<=start+.05||x>=end-.05)return toast.info("Place la ligne blanche avant la fin");remember();onTrimChange(start,x);onCutsChange(cuts.filter(r=>r.start<x));setSplits(s=>s.filter(q=>q<x-.05));seek(Math.max(start,x-.01));toast.success("Fin supprimée")};
- const toggle=()=>{const v=vref.current;if(!v)return;if(v.paused){const target=(v.currentTime<start||v.currentTime>=end)?start:v.currentTime;try{v.currentTime=target}catch{};v.play().catch(()=>toast.info("Appuie sur Lire une seconde fois"))}else v.pause()};
+ const toggle=async()=>{
+   const v=vref.current;if(!v)return;
+   if(!v.paused){
+     v.pause();
+     return;
+   }
+   const target=(v.currentTime<start||v.currentTime>=end)?start:v.currentTime;
+   try{
+     if(Math.abs(v.currentTime-target)>.02)v.currentTime=target;
+     if(v.readyState<2){
+       await new Promise<void>((resolve,reject)=>{
+         const onReady=()=>{cleanup();resolve()};
+         const onError=()=>{cleanup();reject(new Error("video-error"))};
+         const cleanup=()=>{v.removeEventListener("canplay",onReady);v.removeEventListener("loadeddata",onReady);v.removeEventListener("error",onError)};
+         v.addEventListener("canplay",onReady,{once:true});
+         v.addEventListener("loadeddata",onReady,{once:true});
+         v.addEventListener("error",onError,{once:true});
+       });
+     }
+     v.muted=true;
+     v.playsInline=true;
+     await v.play();
+   }catch(error){
+     console.error("[ClipEditor] play",error);
+     setPlaying(false);
+     toast.error("La vidéo ne peut pas démarrer. Appuie encore sur Lire.");
+   }
+ };
  const move=(x:number)=>{const el=tref.current;if(!el)return;const r=el.getBoundingClientRect();if(r.width<=0)return;const safeEnd=end>start?end:total;const ratio=Math.max(0,Math.min(1,(x-r.left)/r.width));seek(start+ratio*Math.max(0.05,safeEnd-start))};
  const updateFromClientX=(x:number)=>{
    const el=tref.current;if(!el)return;
