@@ -50,7 +50,6 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
   const [timerDuration, setTimerDuration] = useState(0);
   const [aspect, setAspect] = useState<"full" | "square" | "portrait">("full");
   const [moreOpen, setMoreOpen] = useState(false);
-  const frameSkipRef = useRef(0);
   const [switchingCamera, setSwitchingCamera] = useState(false);
   const [effectsOpen, setEffectsOpen] = useState(false);
   const [selectedEffect, setSelectedEffect] = useState<AREffect | null>(null);
@@ -474,14 +473,9 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
           {timerDuration === 0 ? <TimerIcon size={20} /> : `${timerDuration}s`}
         </button>
         {moreOpen && (
-          <>
-            <button onClick={cycleAspect} className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center" aria-label="Disposition">
-              <LayoutGrid size={20} />
-            </button>
-            <button onClick={() => setMoreOpen((v) => !v)} className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center" aria-label="Plus d'options">
-              <ChevronUp size={20} className={`transition-transform ${moreOpen ? "" : "rotate-180"}`} />
-            </button>
-          </>
+          <button onClick={cycleAspect} className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center" aria-label="Disposition">
+            <LayoutGrid size={20} />
+          </button>
         )}
         <button onClick={() => setEffectsOpen(true)} className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center" aria-label="Retouche">
           <Sparkles size={20} className={selectedEffect ? "text-yellow-300" : ""} />
@@ -489,11 +483,9 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
         <button onClick={() => setFiltersOpen(true)} className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center" aria-label="Filtres">
           <span className={selectedFilter ? "text-yellow-300" : ""}>🎨</span>
         </button>
-        {!moreOpen && (
-          <button onClick={() => setMoreOpen((v) => !v)} className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center" aria-label="Plus d'options">
-            <ChevronUp size={20} className="rotate-180" />
-          </button>
-        )}
+        <button onClick={() => setMoreOpen((v) => !v)} className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center" aria-label="Plus d'options">
+          <ChevronUp size={20} className={`transition-transform ${moreOpen ? "" : "rotate-180"}`} />
+        </button>
       </div>
 
       {recording && (
