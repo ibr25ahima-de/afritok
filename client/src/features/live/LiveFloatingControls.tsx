@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
-import { Camera, CameraOff, Gift, Grip, Mic, MicOff } from "lucide-react";
+import { Camera, CameraOff, Gift, Grip, Mic, MicOff, RefreshCw } from "lucide-react";
 
 type Props = {
   isHostOrGuest: boolean;
@@ -7,6 +7,7 @@ type Props = {
   isMuted: boolean;
   onToggleVideo: () => void;
   onToggleMute: () => void;
+  onSwitchCamera: () => void;
   onOpenGifts: () => void;
 };
 
@@ -50,7 +51,7 @@ export function LiveFloatingControls({ isHostOrGuest, isVideoOff, isMuted, onTog
       <div className="flex flex-col gap-2 rounded-2xl bg-black/45 backdrop-blur-sm p-1.5">
         {isHostOrGuest && <>
           <button type="button" onClick={onToggleVideo} aria-label={isVideoOff ? "Activer la caméra" : "Désactiver la caméra"} className="w-11 h-11 rounded-full bg-black/65 flex items-center justify-center">{isVideoOff ? <CameraOff size={20} /> : <Camera size={20} />}</button>
-          <button type="button" onClick={onToggleMute} aria-label={isMuted ? "Activer le micro" : "Couper le micro"} className="w-11 h-11 rounded-full bg-black/65 flex items-center justify-center">{isMuted ? <MicOff size={20} /> : <Mic size={20} />}</button>
+          <button type="button" onClick={onSwitchCamera} aria-label="Retourner la caméra" className="w-11 h-11 rounded-full bg-black/65 flex items-center justify-center"><RefreshCw size={20} /></button><button type="button" onClick={onToggleMute} aria-label={isMuted ? "Activer le micro" : "Couper le micro"} className="w-11 h-11 rounded-full bg-black/65 flex items-center justify-center">{isMuted ? <MicOff size={20} /> : <Mic size={20} />}</button>
         </>}
         <button type="button" onClick={onOpenGifts} aria-label="Envoyer un cadeau" className="w-11 h-11 rounded-full bg-pink-500 flex items-center justify-center shadow-lg"><Gift size={20} /></button>
       </div>
