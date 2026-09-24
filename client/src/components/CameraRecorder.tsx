@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Music, Pause, Play, RefreshCw, Sparkles, X } from "lucide-react";
+import { Check, Music, Pause, Play, RefreshCw, Sparkles, X, Sun, Timer as TimerIcon, LayoutGrid, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
 import AREngineMobile from "./AREngineMobile";
 import EffectsPanel, { AR_EFFECTS, type AREffect } from "./EffectsPanel";
@@ -46,6 +46,11 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
   const [paused, setPaused] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [timer, setTimer] = useState(0);
+  const [flashOn, setFlashOn] = useState(false);
+  const [timerDuration, setTimerDuration] = useState(0);
+  const [aspect, setAspect] = useState<"full" | "square" | "portrait">("full");
+  const [moreOpen, setMoreOpen] = useState(false);
+  const frameSkipRef = useRef(0);
   const [switchingCamera, setSwitchingCamera] = useState(false);
   const [effectsOpen, setEffectsOpen] = useState(false);
   const [selectedEffect, setSelectedEffect] = useState<AREffect | null>(null);
@@ -144,10 +149,30 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
     try {
       await startCamera(nextMode);
       setFacingMode(nextMode);
+      setFlashOn(false);
     } finally {
       setSwitchingCamera(false);
     }
   }, [facingMode, startCamera, switchingCamera]);
+
+  const toggleFlash = useCallback(async () => {
+    const track = streamRef.current?.getVideoTracks()[0];
+    const capabilities = track?.getCapabilities?.() as any;
+    if (!track || !capabilities?.torch) {
+      toast.info("Le flash n'est pas disponible sur cette caméra");
+      return;
+    }
+    try {
+      await track.applyConstraints({ advanced: [{ torch: !flashOn }] } as any);
+      setFlashOn((v) => !v);
+    } catch {
+      toast.error("Impossible d'activer le flash");
+    }
+  }, [flashOn]);
+
+  const cycleAspect = () => setAspect((a) => (
+    a === "full" ? "square" : a === "square" ? "portrait" : "full"
+  ));
 
   const takePhoto = () => {
     const source = arCanvasRef.current;
@@ -350,8 +375,8 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
 
   const capture = async () => {
     console.log("[capture] durationMode =", durationMode, "recording =", recording);
-    if (timer > 0 && !recording) {
-      for (let n = timer; n > 0; n -= 1) {
+    if (timerDuration > 0 && !recording) {
+      for (let n = timerDuration; n > 0; n -= 1) {
         setTimer(n);
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
@@ -389,21 +414,34 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
 
   return (
     <div className="h-screen bg-black text-white relative overflow-hidden flex flex-col">
-      <video
-        ref={videoRef}
-        autoPlay
-        muted
-        playsInline
-        className="absolute inset-0 w-full h-full object-cover"
-      />
-      <AREngineMobile
-        videoRef={videoRef}
-        activeEffect={selectedEffect}
-        filterCss={selectedFilter?.cssFilter}
-        canvasRef={arCanvasRef}
-        recordingCanvasRef={recordingCanvasRef}
-        onStatusChange={handleArStatus}
-      />
+      <div className="absolute inset-0 flex items-center justify-center bg-black">
+        <div
+          className="relative overflow-hidden"
+          style={
+            aspect === "square"
+              ? { aspectRatio: "1 / 1", maxHeight: "100%", width: "100%" }
+              : aspect === "portrait"
+                ? { aspectRatio: "4 / 5", maxHeight: "100%", width: "100%" }
+                : { width: "100%", height: "100%" }
+          }
+        >
+          <video
+            ref={videoRef}
+            autoPlay
+            muted
+            playsInline
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+          <AREngineMobile
+            videoRef={videoRef}
+            activeEffect={selectedEffect}
+            filterCss={selectedFilter?.cssFilter}
+            canvasRef={arCanvasRef}
+            recordingCanvasRef={recordingCanvasRef}
+            onStatusChange={handleArStatus}
+          />
+        </div>
+      </div>
 
       {timer > 0 && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 text-8xl font-bold">
@@ -422,29 +460,40 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
         <button onClick={onOpenMusic} className="rounded-full bg-black/55 px-4 py-2 text-xs max-w-[55%] truncate" disabled={recording && switchingCamera}>
           <Music size={15} className="inline mr-2" />{selectedMusic?.name || "Ajouter un son"}
         </button>
-        <button onClick={switchCamera} disabled={switchingCamera} className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center disabled:opacity-50" aria-label="Changer de caméra">
-          <RefreshCw size={24} className={switchingCamera ? "animate-spin" : ""} />
-        </button>
+
       </div>
 
-      <div className="relative z-30 flex justify-end px-4">
-        <button
-          onClick={() => setEffectsOpen(true)}
-          className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center"
-          aria-label="Effets de visage"
-        >
-          <Sparkles size={22} className={selectedEffect ? "text-yellow-300" : ""} />
+      <div className="absolute right-3 top-20 z-30 flex flex-col items-center gap-3">
+        <button onClick={switchCamera} disabled={switchingCamera} className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center disabled:opacity-50" aria-label="Retourner la caméra">
+          <RefreshCw size={20} className={switchingCamera ? "animate-spin" : ""} />
         </button>
-      </div>
-
-      <div className="relative z-30 flex justify-end px-4 mt-2">
-        <button
-          onClick={() => setFiltersOpen(true)}
-          className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center"
-          aria-label="Filtre de couleur"
-        >
+        <button onClick={toggleFlash} className={`h-10 w-10 rounded-full flex items-center justify-center ${flashOn ? "bg-yellow-400 text-black" : "bg-black/45"}`} aria-label="Flash">
+          <Sun size={20} />
+        </button>
+        <button onClick={() => setTimerDuration((d) => (d === 0 ? 3 : d === 3 ? 10 : 0))} className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center text-[10px] font-bold" aria-label="Minuteur">
+          {timerDuration === 0 ? <TimerIcon size={20} /> : `${timerDuration}s`}
+        </button>
+        {moreOpen && (
+          <>
+            <button onClick={cycleAspect} className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center" aria-label="Disposition">
+              <LayoutGrid size={20} />
+            </button>
+            <button onClick={() => setMoreOpen((v) => !v)} className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center" aria-label="Plus d'options">
+              <ChevronUp size={20} className={`transition-transform ${moreOpen ? "" : "rotate-180"}`} />
+            </button>
+          </>
+        )}
+        <button onClick={() => setEffectsOpen(true)} className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center" aria-label="Retouche">
+          <Sparkles size={20} className={selectedEffect ? "text-yellow-300" : ""} />
+        </button>
+        <button onClick={() => setFiltersOpen(true)} className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center" aria-label="Filtres">
           <span className={selectedFilter ? "text-yellow-300" : ""}>🎨</span>
         </button>
+        {!moreOpen && (
+          <button onClick={() => setMoreOpen((v) => !v)} className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center" aria-label="Plus d'options">
+            <ChevronUp size={20} className="rotate-180" />
+          </button>
+        )}
       </div>
 
       {recording && (
