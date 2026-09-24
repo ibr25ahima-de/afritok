@@ -226,8 +226,12 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
         toast.error("La photo capturée est vide, réessaie");
         return;
       }
-      const res = await fetch(dataUrl);
-      const blob = await res.blob();
+      const commaIndex = dataUrl.indexOf(",");
+      const base64 = dataUrl.slice(commaIndex + 1);
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const blob = new Blob([bytes], { type: "image/jpeg" });
       if (!blob || blob.size < 500) {
         toast.error("La photo capturée est invalide, réessaie");
         return;
