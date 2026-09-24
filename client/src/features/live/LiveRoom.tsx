@@ -41,6 +41,13 @@ export function LiveRoom() {
     if (!streamRef.current || !socketRef.current || socketId === socketRef.current.id) return;
     peersRef.current.get(socketId)?.close(); const pc = new RTCPeerConnection(ICE_SERVERS); peersRef.current.set(socketId, pc);
     streamRef.current.getTracks().forEach((track) => pc.addTrack(track, streamRef.current!));
+    pc.ontrack = (event) => {
+      const remoteUserId = peerUsersRef.current.get(socketId);
+      if (event.streams[0] && Number.isInteger(remoteUserId)) {
+        remoteStreamsRef.current.set(Number(remoteUserId), event.streams[0]);
+        setMediaRevision((v) => v + 1);
+      }
+    };
     pc.onicecandidate = (e) => { if (e.candidate) socketRef.current?.emit("live:signal", { to: socketId, signal: { type: "ice", candidate: e.candidate } }); };
     const offer = await pc.createOffer(); await pc.setLocalDescription(offer); socketRef.current.emit("live:signal", { to: socketId, signal: { type: "offer", sdp: offer.sdp } });
   };
@@ -63,6 +70,14 @@ export function LiveRoom() {
       socket.on("live:stage-requests", ({ requests: list }) => setRequests(list || []));
       socket.on("live:stage-request", (item: Request) => { if (isHost) setRequests((items) => items.some((x) => x.requestId === item.requestId) ? items : [...items, item]); });
       socket.on("live:stage-request-state", ({ requestId, state, userId }) => { if (isHost && state !== "pending") setRequests((items) => items.filter((x) => x.requestId !== requestId)); if (userId === me.id && state === "accepted") void startStageMedia(); });
+      socket.on("live:status", ({ userId, isMuted: muted, isVideoOff: videoOff }) => {
+        setParticipants((items) => items.map((p) => p.userId === userId ? { ...p, isMuted: Boolean(muted), isVideoOff: Boolean(videoOff) } : p));
+      });
+      socket.on("live:moderation", ({ action, targetUserId, muted, role }) => {
+        if (action === "mute") setParticipants((items) => items.map((p) => p.userId === targetUserId ? { ...p, isMuted: Boolean(muted) } : p));
+        if (action === "stage") setParticipants((items) => items.map((p) => p.userId === targetUserId ? { ...p, role: role || "viewer" } : p));
+        if (action === "remove") { remoteStreamsRef.current.delete(Number(targetUserId)); setMediaRevision((v) => v + 1); setParticipants((items) => items.filter((p) => p.userId !== targetUserId)); }
+      });
       socket.on("live:stage-error", ({ message }) => window.alert(message)); socket.on("live:viewer-count", ({ delta }) => setViewerCount((v) => Math.max(0, v + Number(delta || 0))));
       socket.on("live:viewer-joined", ({ socketId }) => { const self = participantsRef.current.find((p) => p.userId === me.id); if (isHost || self?.role === "guest" || self?.role === "admin") void createOffer(socketId); });
       socket.on("live:stage-viewer-targets", ({ socketIds }) => { if (Array.isArray(socketIds)) socketIds.forEach((id) => void createOffer(id)); });
@@ -73,6 +88,7 @@ export function LiveRoom() {
         if (signal.type === "offer") {
           if (pc) pc.close(); pc = new RTCPeerConnection(ICE_SERVERS); peersRef.current.set(from, pc); peerUsersRef.current.set(from, Number(userId));
           pc.ontrack = (event) => { if (event.streams[0] && Number.isInteger(userId)) { remoteStreamsRef.current.set(Number(userId), event.streams[0]); setMediaRevision((v) => v + 1); } };
+          if (streamRef.current) streamRef.current.getTracks().forEach((track) => pc!.addTrack(track, streamRef.current!));
           pc.onicecandidate = (e) => { if (e.candidate) socket.emit("live:signal", { to: from, signal: { type: "ice", candidate: e.candidate } }); };
           await pc.setRemoteDescription({ type: "offer", sdp: signal.sdp }); const answer = await pc.createAnswer(); await pc.setLocalDescription(answer); socket.emit("live:signal", { to: from, signal: { type: "answer", sdp: answer.sdp } });
         } else if (signal.type === "answer" && pc) await pc.setRemoteDescription({ type: "answer", sdp: signal.sdp });
@@ -101,7 +117,7 @@ export function LiveRoom() {
   return <div className="h-[100dvh] bg-black text-white overflow-hidden relative">
     <LiveStageLayout layout={layout} participants={participants} maxParticipants={Number(session.maxParticipants || 5)} centerParticipantId={centerParticipantId} renderVideo={renderStageVideo} />
     <header className="absolute top-0 left-0 right-0 z-30 p-4 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent"><div className="flex items-center gap-3"><button onClick={leave} className="w-10 h-10 rounded-full bg-black/45 flex items-center justify-center"><ArrowLeft /></button><div><p className="font-bold truncate max-w-[190px]">{session.title}</p><p className="text-xs text-gray-300">@{session.hostUsername}</p></div></div><div className="px-3 py-1.5 rounded-full bg-red-500/90 text-sm font-bold"><span className="animate-pulse">●</span> LIVE · <Users size={14} className="inline" /> {viewerCount}</div></header>
-    <LiveStagePanel isHost={isHost} participants={participants} requests={requests} maxParticipants={Number(session.maxParticipants || 5)} centerParticipantId={centerParticipantId} myRequestPending={!!requestQuery.data} onRequestStage={askToJoin} onAccept={accept} onReject={reject} onRemove={(userId) => { void removeParticipant.mutateAsync({ sessionId, userId }); }} onMute={(userId, muted) => { void muteParticipant.mutateAsync({ sessionId, userId, muted }); }} onSetCenter={setCenterParticipant} />
+    <LiveStagePanel isHost={isHost} participants={participants} requests={requests} maxParticipants={Number(session.maxParticipants || 5)} centerParticipantId={centerParticipantId} myRequestPending={!!requestQuery.data} onRequestStage={askToJoin} onAccept={accept} onReject={reject} onRemove={(userId) => { void removeParticipant.mutateAsync({ sessionId, userId }).then(() => { socketRef.current?.emit("live:moderate", { sessionId, action: "stage", targetUserId: userId, role: "viewer" }); }).catch(() => undefined); }} onMute={(userId, muted) => { void muteParticipant.mutateAsync({ sessionId, userId, muted }).then(() => { socketRef.current?.emit("live:moderate", { sessionId, action: "mute", targetUserId: userId, muted }); }).catch(() => undefined); }} onSetCenter={setCenterParticipant} />
     <LiveFloatingControls isHostOrGuest={isHostOrGuest} isVideoOff={isVideoOff} isMuted={isMuted} onToggleVideo={toggleVideo} onToggleMute={toggleMute} onOpenGifts={() => setShowGifts(true)} />
     <div className="absolute left-3 right-16 bottom-4 z-30"><div className="max-h-36 overflow-y-auto mb-2 space-y-1">{chat.map((m) => <div key={m.id} className="text-sm"><b className="text-yellow-300">{m.username}</b> {m.message}</div>)}</div><div className="flex gap-2"><input value={chatText} onChange={(e) => setChatText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendChat()} placeholder="Dire quelque chose..." className="flex-1 bg-black/65 border border-white/10 rounded-full px-4 py-3" /><button onClick={sendChat} className="w-12 h-12 rounded-full bg-white/15 flex items-center justify-center"><Send size={18} /></button></div></div>
     {showGifts && <div className="absolute inset-0 z-50 bg-black/70 flex items-end"><div className="w-full bg-gray-950 rounded-t-3xl p-5 max-h-[65vh] overflow-y-auto"><div className="flex justify-between mb-4"><div><h2 className="font-bold">🎁 Envoyer un cadeau</h2><p className="text-xs text-gray-400">Solde : 🪙 {balance.toLocaleString("fr-FR")}</p></div><button onClick={() => setShowGifts(false)}><X /></button></div><div className="grid grid-cols-4 gap-3">{gifts?.map((gift: any) => <button key={gift.id} disabled={balance < Number(gift.coins)} onClick={() => chooseGift(gift)} className="rounded-2xl bg-gray-900 p-3 disabled:opacity-40"><div className="text-4xl">{gift.icon}</div><p className="text-xs">{gift.name}</p><p className="text-[11px] text-yellow-400">🪙 {Number(gift.coins).toLocaleString("fr-FR")}</p></button>)}</div><div className="mt-4 text-xs text-gray-500 flex gap-2"><Heart size={14} /> Cadeaux animés en direct.</div></div></div>}
