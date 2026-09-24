@@ -184,7 +184,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
     return sum < 40;
   };
 
-  const takePhoto = () => {
+  const takePhoto = async () => {
     const arSource = arCanvasRef.current;
     const video = videoRef.current;
     const canvas = document.createElement("canvas");
@@ -220,9 +220,23 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       console.warn("[takePhoto] canvas AR vide, repli sur la vidéo brute");
     }
 
-    canvas.toBlob((blob) => {
-      if (blob) onPhotoTaken?.(blob);
-    }, "image/jpeg", 0.95);
+    try {
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
+      if (!dataUrl || dataUrl === "data:," || dataUrl.length < 100) {
+        toast.error("La photo capturée est vide, réessaie");
+        return;
+      }
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      if (!blob || blob.size < 500) {
+        toast.error("La photo capturée est invalide, réessaie");
+        return;
+      }
+      onPhotoTaken?.(blob);
+    } catch (err) {
+      console.error("[takePhoto] conversion", err);
+      toast.error("Impossible de finaliser la photo sur cet appareil");
+    }
   };
 
   const stopRecording = useCallback(() => {
