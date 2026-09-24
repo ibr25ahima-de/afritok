@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import AREngineMobile from "./AREngineMobile";
 import EffectsPanel, { AR_EFFECTS, type AREffect } from "./EffectsPanel";
 import { FILTERS, type Filter } from "./FilterLibrary";
+import { LiveEntryButton } from "@/features/live/LiveEntryButton";
 
 interface CameraRecorderProps {
   onVideoRecorded?: (blob: Blob, duration: number) => void;
@@ -551,9 +552,10 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       )}
 
       <div className="relative z-20 mt-auto bg-gradient-to-t from-black/95 via-black/55 to-transparent px-5 pb-4 pt-8">
-        <div className="flex justify-center gap-3 mb-5">
+        <div className="flex items-center justify-center gap-2 mb-5 overflow-x-auto">
+          <LiveEntryButton className="shrink-0 px-3 py-2 text-xs" />
           {["PHOTO", "10 s", "15 s", "60 s", "10 min"].map((mode) => (
-            <button key={mode} onClick={() => !recording && setDurationMode(mode)} disabled={recording} className={`rounded-full px-3 py-2 text-xs font-bold transition ${durationMode === mode ? "bg-white text-black" : "bg-black/55 text-white"} ${recording ? "opacity-50" : ""}`}>
+            <button key={mode} onClick={() => !recording && setDurationMode(mode)} disabled={recording} className={`shrink-0 rounded-full px-3 py-2 text-xs font-bold transition ${durationMode === mode ? "bg-white text-black" : "bg-black/55 text-white"} ${recording ? "opacity-50" : ""}`}>
               {mode === "PHOTO" ? "Photo" : mode}
             </button>
           ))}
