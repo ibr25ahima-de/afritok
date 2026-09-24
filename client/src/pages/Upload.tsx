@@ -68,6 +68,20 @@ export default function Upload() {
 
   useEffect(() => {
     if (!file) return;
+
+    if (file.type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === "string") setPreview(reader.result);
+      };
+      reader.onerror = () => {
+        console.error("[Upload] FileReader error", reader.error);
+      };
+      reader.readAsDataURL(file);
+
+      return () => reader.abort();
+    }
+
     const url = URL.createObjectURL(file);
     setPreview(url);
     return () => URL.revokeObjectURL(url);
