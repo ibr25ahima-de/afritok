@@ -31,7 +31,7 @@ export function LiveRoom() {
   const requestStage = trpc.live.requestToJoinStage.useMutation(); const acceptRequest = trpc.live.approveStageRequest.useMutation(); const rejectRequest = trpc.live.rejectStageRequest.useMutation();
   const muteParticipant = trpc.live.muteParticipant.useMutation(); const removeParticipant = trpc.live.removeFromStage.useMutation(); const sendGift = trpc.coins.sendGift.useMutation();
   const socketRef = useRef<Socket | null>(null); const streamRef = useRef<MediaStream | null>(null); const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map()); const peerUsersRef = useRef<Map<string, number>>(new Map()); const remoteStreamsRef = useRef<Map<number, MediaStream>>(new Map());
-  const [participants, setParticipants] = useState<Participant[]>([]); const participantsRef = useRef<Participant[]>([]); const [requests, setRequests] = useState<Request[]>([]); const [isMuted, setIsMuted] = useState(false); const [isVideoOff, setIsVideoOff] = useState(false); const [viewerCount, setViewerCount] = useState(0); const [chat, setChat] = useState<ChatMessage[]>([]); const [chatText, setChatText] = useState(""); const [showGifts, setShowGifts] = useState(false); const [balance, setBalance] = useState(0); const [layout, setLayout] = useState<LiveLayoutId>("spotlight"); const [centerParticipantId, setCenterParticipantId] = useState<number | null>(null); const [, setMediaRevision] = useState(0);
+  const [participants, setParticipants] = useState<Participant[]>([]); const participantsRef = useRef<Participant[]>([]); const [requests, setRequests] = useState<Request[]>([]); const [isMuted, setIsMuted] = useState(false); const [isVideoOff, setIsVideoOff] = useState(false); const [viewerCount, setViewerCount] = useState(0); const [chat, setChat] = useState<ChatMessage[]>([]); const [chatText, setChatText] = useState(""); const [showGifts, setShowGifts] = useState(false); const [balance, setBalance] = useState(0); const [cameraFacing, setCameraFacing] = useState<"user" | "environment">("user"); const [layout, setLayout] = useState<LiveLayoutId>("spotlight"); const [centerParticipantId, setCenterParticipantId] = useState<number | null>(null); const [, setMediaRevision] = useState(0);
   const isHost = !!me && !!session && me.id === session.hostId;
   useEffect(() => { participantsRef.current = participants; }, [participants]);
   useEffect(() => { const saved = sessionId ? sessionStorage.getItem(`afritok:live-layout:${sessionId}`) : null; if (saved && isLiveLayoutId(saved)) setLayout(saved); }, [sessionId]);
@@ -52,11 +52,40 @@ export function LiveRoom() {
     const offer = await pc.createOffer(); await pc.setLocalDescription(offer); socketRef.current.emit("live:signal", { to: socketId, signal: { type: "offer", sdp: offer.sdp } });
   };
 
-  const startStageMedia = async () => {
+  const startStageMedia = async (facing: "user" | "environment" = cameraFacing) => {
     if (streamRef.current || !navigator.mediaDevices?.getUserMedia) return;
-    const media = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true }); streamRef.current = media;
-    setIsMuted(false); setIsVideoOff(false); setMediaRevision((v) => v + 1);
+    let media: MediaStream;
+    try { media = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing }, audio: true }); }
+    catch { media = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+    streamRef.current = media;
+    setCameraFacing(facing);
+    setIsMuted(false);
+    setIsVideoOff(media.getVideoTracks().length === 0);
+    setMediaRevision((v) => v + 1);
     if (!isHost) socketRef.current?.emit("live:stage-media-ready", { sessionId });
+    socketRef.current?.emit("live:status", { sessionId, isMuted: false, isVideoOff: media.getVideoTracks().length === 0 });
+  };
+
+  const switchCamera = async () => {
+    if (!navigator.mediaDevices?.getUserMedia || !streamRef.current) return;
+    const nextFacing = cameraFacing === "user" ? "environment" : "user";
+    try {
+      const next = await navigator.mediaDevices.getUserMedia({ video: { facingMode: nextFacing }, audio: true });
+      const nextVideo = next.getVideoTracks()[0];
+      const nextAudio = next.getAudioTracks()[0];
+      peersRef.current.forEach((pc) => {
+        const videoSender = pc.getSenders().find((s) => s.track?.kind === "video");
+        if (videoSender && nextVideo) void videoSender.replaceTrack(nextVideo);
+        const audioSender = pc.getSenders().find((s) => s.track?.kind === "audio");
+        if (audioSender && nextAudio) void audioSender.replaceTrack(nextAudio);
+      });
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = next;
+      setCameraFacing(nextFacing);
+      setIsVideoOff(false);
+      setMediaRevision((v) => v + 1);
+      socketRef.current?.emit("live:status", { sessionId, isMuted, isVideoOff: false });
+    } catch (error) { console.error("[Live] switch camera", error); }
   };
 
   useEffect(() => {
@@ -111,14 +140,14 @@ export function LiveRoom() {
   const chooseGift = async (gift: any) => { if (!me || !session || !balance || !gift) return; try { const r = await sendGift.mutateAsync({ recipientId: Number(session.hostId), giftId: String(gift.id), quantity: 1, context: "live", contextId: sessionId, idempotencyKey: crypto.randomUUID() }); setBalance(Number(r.balance)); socketRef.current?.emit("live:gift", { sessionId, gift: { icon: r.gift.icon, name: r.gift.name } }); setShowGifts(false); } catch {} };
   if (!session) return <div className="min-h-screen bg-black text-white flex items-center justify-center">Chargement du Live...</div>;
 
-  const renderStageVideo = (participant: Participant) => { const local = participant.userId === me?.id && !!streamRef.current; const stream = local ? streamRef.current || undefined : remoteStreamsRef.current.get(participant.userId); return <StreamVideo stream={stream} muted={local} videoOff={participant.isVideoOff} label={`Connexion avec ${participant.username}...`} />; };
+  const renderStageVideo = (participant: Participant) => { const local = participant.userId === me?.id && !!streamRef.current; const stream = local ? streamRef.current || undefined : remoteStreamsRef.current.get(participant.userId); const label = participant.isVideoOff ? "Caméra désactivée · Audio" : `Connexion avec ${participant.username}...`; return <StreamVideo stream={stream} muted={local} videoOff={participant.isVideoOff} label={label} />; };
   const isHostOrGuest = isHost || participants.some((p) => p.userId === me?.id && (p.role === "guest" || p.role === "admin"));
 
   return <div className="h-[100dvh] bg-black text-white overflow-hidden relative">
     <LiveStageLayout layout={layout} participants={participants} maxParticipants={Number(session.maxParticipants || 5)} centerParticipantId={centerParticipantId} renderVideo={renderStageVideo} />
     <header className="absolute top-0 left-0 right-0 z-30 p-4 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent"><div className="flex items-center gap-3"><button onClick={leave} className="w-10 h-10 rounded-full bg-black/45 flex items-center justify-center"><ArrowLeft /></button><div><p className="font-bold truncate max-w-[190px]">{session.title}</p><p className="text-xs text-gray-300">@{session.hostUsername}</p></div></div><div className="px-3 py-1.5 rounded-full bg-red-500/90 text-sm font-bold"><span className="animate-pulse">●</span> LIVE · <Users size={14} className="inline" /> {viewerCount}</div></header>
     <LiveStagePanel isHost={isHost} participants={participants} requests={requests} maxParticipants={Number(session.maxParticipants || 5)} centerParticipantId={centerParticipantId} myRequestPending={!!requestQuery.data} onRequestStage={askToJoin} onAccept={accept} onReject={reject} onRemove={(userId) => { void removeParticipant.mutateAsync({ sessionId, userId }).then(() => { socketRef.current?.emit("live:moderate", { sessionId, action: "stage", targetUserId: userId, role: "viewer" }); }).catch(() => undefined); }} onMute={(userId, muted) => { void muteParticipant.mutateAsync({ sessionId, userId, muted }).then(() => { socketRef.current?.emit("live:moderate", { sessionId, action: "mute", targetUserId: userId, muted }); }).catch(() => undefined); }} onSetCenter={setCenterParticipant} />
-    <LiveFloatingControls isHostOrGuest={isHostOrGuest} isVideoOff={isVideoOff} isMuted={isMuted} onToggleVideo={toggleVideo} onToggleMute={toggleMute} onOpenGifts={() => setShowGifts(true)} />
+    <LiveFloatingControls isHostOrGuest={isHostOrGuest} isVideoOff={isVideoOff} isMuted={isMuted} onToggleVideo={toggleVideo} onToggleMute={toggleMute} onSwitchCamera={switchCamera} onOpenGifts={() => setShowGifts(true)} />
     <div className="absolute left-3 right-16 bottom-4 z-30"><div className="max-h-36 overflow-y-auto mb-2 space-y-1">{chat.map((m) => <div key={m.id} className="text-sm"><b className="text-yellow-300">{m.username}</b> {m.message}</div>)}</div><div className="flex gap-2"><input value={chatText} onChange={(e) => setChatText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendChat()} placeholder="Dire quelque chose..." className="flex-1 bg-black/65 border border-white/10 rounded-full px-4 py-3" /><button onClick={sendChat} className="w-12 h-12 rounded-full bg-white/15 flex items-center justify-center"><Send size={18} /></button></div></div>
     {showGifts && <div className="absolute inset-0 z-50 bg-black/70 flex items-end"><div className="w-full bg-gray-950 rounded-t-3xl p-5 max-h-[65vh] overflow-y-auto"><div className="flex justify-between mb-4"><div><h2 className="font-bold">🎁 Envoyer un cadeau</h2><p className="text-xs text-gray-400">Solde : 🪙 {balance.toLocaleString("fr-FR")}</p></div><button onClick={() => setShowGifts(false)}><X /></button></div><div className="grid grid-cols-4 gap-3">{gifts?.map((gift: any) => <button key={gift.id} disabled={balance < Number(gift.coins)} onClick={() => chooseGift(gift)} className="rounded-2xl bg-gray-900 p-3 disabled:opacity-40"><div className="text-4xl">{gift.icon}</div><p className="text-xs">{gift.name}</p><p className="text-[11px] text-yellow-400">🪙 {Number(gift.coins).toLocaleString("fr-FR")}</p></button>)}</div><div className="mt-4 text-xs text-gray-500 flex gap-2"><Heart size={14} /> Cadeaux animés en direct.</div></div></div>}
   </div>;
