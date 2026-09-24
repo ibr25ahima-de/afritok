@@ -412,7 +412,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
   const durationLabel = durationMode === "10 min" ? "10:00" : durationMode === "60 s" ? "01:00" : durationMode === "15 s" ? "00:15" : "00:10";
 
   return (
-    <div className="h-screen bg-black text-white relative overflow-hidden flex flex-col">
+    <div className="h-[100dvh] max-h-[100dvh] min-h-0 bg-black text-white relative overflow-hidden flex flex-col">
       <div className="absolute inset-0 flex items-center justify-center bg-black">
         <div
           className="relative overflow-hidden"
@@ -454,7 +454,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
         arCanvas: {arCanvasRef.current?.width || 0}×{arCanvasRef.current?.height || 0}
       </div>
 
-      <div className="relative z-30 flex items-center justify-between p-4">
+      <div className="relative z-30 flex items-center justify-between px-4 pt-3 pb-2">
         <button onClick={onClose} className="h-10 w-10 rounded-full bg-black/45 flex items-center justify-center" aria-label="Fermer"><X size={25} /></button>
         <button onClick={onOpenMusic} className="rounded-full bg-black/55 px-4 py-2 text-xs max-w-[55%] truncate" disabled={recording && switchingCamera}>
           <Music size={15} className="inline mr-2" />{selectedMusic?.name || "Ajouter un son"}
@@ -497,7 +497,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
         </div>
       )}
 
-      <div className="relative z-20 mt-auto bg-gradient-to-t from-black/95 via-black/55 to-transparent px-5 pb-7 pt-12">
+      <div className="relative z-20 mt-auto bg-gradient-to-t from-black/95 via-black/55 to-transparent px-5 pb-4 pt-8">
         <div className="flex justify-center gap-3 mb-5">
           {["PHOTO", "10 s", "15 s", "60 s", "10 min"].map((mode) => (
             <button key={mode} onClick={() => !recording && setDurationMode(mode)} disabled={recording} className={`rounded-full px-3 py-2 text-xs font-bold transition ${durationMode === mode ? "bg-white text-black" : "bg-black/55 text-white"} ${recording ? "opacity-50" : ""}`}>
