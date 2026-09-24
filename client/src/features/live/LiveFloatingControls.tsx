@@ -14,7 +14,7 @@ type Props = {
 const STORAGE_KEY = "afritok:live-controls-position";
 const DEFAULT = { x: 12, y: 42 };
 
-export function LiveFloatingControls({ isHostOrGuest, isVideoOff, isMuted, onToggleVideo, onToggleMute, onOpenGifts }: Props) {
+export function LiveFloatingControls({ isHostOrGuest, isVideoOff, isMuted, onToggleVideo, onToggleMute, onSwitchCamera, onOpenGifts }: Props) {
   const [position, setPosition] = useState(DEFAULT);
   const dragging = useRef(false);
   const pointerOffset = useRef({ x: 0, y: 0 });
