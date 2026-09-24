@@ -173,20 +173,68 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
     a === "full" ? "square" : a === "square" ? "portrait" : "full"
   ));
 
-  const takePhoto = () => {
+  const takePhoto = async () => {
     const source = arCanvasRef.current;
+    const video = videoRef.current;
     console.log("[takePhoto] source size", source?.width, source?.height, "durationMode", durationMode);
-    if (!source || !source.width || !source.height) {
+
+    if (!video || !video.videoWidth || !video.videoHeight) {
       toast.error("La caméra n'est pas encore prête");
       return;
     }
+
+    // Laisser le moteur AR terminer sa dernière image avant la capture.
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+
+    const width = source?.width || video.videoWidth;
+    const height = source?.height || video.videoHeight;
+    if (!width || !height) {
+      toast.error("Impossible de capturer la photo");
+      return;
+    }
+
     const canvas = document.createElement("canvas");
-    canvas.width = source.width;
-    canvas.height = source.height;
+    canvas.width = width;
+    canvas.height = height;
     const context = canvas.getContext("2d");
-    context?.drawImage(source, 0, 0);
+    if (!context) {
+      toast.error("Impossible de préparer la photo");
+      return;
+    }
+
+    let capturedFromAr = false;
+    if (source && source.width === width && source.height === height) {
+      const sourceContext = source.getContext("2d", { willReadFrequently: true });
+      if (sourceContext) {
+        const pixels = sourceContext.getImageData(0, 0, Math.min(16, width), Math.min(16, height)).data;
+        capturedFromAr = pixels.some((value, index) => index % 4 === 3 && value > 0);
+      }
+      if (capturedFromAr) {
+        context.drawImage(source, 0, 0);
+      }
+    }
+
+    // Si le canvas AR n'a pas encore produit d'image, capturer directement la caméra
+    // plutôt que d'enregistrer une photo noire.
+    if (!capturedFromAr) {
+      context.save();
+      context.translate(width, 0);
+      context.scale(-1, 1);
+      const scale = Math.max(width / video.videoWidth, height / video.videoHeight);
+      const drawWidth = video.videoWidth * scale;
+      const drawHeight = video.videoHeight * scale;
+      context.drawImage(video, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
+      context.restore();
+    }
+
     canvas.toBlob((blob) => {
-      if (blob) onPhotoTaken?.(blob);
+      if (blob && blob.size > 1024) {
+        onPhotoTaken?.(blob);
+      } else {
+        toast.error("La photo n'a pas pu être capturée");
+      }
     }, "image/jpeg", 0.95);
   };
 
