@@ -5,7 +5,7 @@ export default function Advertising() {
   const [, navigate] = useLocation();
 
   return (
-    <div className="min-h-screen bg-black px-3 py-6 text-white">
+    <div className="min-h-[100dvh] bg-black px-3 py-6 text-white">
       <div className="mx-auto mb-4 w-full max-w-lg">
         <button
           type="button"
