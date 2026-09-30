@@ -10,7 +10,7 @@ export function LiveLobby() {
   });
 
   return (
-    <main className="min-h-screen bg-black text-white px-4 py-6">
+    <main className="min-h-[100dvh] bg-black text-white px-4 py-6">
       <header className="flex items-center justify-between gap-3 mb-6">
         <div>
           <div className="flex items-center gap-2"><Radio className="text-red-500" size={22} /><h1 className="text-2xl font-bold">Lives en direct</h1></div>
