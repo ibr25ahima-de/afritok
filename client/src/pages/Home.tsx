@@ -58,10 +58,10 @@ export default function Home() {
             </div>
 
             {/* CTA Buttons */}
-            <div className="flex gap-4">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
               <Button
                 onClick={() => navigate("/login")}
-                className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-6 text-lg font-semibold rounded-lg transition-all hover:shadow-lg hover:shadow-purple-500/50 flex items-center gap-2"
+                className="bg-purple-600 hover:bg-purple-700 text-white w-full sm:w-auto px-6 sm:px-8 py-5 sm:py-6 text-base sm:text-lg font-semibold rounded-lg transition-all hover:shadow-lg hover:shadow-purple-500/50 flex items-center gap-2"
               >
                 Get Started
                 <ArrowRight className="w-5 h-5" />
