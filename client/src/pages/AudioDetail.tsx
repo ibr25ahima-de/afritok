@@ -29,21 +29,21 @@ export default function AudioDetail() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="min-h-[100dvh] bg-black flex items-center justify-center">
         <Loader2 className="animate-spin text-amber-400" size={40} />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col pb-24">
+    <div className="min-h-[100dvh] bg-black text-white flex flex-col pb-24">
       {/* HEADER */}
       <header className="p-4 flex items-center justify-between sticky top-0 bg-black z-50">
-        <button onClick={() => window.history.back()} className="p-1">
+        <button onClick={() => window.history.back()} className="p-2 min-h-11 min-w-11 touch-manipulation">
           <ChevronLeft size={28} />
         </button>
         <div className="flex gap-4">
-          <button className="p-1"><Share2 size={24} /></button>
+          <button className="p-2 min-h-11 min-w-11 touch-manipulation"><Share2 size={24} /></button>
         </div>
       </header>
 
@@ -88,7 +88,7 @@ export default function AudioDetail() {
               {v.thumbnailUrl && (
                 <img src={v.thumbnailUrl} alt="" className="w-full h-full object-cover" />
               )}
-              <div className="absolute bottom-1 left-1 flex items-center gap-1 text-[10px] font-bold">
+              <div className="absolute bottom-1 left-1 flex items-center gap-2 min-h-11 min-w-11 touch-manipulation text-[10px] font-bold">
                 <Play size={10} fill="white" />
                 {v.views || 0}
               </div>
