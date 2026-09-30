@@ -38,7 +38,6 @@
       "@shared/*": [
         "./shared/*"
       ]
-    },
-    "target": "ES2022"
+    }
   }
 }
