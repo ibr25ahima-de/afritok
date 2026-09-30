@@ -53,11 +53,11 @@ export default function MyVideos() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       <header className="border-b border-purple-800/30 bg-slate-900/50 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <button onClick={() => navigate(`/profile/${user?.id}`)} className="text-purple-400 hover:text-purple-300">
+            <button onClick={() => navigate(`/profile/${user?.id}`)} className="min-h-11 min-w-11 flex items-center justify-center text-purple-400 hover:text-purple-300 touch-manipulation">
               <ArrowLeft className="w-6 h-6" />
             </button>
             <div className="flex items-center gap-2">
