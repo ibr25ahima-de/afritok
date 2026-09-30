@@ -24,7 +24,7 @@ export default function AdminMusic() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-6">
+    <div className="min-h-[100dvh] bg-slate-950 text-white p-6">
       <div className="max-w-2xl mx-auto space-y-6">
         <Link href="/settings">
           <a className="inline-flex items-center text-gray-400 hover:text-white transition-colors mb-4">
