@@ -23,7 +23,7 @@ export default function AfritokPremium() {
   const [paymentOpen, setPaymentOpen] = useState(false);
   const selected = plans.find((plan) => plan.id === selectedPlan) ?? plans[1];
   return (
-    <div className="min-h-screen bg-black text-white pb-10">
+    <div className="min-h-[100dvh] bg-black text-white pb-10">
       <header className="sticky top-0 z-40 bg-black/90 backdrop-blur border-b border-gray-800 px-4 py-4 flex items-center gap-3"><button type="button" onClick={() => navigate("/profile")} aria-label="Retour au profil"><ArrowLeft size={24} /></button><div className="flex items-center gap-2"><Crown size={22} className="text-amber-400" /><h1 className="text-xl font-bold">AfriTok Premium</h1></div></header>
       <main className="max-w-lg mx-auto px-4 py-6 space-y-6">
         <section className="rounded-2xl border border-amber-400/30 bg-gradient-to-br from-amber-500/20 via-black to-orange-500/10 p-6 text-center"><Crown size={46} className="mx-auto text-amber-400 mb-3" /><h2 className="text-2xl font-black">Pourquoi passer à AfriTok Premium ?</h2><p className="text-gray-300 mt-3 leading-relaxed">Avec Premium, vous profitez de fonctionnalités supplémentaires réservées aux abonnés Premium.</p><p className="text-amber-200 text-sm font-semibold mt-3">Votre abonnement ne garantit ni vues, ni likes, ni abonnés.</p></section>
