@@ -46,10 +46,12 @@ export const VideoCamera: React.FC<VideoCameraProps> = ({
   useEffect(() => {
     const initCamera = async () => {
       try {
-        const constraints = {
+        const requested = resolutionSettings[resolution];
+        const constraints: MediaStreamConstraints = {
           video: {
             facingMode,
-            ...resolutionSettings[resolution],
+            width: { ideal: requested.width },
+            height: { ideal: requested.height },
           },
           audio: true,
         };
@@ -101,9 +103,20 @@ export const VideoCamera: React.FC<VideoCameraProps> = ({
     const stream = videoRef.current.srcObject as MediaStream;
 
     try {
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'video/webm;codecs=vp9',
-      });
+      const supportedMimeTypes = [
+        'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+        'video/mp4',
+        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp8,opus',
+        'video/webm',
+      ];
+      const mimeType = supportedMimeTypes.find((type) =>
+        typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type)
+      );
+
+      const mediaRecorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -112,7 +125,8 @@ export const VideoCamera: React.FC<VideoCameraProps> = ({
       };
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+        const type = mediaRecorder.mimeType || mimeType || 'video/webm';
+        const blob = new Blob(chunksRef.current, { type });
         onVideoCapture?.(blob, recordingTime);
       };
 
