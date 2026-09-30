@@ -49,7 +49,7 @@ export default function QRCodePage() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white pb-20">
+    <div className="min-h-[100dvh] bg-black text-white pb-20">
       {/* HEADER */}
       <header className="sticky top-0 z-40 bg-black/80 backdrop-blur border-b border-gray-800 px-4 py-3 flex items-center gap-3">
         <button
