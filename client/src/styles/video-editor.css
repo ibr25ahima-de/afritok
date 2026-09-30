@@ -6,11 +6,10 @@
   height: 100vh;
   height: 100dvh;
   min-height: 100dvh;
-  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
   background: #1a1a1a;
   color: #fff;
   gap: 1rem;
-  padding: 1rem;
+  padding: 1rem 1rem max(1rem, env(safe-area-inset-bottom, 0px));
   overflow: hidden;
 }
 
