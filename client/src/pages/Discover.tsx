@@ -21,7 +21,7 @@ export default function Discover() {
   });
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-[100dvh] bg-black text-white">
       <div className="p-4 border-b border-gray-800">
         <h1 className="text-2xl font-bold mb-4">Découvrir</h1>
 
