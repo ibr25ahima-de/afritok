@@ -13,7 +13,7 @@ export default function Wallet() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-[100dvh] flex items-center justify-center">
         <p>Chargement du portefeuille...</p>
       </div>
     );
@@ -22,7 +22,7 @@ export default function Wallet() {
   const balance = wallet?.balance ?? 0;
 
   return (
-    <div className="min-h-screen bg-background px-4 py-6">
+    <div className="min-h-[100dvh] bg-background px-4 py-6">
       <div className="max-w-lg mx-auto space-y-6">
 
         <div>
