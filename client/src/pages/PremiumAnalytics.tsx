@@ -7,7 +7,7 @@ const n = (value: unknown) => Number(value || 0).toLocaleString("fr-FR");
 export default function PremiumAnalytics() {
   const [, navigate] = useLocation();
   const { data, isLoading, error } = trpc.subscription.analytics.useQuery({ days: 30 });
-  return <div className="min-h-screen bg-black text-white pb-10">
+  return <div className="min-h-[100dvh] bg-black text-white pb-10">
     <header className="sticky top-0 z-40 bg-black/90 backdrop-blur border-b border-gray-800 px-4 py-4 flex items-center gap-3"><button onClick={() => navigate("/premium")} aria-label="Retour"><ArrowLeft size={24}/></button><BarChart3 className="text-amber-400"/><h1 className="text-xl font-black">Analytics Premium</h1></header>
     <main className="max-w-lg mx-auto px-4 py-6 space-y-5">
       {isLoading && <div className="rounded-xl bg-gray-900 p-6 text-center text-gray-400">Chargement de vos statistiques…</div>}
