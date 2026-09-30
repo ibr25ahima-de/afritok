@@ -136,12 +136,23 @@ html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+}
+
+:root {
+  --afritok-safe-top: env(safe-area-inset-top, 0px);
+  --afritok-safe-right: env(safe-area-inset-right, 0px);
+  --afritok-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --afritok-safe-left: env(safe-area-inset-left, 0px);
 }
 
 body,
 #root {
   width: 100%;
   min-height: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 body {
