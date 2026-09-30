@@ -86,7 +86,7 @@ export default function InstantWithdraw() {
   // Step 3: Success screen
   if (step === 3 && withdrawalResult?.success) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 p-4 flex items-center justify-center">
+      <div className="min-h-[100dvh] bg-gradient-to-br from-green-50 to-blue-50 p-4 flex items-center justify-center">
         <Card className="w-full max-w-md p-8 text-center">
           <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-green-600 mb-2">✅ Success!</h1>
@@ -110,7 +110,7 @@ export default function InstantWithdraw() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-4">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-blue-50 to-indigo-50 p-4">
       <div className="max-w-md mx-auto">
         {/* Header */}
         <div className="text-center mb-8 mt-8">
