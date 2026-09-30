@@ -38,15 +38,15 @@ if (majors.size !== 1 || !majors.has(8)) {
   );
 }
 
-if (allDeps["@capacitor/cli"] && !/^\\^?8\./.test(String(allDeps["@capacitor/cli"]))) {
+if (allDeps["@capacitor/cli"] && !/^\^?8\./.test(String(allDeps["@capacitor/cli"]))) {
   throw new Error(`@capacitor/cli must remain on major 8: ${allDeps["@capacitor/cli"]}`);
 }
 
 const configText = fs.readFileSync("capacitor.config.ts", "utf8");
-if (!/appId\\s*:\\s*["'][^"']+["']/.test(configText)) {
+if (!/appId\s*:\s*["'][^"']+["']/.test(configText)) {
   throw new Error("capacitor.config.ts is missing appId.");
 }
-if (!/webDir\\s*:\\s*["']dist\/public["']/.test(configText)) {
+if (!/webDir\s*:\s*["']dist\/public["']/.test(configText)) {
   throw new Error('capacitor.config.ts must keep webDir aligned with the Vite build output: dist/public');
 }
 
