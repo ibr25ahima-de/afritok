@@ -28,14 +28,14 @@ export default function Search() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       {/* Header */}
       <header className="border-b border-purple-800/30 bg-slate-900/50 backdrop-blur-md sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center gap-4 mb-4">
             <button
               onClick={() => navigate("/feed")}
-              className="text-purple-400 hover:text-purple-300"
+              className="min-h-11 min-w-11 flex items-center justify-center text-purple-400 hover:text-purple-300 touch-manipulation"
             >
               <ArrowLeft className="w-6 h-6" />
             </button>
