@@ -73,7 +73,7 @@ if (result.isNewUser) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-900 p-4">
+    <div className="min-h-[100dvh] flex items-center justify-center bg-slate-900 p-4">
       <Card className="w-full max-w-sm p-6 space-y-4">
         <div className="text-center space-y-2">
           {APP_LOGO && (
