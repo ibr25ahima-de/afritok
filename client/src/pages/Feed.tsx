@@ -138,7 +138,7 @@ export default function Feed() {
     } catch { await interactionsQuery.refetch(); }
   };
 
-  if (trpcLoading && videos.length === 0) return <div className="h-screen bg-black flex items-center justify-center"><Loader2 className="animate-spin text-amber-400" size={40} /></div>;
+  if (trpcLoading && videos.length === 0) return <div className="h-[100dvh] min-h-[100dvh] bg-black flex items-center justify-center"><Loader2 className="animate-spin text-amber-400" size={40} /></div>;
 
   return (
     <div className="bg-black text-white h-[100dvh] min-h-screen overflow-hidden flex flex-col relative">
@@ -147,12 +147,12 @@ export default function Feed() {
         <div className="flex items-center gap-4 pointer-events-auto"><button className="p-2 bg-black/20 rounded-full backdrop-blur-sm"><SearchIcon size={22} /></button><button className="p-2 bg-black/20 rounded-full backdrop-blur-sm"><BellIcon size={22} /></button></div>
       </header>
       <div ref={containerRef} onScroll={handleScroll} className="flex-1 min-h-0 overflow-y-auto snap-y snap-mandatory scrollbar-hide" style={{ scrollbarWidth: "none", msOverflowStyle: "none", touchAction: "pan-y", WebkitOverflowScrolling: "touch" }}>
-        {trpcError && videos.length === 0 && <div className="h-full min-h-screen flex items-center justify-center px-8 text-center"><div><p className="text-amber-400 font-bold text-lg">Impossible de charger les vidéos</p><p className="text-gray-400 text-sm mt-2">Le fil principal n’a pas reçu les vidéos. Réessaie dans quelques secondes.</p></div></div>}
+        {trpcError && videos.length === 0 && <div className="h-full min-h-[100dvh] flex items-center justify-center px-8 text-center"><div><p className="text-amber-400 font-bold text-lg">Impossible de charger les vidéos</p><p className="text-gray-400 text-sm mt-2">Le fil principal n’a pas reçu les vidéos. Réessaie dans quelques secondes.</p></div></div>}
         {!trpcError && !trpcLoading && videos.length === 0 && <div className="h-full min-h-screen flex items-center justify-center px-8 text-center"><div><p className="text-white font-bold text-lg">Aucune vidéo dans le fil</p><p className="text-gray-400 text-sm mt-2">Les vidéos publiques apparaîtront ici.</p></div></div>}
         {videos.map((video, i) => {
           const isVisible = Math.abs(i - currentVideoIndex) <= 2;
           const counter = videoCounters[video.id] || { likes: video.likes || 0, comments: video.comments || 0, shares: video.shares || 0, favorites: video.favorites || 0 };
-          return <div key={video.id} data-index={i} className="video-item h-screen w-full relative snap-start bg-black flex-shrink-0">
+          return <div key={video.id} data-index={i} className="video-item h-[100dvh] min-h-[100dvh] w-full relative snap-start bg-black flex-shrink-0">
             {video.thumbnailUrl && <img src={video.thumbnailUrl} alt="" className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${loadedVideos.has(video.id) ? "opacity-0" : "opacity-100"}`} />}
             {isVisible && <video ref={el => { videoRefs.current[video.id] = el; }} src={video.videoUrl} className="w-full h-full object-cover" style={{ touchAction: "pan-y" }} loop playsInline muted={muted} autoPlay={i === currentVideoIndex} onPlaying={() => setLoadedVideos(prev => new Set(prev).add(video.id))} onLoadedData={e => { if (i === currentVideoIndex) e.currentTarget.play().catch(() => {}); }} />}
             <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60 pointer-events-none" />
