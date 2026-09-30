@@ -58,7 +58,7 @@ export default function EditProfile() {
   const selectedTheme = PREMIUM_THEMES.find((item) => item.id === theme) || PREMIUM_THEMES[0];
 
   return (
-    <div className={`min-h-screen bg-gradient-to-br ${premium?.isPremium ? selectedTheme.className : "from-slate-900 via-purple-900 to-slate-900"}`}>
+    <div className={`min-h-[100dvh] bg-gradient-to-br ${premium?.isPremium ? selectedTheme.className : "from-slate-900 via-purple-900 to-slate-900"}`}>
       <header className="border-b border-purple-800/30 bg-slate-900/50 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
