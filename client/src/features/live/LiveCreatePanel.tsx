@@ -19,7 +19,7 @@ type LiveCreatePanelProps = {
 
 export function LiveCreatePanel({ title, description, capacity, layout, isStarting, error, onTitleChange, onDescriptionChange, onCapacityChange, onLayoutChange, onStart }: LiveCreatePanelProps) {
   return (
-    <main className="min-h-screen bg-gray-950 text-white px-5 py-8 flex items-center justify-center">
+    <main className="min-h-[100dvh] bg-gray-950 text-white px-5 py-8 flex items-center justify-center">
       <div className="w-full max-w-lg rounded-3xl bg-gray-900 border border-white/10 p-6 shadow-2xl">
         <div className="flex items-center gap-3 mb-6"><div className="w-12 h-12 rounded-2xl bg-red-500/15 text-red-400 flex items-center justify-center"><Radio /></div><div><h1 className="text-2xl font-bold">Passer en Live</h1><p className="text-sm text-gray-400">Choisis le thème, la présentation et le nombre de personnes sur scène.</p></div></div>
         <label className="block text-sm font-semibold mb-2">Thème du Live</label>
