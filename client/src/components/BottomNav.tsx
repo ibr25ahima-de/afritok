@@ -32,7 +32,7 @@ export default function BottomNav() {
 
   return (
     <>
-      <div className="fixed bottom-0 left-0 right-0 z-50 flex min-h-16 items-center justify-around border-t border-gray-800 bg-black px-1 pb-[max(0.5rem,var(--afritok-safe-bottom))] pt-2">
+      <div className="fixed inset-x-0 bottom-0 z-50 flex min-h-16 items-center justify-around border-t border-gray-800 bg-black px-1 pb-[max(0.5rem,var(--afritok-safe-bottom))] pt-2">
         <Item icon={Home} path="/feed" />
         <Item icon={Search} path="/discover" />
 
