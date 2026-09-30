@@ -42,6 +42,21 @@ if (allDeps["@capacitor/cli"] && !/^\^?8\./.test(String(allDeps["@capacitor/cli"
   throw new Error(`@capacitor/cli must remain on major 8: ${allDeps["@capacitor/cli"]}`);
 }
 
+const htmlText = fs.readFileSync("client/index.html", "utf8");
+if (!htmlText.includes("width=device-width")) {
+  throw new Error("client/index.html must keep the device-width viewport.");
+}
+if (!htmlText.includes("interactive-widget=resizes-content")) {
+  throw new Error("client/index.html must keep interactive-widget resizing for mobile keyboards.");
+}
+
+const cssText = fs.readFileSync("client/src/index.css", "utf8");
+for (const requiredRule of ["-webkit-text-size-adjust: 100%", "text-size-adjust: 100%", "#root"]) {
+  if (!cssText.includes(requiredRule)) {
+    throw new Error(`client/src/index.css is missing mobile normalization rule: ${requiredRule}`);
+  }
+}
+
 const configText = fs.readFileSync("capacitor.config.ts", "utf8");
 if (!/appId\s*:\s*["'][^"']+["']/.test(configText)) {
   throw new Error("capacitor.config.ts is missing appId.");
