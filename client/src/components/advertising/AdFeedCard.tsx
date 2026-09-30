@@ -32,7 +32,7 @@ export default function AdFeedCard() {
   };
 
   return (
-    <article className="relative h-screen w-full flex-shrink-0 snap-start bg-black text-white">
+    <article className="relative h-[100dvh] w-full flex-shrink-0 snap-start bg-black text-white">
       <div className="absolute inset-0 flex items-center justify-center p-5">
         <div className="w-full max-w-xl overflow-hidden rounded-3xl border border-amber-400/30 bg-zinc-950 shadow-2xl">
           <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
