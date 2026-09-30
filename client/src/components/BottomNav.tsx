@@ -9,7 +9,7 @@ export default function BottomNav() {
   const Item = ({ icon: Icon, path }: any) => (
     <button
       onClick={() => navigate(path)}
-      className={`flex flex-col items-center text-xs ${
+      className={`flex min-h-11 min-w-11 flex-col items-center justify-center text-xs touch-manipulation ${
         location === path ? "text-white" : "text-gray-400"
       }`}
     >
@@ -32,14 +32,14 @@ export default function BottomNav() {
 
   return (
     <>
-      <div className="fixed bottom-0 left-0 right-0 bg-black border-t border-gray-800 flex justify-around py-2 z-50">
+      <div className="fixed bottom-0 left-0 right-0 z-50 flex min-h-16 items-center justify-around border-t border-gray-800 bg-black px-1 pb-[max(0.5rem,var(--afritok-safe-bottom))] pt-2">
         <Item icon={Home} path="/feed" />
         <Item icon={Search} path="/discover" />
 
         {/* center upload */}
         <button
           onClick={handleUploadClick}
-          className="bg-white text-black px-3 rounded-md"
+          className="flex min-h-11 min-w-11 items-center justify-center rounded-md bg-white px-3 text-black touch-manipulation"
         >
           <PlusSquare size={28} />
         </button>
