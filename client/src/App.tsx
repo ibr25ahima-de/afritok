@@ -73,7 +73,7 @@ function GlobalAdvertisingButton() {
     const height = 48;
     return {
       x: Math.max(margin, Math.min(window.innerWidth - width - margin, x)),
-      y: Math.max(margin, Math.min(window.innerHeight - height - margin, y)),
+      y: Math.max(margin, Math.min(window.innerHeight - height - margin - 8, y)),
     };
   }, []);
 
@@ -132,7 +132,7 @@ function GlobalAdvertisingButton() {
     </div>
   );
 }
-function GlobalPremiumButton() { const [location] = useLocation(); if (!location.startsWith("/profile") || location.startsWith("/admin")) return null; return <div className="fixed bottom-24 left-4 z-[90]"><PremiumButton /></div>; }
+function GlobalPremiumButton() { const [location] = useLocation(); if (!location.startsWith("/profile") || location.startsWith("/admin")) return null; return <div className="fixed left-4 z-[90] bottom-[calc(6rem+var(--afritok-safe-bottom))]"><PremiumButton /></div>; }
 function GlobalAdvertisingDisplay() { const [location] = useLocation(); if (location === "/advertising" || location.startsWith("/admin")) return null; return <GlobalAdSlot />; }
 function GlobalLiveStrip() { const [location] = useLocation(); if (location !== "/feed") return null; return <ActiveLiveStrip />; }
 function App() { return <ErrorBoundary><ThemeProvider defaultTheme="dark"><NotificationProvider><TooltipProvider><Toaster /><VideoPlaybackPolicy /><Router /><GlobalLiveStrip /><ProfileMessageLauncher /><LiveHostControls /><GlobalAdvertisingButton /><GlobalPremiumButton /><GlobalAdvertisingDisplay /></TooltipProvider></NotificationProvider></ThemeProvider></ErrorBoundary>; }
