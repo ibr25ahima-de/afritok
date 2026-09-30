@@ -35,7 +35,10 @@ jobs:
           run_install: false
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Check mobile dependency consistency
+        run: node scripts/verify-mobile-config.mjs
 
       - name: Type check
         run: pnpm check
