@@ -18,7 +18,7 @@ export default function ProfileMessageLauncher() {
     <button
       type="button"
       onClick={() => navigate(`/inbox?userId=${userId}`)}
-      className="fixed top-3 right-14 z-[85] flex h-10 items-center gap-2 rounded-full bg-red-500 px-4 font-semibold text-white shadow-lg transition hover:bg-red-600 active:scale-95"
+      className="fixed top-[calc(0.75rem+var(--afritok-safe-top))] right-[calc(0.75rem+var(--afritok-safe-right))] z-[85] flex min-h-11 items-center gap-2 rounded-full bg-red-500 px-4 font-semibold text-white shadow-lg transition hover:bg-red-600 active:scale-95 touch-manipulation"
       aria-label={`Envoyer un message à ${profile.name || "cet utilisateur"}`}
     >
       <MessageCircle size={20} />
