@@ -18,7 +18,7 @@ export function ActiveLiveStrip() {
             key={session.sessionId}
             type="button"
             onClick={() => navigate(`/live/${session.sessionId}`)}
-            className="shrink-0 flex items-center gap-2 rounded-full border border-red-400/50 bg-black/75 px-2.5 py-1.5 text-white shadow-lg backdrop-blur-md"
+            className="shrink-0 min-h-11 flex items-center gap-2 rounded-full border border-red-400/50 bg-black/75 px-3 py-1.5 text-white shadow-lg backdrop-blur-md touch-manipulation"
           >
             <span className="flex h-7 w-7 items-center justify-center rounded-full bg-red-500 text-[10px] font-black">
               {(session.hostUsername || "U").slice(0, 1).toUpperCase()}
