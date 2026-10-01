@@ -34,7 +34,7 @@ export default function GlobalAdSlot() {
   };
 
   return (
-    <div className="fixed bottom-20 left-3 right-3 z-[80] mx-auto max-w-lg">
+    <div className="fixed bottom-[calc(5rem+var(--afritok-safe-bottom))] left-3 right-3 z-[80] mx-auto max-w-lg">
       <div className="overflow-hidden rounded-2xl border border-amber-400/40 bg-black/95 shadow-2xl backdrop-blur-md">
         <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
           <Megaphone size={15} className="text-amber-400" />
