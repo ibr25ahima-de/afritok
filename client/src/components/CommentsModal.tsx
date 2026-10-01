@@ -66,7 +66,7 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
 
   return (
     <div className="fixed inset-0 bg-black/80 z-50 flex items-end">
-      <div className="bg-slate-900 w-full h-[70vh] flex flex-col rounded-t-lg shadow-2xl">
+      <div className="bg-slate-900 w-full h-[70dvh] max-h-[70dvh] flex flex-col rounded-t-lg shadow-2xl pb-[env(safe-area-inset-bottom,0px)]">
 
         {/* Header */}
         <div className="border-b border-purple-800/30 p-4 flex items-center justify-between">
