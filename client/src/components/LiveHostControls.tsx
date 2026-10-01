@@ -42,7 +42,7 @@ export default function LiveHostControls() {
 
   return (
     <>
-      <button onClick={() => setOpen(true)} className="fixed right-4 top-20 z-[80] w-11 h-11 rounded-full bg-black/65 border border-white/20 flex items-center justify-center" aria-label="Contrôler le Live">
+      <button onClick={() => setOpen(true)} className="fixed right-[calc(1rem+var(--afritok-safe-right))] top-[calc(5rem+var(--afritok-safe-top))] z-[80] min-h-11 min-w-11 rounded-full bg-black/65 border border-white/20 flex items-center justify-center touch-manipulation" aria-label="Contrôler le Live">
         <Settings2 size={20} />
       </button>
       {open && (
