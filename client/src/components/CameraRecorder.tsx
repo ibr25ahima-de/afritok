@@ -583,7 +583,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
 
 
       {filtersOpen && (
-        <div className="fixed inset-x-0 bottom-0 z-[70] bg-black/92 backdrop-blur-sm p-4 pb-8 max-h-[55vh] overflow-y-auto">
+        <div className="fixed inset-x-0 bottom-0 z-[70] bg-black/92 backdrop-blur-sm p-4 pb-[max(2rem,env(safe-area-inset-bottom,0px))] max-h-[55dvh] overflow-y-auto">
           <div className="flex justify-between items-center mb-3">
             <h3 className="text-white text-sm font-bold">Filtre de couleur</h3>
             <button onClick={() => setFiltersOpen(false)} className="text-white/80"><X size={18} /></button>
