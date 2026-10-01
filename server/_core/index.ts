@@ -131,7 +131,7 @@ async function startServer() {
       }
       const extension = mimeType === "video/quicktime" ? "mov" : mimeType.split("/")[1];
       const fileName = `${randomUUID()}.${extension}`;
-      const videoUrl = await uploadVideoToSupabase(req.file.buffer, fileName, user.id);
+      const videoUrl = await uploadVideoToSupabase(req.file.buffer, fileName, user.id, mimeType);
       return res.json({ videoUrl });
     } catch (error) {
       console.error("[Upload] Error:", error);
