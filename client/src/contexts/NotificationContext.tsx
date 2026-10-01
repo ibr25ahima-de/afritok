@@ -227,8 +227,8 @@ const NotificationContainer: React.FC<{
   onRemove: (id: string) => void;
 }> = ({ notifications, onRemove }) => {
   return (
-    <div className="fixed bottom-0 right-0 z-50 pointer-events-none">
-      <div className="flex flex-col gap-3 p-4 pointer-events-auto">
+    <div className="fixed inset-x-0 bottom-0 z-50 pointer-events-none">
+      <div className="flex flex-col items-end gap-3 p-4 pb-[max(1rem,var(--afritok-safe-bottom))] pointer-events-auto">
         {notifications.map((notification) => (
           <TikTokToast
             key={notification.id}
