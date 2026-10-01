@@ -77,7 +77,7 @@ export default function Publish() {
     xhr.open("POST", "/api/upload-video", true);
     xhr.withCredentials = true;
     xhr.upload.onprogress = event => {
-      if (event.lengthComputable) setUploadProgress(Math.min(75, 50 + Math.round((event.loaded / event.total) * 25)));
+      if (event.lengthComputable) setUploadProgress(Math.min(75, 10 + Math.round((event.loaded / event.total) * 65)));
     };
     xhr.onload = () => {
       try {
@@ -89,7 +89,15 @@ export default function Publish() {
     xhr.onerror = () => reject(new Error("Connexion impossible pendant l'envoi de la vidéo"));
     xhr.onabort = () => reject(new Error("Envoi de la vidéo interrompu"));
     const form = new FormData();
-    form.append("file", videoFile, videoFile.name || "video.webm");
+    const extensionByType: Record<string, string> = {
+      "video/quicktime": ".mov",
+      "video/mp4": ".mp4",
+      "video/webm": ".webm",
+      "video/x-m4v": ".m4v",
+    };
+    const fallbackExtension = extensionByType[videoFile.type.toLowerCase()] || ".mp4";
+    const fileName = videoFile.name?.trim() || `video${fallbackExtension}`;
+    form.append("file", videoFile, fileName);
     xhr.send(form);
   });
 
@@ -99,10 +107,15 @@ export default function Publish() {
     if (!title.trim()) return alert("Veuillez ajouter un titre");
     setLoading(true); setUploadProgress(0);
     try {
-      let thumbnailDataUrl: string | null = null;
-      if (file.type.startsWith("video/")) { setUploadProgress(10); thumbnailDataUrl = await extractThumbnail(file); }
-      setUploadProgress(50);
+      setUploadProgress(10);
+      const thumbPromise = file.type.startsWith("video/")
+        ? Promise.race([
+            extractThumbnail(file),
+            new Promise<null>(resolve => window.setTimeout(() => resolve(null), 2000)),
+          ])
+        : Promise.resolve(null);
       const videoUrl = await uploadVideoDirect(file);
+      const thumbnailDataUrl = await thumbPromise;
       setUploadProgress(80);
       let thumbnailUrl: string | null = null;
       if (thumbnailDataUrl) {
