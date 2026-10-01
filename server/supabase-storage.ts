@@ -16,7 +16,8 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 export async function uploadVideoToSupabase(
   fileBuffer: Buffer,
   fileName: string,
-  userId: number
+  userId: number,
+  contentType = "video/mp4"
 ): Promise<string> {
   try {
     // Generate unique file path
@@ -28,7 +29,7 @@ export async function uploadVideoToSupabase(
     const { data, error } = await supabase.storage
       .from("videos")
       .upload(filePath, fileBuffer, {
-        contentType: "video/mp4",
+        contentType,
         upsert: false,
       });
 
