@@ -98,7 +98,7 @@ export default function AudioDetail() {
       </div>
 
       {/* BOUTON "UTILISER CE SON" */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+      <div className="fixed bottom-[calc(1.5rem+var(--afritok-safe-bottom))] left-3 right-3 z-50 flex justify-center">
         <button 
           onClick={() => navigate("/upload")}
           className="bg-amber-500 text-black px-8 py-3 rounded-full font-black flex items-center gap-3 shadow-[0_0_30px_rgba(245,158,11,0.4)] hover:scale-105 transition-transform active:scale-95"
