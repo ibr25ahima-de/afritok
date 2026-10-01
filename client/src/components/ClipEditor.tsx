@@ -263,7 +263,7 @@ export function ClipEditor({ src, duration, trimStart, trimEnd, cuts, onTrimChan
     }
   };
 
-  return <div className="fixed inset-0 z-[80] bg-black text-white flex flex-col">
+  return <div className="fixed inset-0 z-[80] bg-black text-white flex flex-col pb-[env(safe-area-inset-bottom,0px)]">
     <header className="h-14 shrink-0 flex items-center justify-between px-3 border-b border-white/10">
       <button type="button" onClick={onClose} className="h-10 w-10 flex items-center justify-center rounded-full" aria-label="Retour"><ArrowLeft size={25} /></button>
       <div className="text-sm font-semibold">Modifier</div>
