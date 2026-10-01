@@ -24,10 +24,52 @@ export default function Publish() {
   const { data: premiumStatus } = trpc.subscription.status.useQuery(undefined, { staleTime: 60_000 });
 
   const extractThumbnail = (videoFile: File): Promise<string | null> => new Promise((resolve) => {
-    const video = document.createElement("video"); video.preload = "metadata"; video.muted = true; video.playsInline = true; video.src = URL.createObjectURL(videoFile);
-    video.onloadeddata = () => { video.currentTime = Math.min(1, video.duration * 0.1); };
-    video.onseeked = () => { const canvas = document.createElement("canvas"); canvas.width = video.videoWidth || 360; canvas.height = video.videoHeight || 640; const ctx = canvas.getContext("2d"); if (ctx) { ctx.drawImage(video, 0, 0, canvas.width, canvas.height); resolve(canvas.toDataURL("image/jpeg", 0.7)); } else resolve(null); URL.revokeObjectURL(video.src); };
-    video.onerror = () => { resolve(null); URL.revokeObjectURL(video.src); };
+    const video = document.createElement("video");
+    const objectUrl = URL.createObjectURL(videoFile);
+    let settled = false;
+    const finish = (result: string | null) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      video.onloadedmetadata = null;
+      video.onloadeddata = null;
+      video.onseeked = null;
+      video.onerror = null;
+      video.removeAttribute("src");
+      video.load();
+      URL.revokeObjectURL(objectUrl);
+      resolve(result);
+    };
+    const timeoutId = window.setTimeout(() => finish(null), 5000);
+
+    video.preload = "metadata";
+    video.muted = true;
+    video.playsInline = true;
+    video.onloadedmetadata = () => {
+      if (!Number.isFinite(video.duration) || video.duration <= 0) return finish(null);
+      video.currentTime = Math.min(1, Math.max(0, video.duration * 0.1));
+    };
+    video.onloadeddata = () => {
+      if (video.readyState >= 2) {
+        video.currentTime = Math.min(1, Math.max(0, (video.duration || 1) * 0.1));
+      }
+    };
+    video.onseeked = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth || 360;
+      canvas.height = video.videoHeight || 640;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return finish(null);
+      try {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        finish(canvas.toDataURL("image/jpeg", 0.7));
+      } catch {
+        finish(null);
+      }
+    };
+    video.onerror = () => finish(null);
+    video.src = objectUrl;
+    video.load();
   });
 
   const uploadVideoDirect = (videoFile: File): Promise<string> => new Promise((resolve, reject) => {
