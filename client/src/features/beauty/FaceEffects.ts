@@ -1,6 +1,7 @@
 import type { NormalizedLandmark } from "@mediapipe/tasks-vision";
 import type { AREffect } from "@/features/ar/ARRegistry";
 import { LM, getFaceGeometry, getPoints } from "@/components/faceUtils";
+import { blurInto } from "./canvasBlur";
 
 type Point = { x: number; y: number };
 
@@ -51,6 +52,18 @@ function line(ctx: CanvasRenderingContext2D, p: Point[], stroke: string, width: 
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   ctx.stroke();
+}
+
+function blush(ctx: CanvasRenderingContext2D, c: Point, rx: number, ry: number, rgb: string, alpha: number) {
+  ctx.save();
+  ctx.translate(c.x, c.y);
+  ctx.scale(1, ry / rx);
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rx * 1.3);
+  g.addColorStop(0, `rgba(${rgb},${alpha})`);
+  g.addColorStop(1, `rgba(${rgb},0)`);
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(0, 0, rx * 1.3, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
 }
 
 function glow(ctx: CanvasRenderingContext2D, draw: () => void, blur: number, color = "rgba(255,255,255,.8)") {
@@ -123,12 +136,7 @@ function drawBunny(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: nu
     { x: f.cx - f.width * .255, y: f.cy + f.height * .11 },
     { x: f.cx + f.width * .255, y: f.cy + f.height * .11 },
   ];
-  cheeks.forEach(c => {
-    ctx.save();
-    ctx.filter = `blur(${Math.max(5, f.width * .035)}px)`;
-    ellipse(ctx, c, f.width * .105, f.height * .058, "rgba(255,80,145,.32)");
-    ctx.restore();
-  });
+  cheeks.forEach(c => blush(ctx, c, f.width * .105, f.height * .058, "255,80,145", .32));
 }
 
 function drawGlasses(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: number, h: number, style: "dark" | "heart") {
@@ -249,8 +257,7 @@ function featheredFill(
     const soft = document.createElement("canvas");
     soft.width = w; soft.height = h;
     const s = soft.getContext("2d")!;
-    s.filter = `blur(${feather}px)`;
-    s.drawImage(mask, 0, 0);
+    blurInto(s, mask, feather, w, h);
     const layer = document.createElement("canvas");
     layer.width = w; layer.height = h;
     const lctx = layer.getContext("2d")!;
@@ -303,10 +310,7 @@ function drawMakeup(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: n
   const cheekY = f.cy + f.height * .11;
   [-1, 1].forEach(side => {
     const c = { x: f.cx + side * f.width * .255, y: cheekY };
-    ctx.save();
-    ctx.filter = `blur(${Math.max(5, f.width * .035)}px)`;
-    ellipse(ctx, c, f.width * .12, f.height * .065, `rgba(255,48,119,${strong ? .30 : .20})`);
-    ctx.restore();
+    blush(ctx, c, f.width * .12, f.height * .065, "255,48,119", strong ? .30 : .20);
   });
 
   const lips = points(l, LM.outerLips, w, h);
