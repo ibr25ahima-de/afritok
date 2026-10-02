@@ -5,6 +5,7 @@ import AREngineMobile from "./AREngineMobile";
 import EffectsPanel, { AR_EFFECTS, type AREffect } from "./EffectsPanel";
 import { FILTERS, type Filter } from "./FilterLibrary";
 import { LiveEntryButton } from "@/features/live/LiveEntryButton";
+import { SUPPORTS_CTX_FILTER } from "@/features/beauty/canvasBlur";
 
 interface CameraRecorderProps {
   onVideoRecorded?: (blob: Blob, duration: number) => void;
@@ -505,7 +506,8 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       <div className="absolute top-24 left-1/2 -translate-x-1/2 z-50 rounded bg-black/80 px-3 py-1 text-[10px] font-mono text-lime-300 text-center leading-tight">
         AR: {arStatus}<br/>
         mode: {durationMode} | rec: {recording ? "OUI" : "non"}<br/>
-        arCanvas: {arCanvasRef.current?.width || 0}×{arCanvasRef.current?.height || 0}
+        arCanvas: {arCanvasRef.current?.width || 0}×{arCanvasRef.current?.height || 0}<br/>
+        filtre: {String(SUPPORTS_CTX_FILTER)}
       </div>
 
       <div className="relative z-30 flex items-center justify-between px-4 pt-3 pb-2">
