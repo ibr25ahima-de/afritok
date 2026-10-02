@@ -33,7 +33,7 @@ function createSkinMask(l: NormalizedLandmark[], w: number, h: number, feather: 
 
   const oval = getPoints(l, LM.faceOval, w, h);
   const geo = getFaceGeometry(l, w, h);
-  const ovalExtended = extendForeheadUp(oval, geo.cx, geo.cy, 0.35);
+  const ovalExtended = extendForeheadUp(oval, geo.cx, geo.cy, 0.55);
   if (oval.length < 3) return null;
 
   const holes = [LM.leftEye, LM.rightEye, LM.outerLips]
@@ -51,9 +51,7 @@ function createSkinMask(l: NormalizedLandmark[], w: number, h: number, feather: 
     softened.height = h;
     const s = softened.getContext("2d");
     if (!s) return mask;
-    s.filter = `blur(${feather.toFixed(1)}px)`;
-    s.drawImage(mask, 0, 0);
-    s.filter = "none";
+    blurInto(s, mask, feather, w, h, "mask");
     return softened;
   }
   return mask;
