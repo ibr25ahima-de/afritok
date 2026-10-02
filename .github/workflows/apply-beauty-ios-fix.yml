@@ -1,0 +1,152 @@
+name: Apply iPhone Beauty Blur Fix
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Apply shared blur fallback and beauty fixes
+        shell: python
+        run: |
+          from pathlib import Path
+
+          root = Path("client/src/features/beauty")
+
+          blur = '''export const SUPPORTS_CTX_FILTER = (() => {
+            try {
+              const c = document.createElement("canvas");
+              c.width = c.height = 2;
+              const x = c.getContext("2d")!;
+              x.filter = "grayscale(1)";
+              x.fillStyle = "#f00";
+              x.fillRect(0, 0, 2, 2);
+              const d = x.getImageData(0, 0, 1, 1).data;
+              return d[0] === d[1];
+            } catch { return false; }
+          })();
+
+          export function blurInto(dst: CanvasRenderingContext2D, src: HTMLCanvasElement, radius: number, w: number, h: number) {
+            if (SUPPORTS_CTX_FILTER) {
+              dst.filter = `blur(${radius.toFixed(1)}px)`;
+              dst.drawImage(src, 0, 0);
+              dst.filter = "none";
+              return;
+            }
+            const k = Math.max(2, radius);
+            const sw = Math.max(1, Math.round(w / k)), sh = Math.max(1, Math.round(h / k));
+            const tmp = document.createElement("canvas");
+            tmp.width = sw; tmp.height = sh;
+            const t = tmp.getContext("2d")!;
+            t.imageSmoothingQuality = "high";
+            t.drawImage(src, 0, 0, sw, sh);
+            dst.imageSmoothingEnabled = true;
+            dst.imageSmoothingQuality = "high";
+            dst.drawImage(tmp, 0, 0, sw, sh, 0, 0, w, h);
+          }
+          '''
+          (root / "canvasBlur.ts").write_text(blur, encoding="utf-8")
+
+          face = root / "FaceEffects.ts"
+          s = face.read_text(encoding="utf-8")
+          s = s.replace(
+              'import { LM, getFaceGeometry, getPoints } from "@/components/faceUtils";\n',
+              'import { LM, getFaceGeometry, getPoints } from "@/components/faceUtils";\nimport { blurInto } from "./canvasBlur";\n'
+          )
+          anchor = 'function glow(ctx: CanvasRenderingContext2D, draw: () => void, blur: number, color = "rgba(255,255,255,.8)") {'
+          blush = '''function blush(ctx: CanvasRenderingContext2D, c: Point, rx: number, ry: number, rgb: string, alpha: number) {
+            ctx.save();
+            ctx.translate(c.x, c.y);
+            ctx.scale(1, ry / rx);
+            const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rx * 1.3);
+            g.addColorStop(0, `rgba(${rgb},${alpha})`);
+            g.addColorStop(1, `rgba(${rgb},0)`);
+            ctx.fillStyle = g;
+            ctx.beginPath(); ctx.arc(0, 0, rx * 1.3, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+          }
+
+          '''
+          if blush not in s:
+              s = s.replace(anchor, blush + anchor, 1)
+          old = '''  cheeks.forEach(c => {
+            ctx.save();
+            ctx.filter = `blur(${Math.max(5, f.width * .035)}px)`;
+            ellipse(ctx, c, f.width * .105, f.height * .058, "rgba(255,80,145,.32)");
+            ctx.restore();
+          });'''
+          new = '''  cheeks.forEach(c => blush(ctx, c, f.width * .105, f.height * .058, "255,80,145", .32));'''
+          if old not in s:
+              raise SystemExit("drawBunny cheeks block not found")
+          s = s.replace(old, new, 1)
+          old = '''  [-1, 1].forEach(side => {
+    const c = { x: f.cx + side * f.width * .255, y: cheekY };
+    ctx.save();
+    ctx.filter = `blur(${Math.max(5, f.width * .035)}px)`;
+    ellipse(ctx, c, f.width * .12, f.height * .065, `rgba(255,48,119,${strong ? .30 : .20})`);
+    ctx.restore();
+  });'''
+          new = '''  [-1, 1].forEach(side => {
+    const c = { x: f.cx + side * f.width * .255, y: cheekY };
+    blush(ctx, c, f.width * .12, f.height * .065, "255,48,119", strong ? .30 : .20);
+  });'''
+          if old not in s:
+              raise SystemExit("drawMakeup cheeks block not found")
+          s = s.replace(old, new, 1)
+          old = '''    const s = soft.getContext("2d")!;
+    s.filter = `blur(${feather}px)`;
+    s.drawImage(mask, 0, 0);'''
+          new = '''    const s = soft.getContext("2d")!;
+    blurInto(s, mask, feather, w, h);'''
+          if old not in s:
+              raise SystemExit("featheredFill blur block not found")
+          s = s.replace(old, new, 1)
+          face.write_text(s, encoding="utf-8")
+
+          pipeline = root / "BeautyPipeline.ts"
+          s = pipeline.read_text(encoding="utf-8")
+          s = s.replace(
+              'import { normalizeBeautyConfig } from "./BeautyConfig";\n',
+              'import { normalizeBeautyConfig } from "./BeautyConfig";\nimport { SUPPORTS_CTX_FILTER, blurInto } from "./canvasBlur";\n'
+          )
+          old = '''      ctx.save();
+      ctx.filter = `blur(${Math.max(5, f.width * .035)}px)`;
+      ellipse(ctx, { x: e.x, y: e.y + f.height * .048 }, f.width * .105, f.height * .035, `rgba(255,205,185,${.035 + c.darkCircles * .08})`);
+      ctx.restore();'''
+          new = '''      const glow = document.createElement("canvas");
+      glow.width = w; glow.height = h;
+      const gctx = glow.getContext("2d");
+      if (gctx) {
+        ellipse(gctx, { x: e.x, y: e.y + f.height * .048 }, f.width * .105, f.height * .035, `rgba(255,205,185,${.035 + c.darkCircles * .08})`);
+        const blurred = document.createElement("canvas");
+        blurred.width = w; blurred.height = h;
+        const bctx = blurred.getContext("2d");
+        if (bctx) {
+          blurInto(bctx, glow, Math.max(5, f.width * .035), w, h);
+          ctx.drawImage(blurred, 0, 0);
+        }
+      }'''
+          if old not in s:
+              raise SystemExit("BeautyPipeline dark circles block not found")
+          s = s.replace(old, new, 1)
+          if 'SUPPORTS_CTX_FILTER' not in s:
+              raise SystemExit("shared blur import was not applied")
+          pipeline.write_text(s, encoding="utf-8")
+
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/features/beauty/canvasBlur.ts client/src/features/beauty/FaceEffects.ts client/src/features/beauty/BeautyPipeline.ts
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "fix: make beauty blur compatible with iPhone Safari"
+          git push origin main
