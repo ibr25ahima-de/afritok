@@ -76,13 +76,19 @@ export function buildPolygonMask(points: Point[], width: number, height: number)
 
 export function smoothLandmarks(current: NormalizedLandmark[], previous: NormalizedLandmark[] | null, alpha = 0.7): NormalizedLandmark[] {
   if (!previous || previous.length !== current.length) return current.map((p) => ({ ...p }));
+
+  // Mouvement du visage entre deux détections (le nez, repère 1, suffit).
+  const move = Math.hypot(current[1].x - previous[1].x, current[1].y - previous[1].y);
+  // Immobile : on garde alpha (stable). En mouvement : on monte jusqu'à 0.95 (réactif).
+  const a = Math.min(0.95, alpha + move * 18);
+
   return current.map((point, index) => {
     const old = previous[index];
     return {
       ...point,
-      x: point.x * alpha + old.x * (1 - alpha),
-      y: point.y * alpha + old.y * (1 - alpha),
-      z: (point.z ?? 0) * alpha + (old.z ?? 0) * (1 - alpha),
+      x: point.x * a + old.x * (1 - a),
+      y: point.y * a + old.y * (1 - a),
+      z: (point.z ?? 0) * a + (old.z ?? 0) * (1 - a),
     };
   });
 }
