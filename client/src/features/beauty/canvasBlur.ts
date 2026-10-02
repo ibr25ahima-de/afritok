@@ -31,17 +31,6 @@ export function blurInto(
     dst.filter = "none";
     return;
   }
-  if (kind === "mask") {
-    const off = w + radius * 6 + 50;
-    dst.save();
-    dst.shadowColor = "#000";
-    dst.shadowBlur = radius * 2;
-    dst.shadowOffsetX = off;
-    dst.shadowOffsetY = 0;
-    dst.drawImage(src, -off, 0);
-    dst.restore();
-    return;
-  }
   const f = Math.max(2, radius);
   const sw = Math.max(2, Math.round(w / f)), sh = Math.max(2, Math.round(h / f));
   let cur = src;
