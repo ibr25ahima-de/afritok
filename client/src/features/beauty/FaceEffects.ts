@@ -257,7 +257,7 @@ function featheredFill(
     const soft = document.createElement("canvas");
     soft.width = w; soft.height = h;
     const s = soft.getContext("2d")!;
-    blurInto(s, mask, feather, w, h);
+    blurInto(s, mask, feather, w, h, "mask");
     const layer = document.createElement("canvas");
     layer.width = w; layer.height = h;
     const lctx = layer.getContext("2d")!;
