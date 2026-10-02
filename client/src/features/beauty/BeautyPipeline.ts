@@ -2,6 +2,7 @@ import type { NormalizedLandmark } from "@mediapipe/tasks-vision";
 import { LM, getFaceGeometry, getPoints } from "@/components/faceUtils";
 import type { BeautyConfig } from "./BeautyConfig";
 import { normalizeBeautyConfig } from "./BeautyConfig";
+import { SUPPORTS_CTX_FILTER, blurInto } from "./canvasBlur";
 
 type Point = { x: number; y: number };
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
@@ -159,10 +160,25 @@ function eyePolish(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: nu
     if (p.length < 3) continue;
     const e = { x: p.reduce((s, q) => s + q.x, 0) / p.length, y: p.reduce((s, q) => s + q.y, 0) / p.length };
     if (c.darkCircles > 0) {
-      ctx.save();
-      ctx.filter = `blur(${Math.max(5, f.width * .035)}px)`;
-      ellipse(ctx, { x: e.x, y: e.y + f.height * .048 }, f.width * .105, f.height * .035, `rgba(255,205,185,${.035 + c.darkCircles * .08})`);
-      ctx.restore();
+      const glow = document.createElement("canvas");
+      glow.width = w; glow.height = h;
+      const gctx = glow.getContext("2d");
+      if (gctx) {
+        ellipse(gctx, { x: e.x, y: e.y + f.height * .048 }, f.width * .105, f.height * .035, `rgba(255,205,185,${.035 + c.darkCircles * .08})`);
+        const blurred = document.createElement("canvas");
+        blurred.width = w; blurred.height = h;
+        const bctx = blurred.getContext("2d");
+        if (bctx) {
+          if (SUPPORTS_CTX_FILTER) {
+            bctx.filter = `blur(${Math.max(5, f.width * .035).toFixed(1)}px)`;
+            bctx.drawImage(glow, 0, 0);
+            bctx.filter = "none";
+          } else {
+            blurInto(bctx, glow, Math.max(5, f.width * .035), w, h);
+          }
+          ctx.drawImage(blurred, 0, 0);
+        }
+      }
     }
     if (c.eyeBrilliance > 0) {
       ctx.save();
