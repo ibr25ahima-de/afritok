@@ -3,6 +3,7 @@ import { LM, getFaceGeometry, getPoints } from "@/components/faceUtils";
 import type { BeautyConfig } from "./BeautyConfig";
 import { normalizeBeautyConfig } from "./BeautyConfig";
 import { SUPPORTS_CTX_FILTER, blurInto } from "./canvasBlur";
+import { pooled } from "./canvasPool";
 
 type Point = { x: number; y: number };
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
@@ -25,9 +26,7 @@ function extendForeheadUp(points: Point[], cx: number, cy: number, factor: numbe
 }
 
 function createSkinMask(l: NormalizedLandmark[], w: number, h: number, feather: number) {
-  const mask = document.createElement("canvas");
-  mask.width = w;
-  mask.height = h;
+  const mask = pooled("mask", w, h);
   const m = mask.getContext("2d");
   if (!m) return null;
 
@@ -46,9 +45,7 @@ function createSkinMask(l: NormalizedLandmark[], w: number, h: number, feather: 
   m.fill("evenodd");
 
   if (feather > 0) {
-    const softened = document.createElement("canvas");
-    softened.width = w;
-    softened.height = h;
+    const softened = pooled("soft", w, h);
     const s = softened.getContext("2d");
     if (!s) return mask;
     blurInto(s, mask, feather, w, h, "mask");
@@ -56,14 +53,14 @@ function createSkinMask(l: NormalizedLandmark[], w: number, h: number, feather: 
   }
   return mask;
 }
+
 function maskedImage(
   source: HTMLCanvasElement,
   mask: HTMLCanvasElement,
   filter: string,
+  key: string,
 ) {
-  const out = document.createElement("canvas");
-  out.width = source.width;
-  out.height = source.height;
+  const out = pooled(key, source.width, source.height);
   const o = out.getContext("2d");
   if (!o) return null;
   o.filter = filter;
@@ -85,15 +82,13 @@ function retouchSkin(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: 
   if (!mask) return;
 
   // Photo de référence non modifiée, utilisée comme calque "net".
-  const original = document.createElement("canvas");
-  original.width = w;
-  original.height = h;
+  const original = pooled("orig", w, h);
   original.getContext("2d")!.drawImage(ctx.canvas, 0, 0);
 
   // Calque lissé (basse fréquence) : enterre les petits défauts locaux
   // (boutons, points noirs) dans le ton de peau environnant.
   const lowBlur = Math.max(6, face.width * (0.02 + amount * 0.05));
-  const low = maskedImage(original, mask, `blur(${lowBlur.toFixed(1)}px)`);
+  const low = maskedImage(original, mask, `blur(${lowBlur.toFixed(1)}px)`, "low");
   if (!low) return;
 
   ctx.save();
@@ -105,7 +100,7 @@ function retouchSkin(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: 
   // reflets/ombres naturels de la peau (évite l'effet "tache floue plate"
   // sur le front) sans faire réapparaître les petits défauts, qui restent
   // noyés sous le calque flouté au-dessus.
-  const sharpSkin = maskedImage(original, mask, "none");
+  const sharpSkin = maskedImage(original, mask, "none", "sharp");
   if (sharpSkin) {
     ctx.save();
     ctx.globalAlpha = Math.max(0.08, 0.22 - amount * 0.12);
@@ -113,6 +108,7 @@ function retouchSkin(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: 
     ctx.restore();
   }
 }
+
 function tone(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: number, h: number, amount: number) {
   amount = clamp01(amount);
   if (amount <= 0) return;
@@ -123,7 +119,7 @@ function tone(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: number,
   // Couche "éclat" : la peau elle-même, rendue plus lumineuse/saturée,
   // fusionnée en mode "screen" pour un effet brillant sans cramer les ombres.
   const glowFilter = `brightness(${(1 + 0.4 * amount).toFixed(3)}) saturate(${(1 + 0.2 * amount).toFixed(3)}) contrast(${(1 + 0.08 * amount).toFixed(3)})`;
-  const glow = maskedImage(ctx.canvas, mask, glowFilter);
+  const glow = maskedImage(ctx.canvas, mask, glowFilter, "glow");
   if (glow) {
     ctx.save();
     ctx.globalCompositeOperation = "screen";
@@ -133,8 +129,7 @@ function tone(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: number,
   }
 
   // Reflet doux façon "lumière naturelle" sur le front/pommettes/nez.
-  const overlay = document.createElement("canvas");
-  overlay.width = w; overlay.height = h;
+  const overlay = pooled("overlay", w, h);
   const o = overlay.getContext("2d")!;
   const g = o.createRadialGradient(face.cx, face.cy - face.height * .18, face.width * .05, face.cx, face.cy, face.width * .75);
   g.addColorStop(0, `rgba(255,250,240,${0.16 * amount})`);
@@ -151,6 +146,7 @@ function tone(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: number,
   ctx.drawImage(overlay, 0, 0);
   ctx.restore();
 }
+
 function eyePolish(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: number, h: number, c: Required<BeautyConfig>) {
   const f = getFaceGeometry(l, w, h), eyes = [LM.leftEye, LM.rightEye];
   for (const ids of eyes) {
@@ -158,13 +154,11 @@ function eyePolish(ctx: CanvasRenderingContext2D, l: NormalizedLandmark[], w: nu
     if (p.length < 3) continue;
     const e = { x: p.reduce((s, q) => s + q.x, 0) / p.length, y: p.reduce((s, q) => s + q.y, 0) / p.length };
     if (c.darkCircles > 0) {
-      const glow = document.createElement("canvas");
-      glow.width = w; glow.height = h;
+      const glow = pooled("eyeGlow", w, h);
       const gctx = glow.getContext("2d");
       if (gctx) {
         ellipse(gctx, { x: e.x, y: e.y + f.height * .048 }, f.width * .105, f.height * .035, `rgba(255,205,185,${.035 + c.darkCircles * .08})`);
-        const blurred = document.createElement("canvas");
-        blurred.width = w; blurred.height = h;
+        const blurred = pooled("eyeBlur", w, h);
         const bctx = blurred.getContext("2d");
         if (bctx) {
           if (SUPPORTS_CTX_FILTER) {
@@ -206,8 +200,7 @@ function localScale(ctx: CanvasRenderingContext2D, cx: number, cy: number, rx: n
   const sw = Math.min(ctx.canvas.width - sx, Math.ceil(padX * 2));
   const sh = Math.min(ctx.canvas.height - sy, Math.ceil(padY * 2));
   if (sw < 12 || sh < 12) return;
-  const crop = document.createElement("canvas");
-  crop.width = sw; crop.height = sh;
+  const crop = pooled("crop", sw, sh);
   const c = crop.getContext("2d");
   if (!c) return;
   c.drawImage(ctx.canvas, sx, sy, sw, sh, 0, 0, sw, sh);
