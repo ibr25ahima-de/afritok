@@ -23,6 +23,13 @@ export const coinsRouter = router({
     const { purchaseCoins } = await import("./purchase-service");
     return purchaseCoins({ userId: ctx.user.id, packageId: input.packageId, paymentReference: input.paymentReference });
   }),
+  purchaseGooglePlay: protectedProcedure.input(z.object({
+    productId: z.string().trim().min(1).max(150),
+    purchaseToken: z.string().trim().min(10).max(4096),
+  })).mutation(async ({ ctx, input }) => {
+    const { purchaseGooglePlayCoins } = await import("./google-play-service");
+    return purchaseGooglePlayCoins({ userId: ctx.user.id, productId: input.productId, purchaseToken: input.purchaseToken });
+  }),
   getTransactions: protectedProcedure.input(z.object({ limit: z.number().int().min(1).max(100).default(50) })).query(async ({ ctx, input }) => {
     const transactions = await getCoinTransactions(ctx.user.id, input.limit);
     return transactions.map((transaction) => ({ id: transaction.id, type: transaction.type, amount: Number(transaction.amount), balanceBefore: Number(transaction.balanceBefore), balanceAfter: Number(transaction.balanceAfter), referenceId: transaction.referenceId, description: transaction.description, createdAt: transaction.createdAt }));
@@ -58,8 +65,6 @@ export const coinsRouter = router({
     if (!recipient) throw new Error("Le destinataire n'est pas dans ce Live.");
     if (recipient.role === "viewer") throw new Error("Seuls les participants sur scène peuvent recevoir un cadeau Live.");
 
-    // Le service de cadeaux utilise maintenant le même identifiant chaîne
-    // que le gestionnaire de Live. Aucun cast numérique dangereux.
     const result = await sendGift(
       ctx.user.id,
       input.recipientId,
