@@ -6,6 +6,7 @@ import { videos } from "../../drizzle/schema";
 import { getLiveSessionsManager } from "../live-sessions";
 import { getUserCoins, getCoinBalance, getCoinTransactions } from "./coin-service";
 import { getActiveGifts, sendGift } from "./gifts-service";
+import { getGooglePlayAccountToken } from "./google-play-service";
 
 const liveSessionsManager = getLiveSessionsManager();
 
@@ -19,6 +20,7 @@ export const coinsRouter = router({
     const { getCoinPackages } = await import("./purchase-service");
     return getCoinPackages();
   }),
+  getGooglePlayAccountToken: protectedProcedure.query(({ ctx }) => ({ token: getGooglePlayAccountToken(ctx.user.id) })),
   purchase: protectedProcedure.input(z.object({ packageId: z.string().trim().min(1).max(50), paymentReference: z.string().trim().min(5).max(150) })).mutation(async ({ ctx, input }) => {
     const { purchaseCoins } = await import("./purchase-service");
     return purchaseCoins({ userId: ctx.user.id, packageId: input.packageId, paymentReference: input.paymentReference });
@@ -65,16 +67,7 @@ export const coinsRouter = router({
     if (!recipient) throw new Error("Le destinataire n'est pas dans ce Live.");
     if (recipient.role === "viewer") throw new Error("Seuls les participants sur scène peuvent recevoir un cadeau Live.");
 
-    const result = await sendGift(
-      ctx.user.id,
-      input.recipientId,
-      input.giftId,
-      input.quantity,
-      null,
-      input.contextId,
-      input.idempotencyKey,
-    );
-
+    const result = await sendGift(ctx.user.id, input.recipientId, input.giftId, input.quantity, null, input.contextId, input.idempotencyKey);
     return { ...result, balance: await getCoinBalance(ctx.user.id) };
   }),
 });
