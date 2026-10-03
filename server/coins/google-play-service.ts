@@ -26,21 +26,13 @@ async function getGoogleAccessToken(): Promise<string> {
   const privateKey = requiredEnv("GOOGLE_PLAY_SERVICE_ACCOUNT_PRIVATE_KEY").replace(/\\n/g, "\n");
   const key = await importPKCS8(privateKey, "RS256");
   const now = Math.floor(Date.now() / 1000);
-
-  const assertion = await new SignJWT({ scope: GOOGLE_SCOPE })
-    .setProtectedHeader({ alg: "RS256", typ: "JWT" })
-    .setIssuer(email)
-    .setAudience(GOOGLE_TOKEN_URL)
-    .setIssuedAt(now)
-    .setExpirationTime(now + 3600)
-    .sign(key);
+  const assertion = await new SignJWT({ scope: GOOGLE_SCOPE }).setProtectedHeader({ alg: "RS256", typ: "JWT" }).setIssuer(email).setAudience(GOOGLE_TOKEN_URL).setIssuedAt(now).setExpirationTime(now + 3600).sign(key);
 
   const response = await fetch(GOOGLE_TOKEN_URL, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion }),
   });
-
   if (!response.ok) throw new Error(`Authentification Google Play impossible (${response.status}).`);
   const data = (await response.json()) as { access_token?: string };
   if (!data.access_token) throw new Error("Jeton d'accès Google Play absent.");
@@ -49,10 +41,7 @@ async function getGoogleAccessToken(): Promise<string> {
 
 async function googleApi<T>(path: string, init?: RequestInit): Promise<T> {
   const accessToken = await getGoogleAccessToken();
-  const response = await fetch(`${GOOGLE_API_BASE}${path}`, {
-    ...init,
-    headers: { authorization: `Bearer ${accessToken}`, ...(init?.headers ?? {}) },
-  });
+  const response = await fetch(`${GOOGLE_API_BASE}${path}`, { ...init, headers: { authorization: `Bearer ${accessToken}`, ...(init?.headers ?? {}) } });
   if (!response.ok) {
     const body = await response.text();
     throw new Error(`Google Play API ${response.status}: ${body.slice(0, 500)}`);
@@ -61,7 +50,7 @@ async function googleApi<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 type ProductPurchaseV2 = {
-  productLineItem?: Array<{ productId?: string }>;
+  productLineItem?: Array<{ productId?: string; productOfferDetails?: { consumptionState?: string } }>;
   purchaseStateContext?: { purchaseState?: string };
   orderId?: string;
   obfuscatedExternalAccountId?: string;
@@ -90,6 +79,7 @@ export async function purchaseGooglePlayCoins({ userId, productId, purchaseToken
   const packageName = process.env.GOOGLE_PLAY_PACKAGE_NAME || "com.afritok.app";
   const purchase = await googleApi<ProductPurchaseV2>(`/applications/${encodeURIComponent(packageName)}/purchases/productsv2/tokens/${encodeURIComponent(purchaseToken)}`);
   const lineItem = purchase.productLineItem?.[0];
+  const consumptionState = lineItem?.productOfferDetails?.consumptionState;
 
   if (!lineItem || lineItem.productId !== productId) throw new Error("Le produit Google Play ne correspond pas au package Coins.");
   if (purchase.purchaseStateContext?.purchaseState !== "PURCHASED") throw new Error("L'achat Google Play n'est pas encore confirmé.");
@@ -124,14 +114,14 @@ export async function purchaseGooglePlayCoins({ userId, productId, purchaseToken
     return { success: true, duplicate: false, coins: coinPackage.coins, balance: balanceAfter, transactionId: transaction[0]?.id, orderId, amount, currency, developerRevenue };
   });
 
-  if (!result.duplicate) {
+  if (consumptionState !== "CONSUMPTION_STATE_CONSUMED") {
     const consumePath = `/applications/${encodeURIComponent(packageName)}/purchases/products/${encodeURIComponent(productId)}/tokens/${encodeURIComponent(purchaseToken)}:consume`;
     try {
       await googleApi<Record<string, never>>(consumePath, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
     } catch (error) {
-      throw new Error(`Coins crédités mais consommation Google Play à réessayer: ${error instanceof Error ? error.message : "erreur inconnue"}`);
+      return { ...result, consumePending: true, consumeError: error instanceof Error ? error.message : "Erreur inconnue" };
     }
   }
 
-  return result;
+  return { ...result, consumePending: false };
 }
