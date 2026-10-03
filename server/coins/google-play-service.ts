@@ -46,7 +46,9 @@ async function googleApi<T>(path: string, init?: RequestInit): Promise<T> {
     const body = await response.text();
     throw new Error(`Google Play API ${response.status}: ${body.slice(0, 500)}`);
   }
-  return (await response.json()) as T;
+  if (response.status === 204) return {} as T;
+  const text = await response.text();
+  return text ? (JSON.parse(text) as T) : ({} as T);
 }
 
 type ProductPurchaseV2 = {
