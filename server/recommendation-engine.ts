@@ -204,7 +204,7 @@ export class RecommendationEngine {
       const filteredScores = Array.from(scores.values()).filter(
         (rec) =>
           !viewHistory.some((vh) => vh.videoId === rec.videoId) &&
-          !userProfile.blockedIds.includes((rec as any).userId)
+          !userProfile.blockedIds.includes((rec as any).userId) &&
           !userProfile.likedVideoIds.includes(rec.videoId) // Optionnel : éviter les vidéos aimées
       );
 
