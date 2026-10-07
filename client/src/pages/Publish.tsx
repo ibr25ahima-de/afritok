@@ -128,7 +128,7 @@ export default function Publish() {
         } catch (thumbErr) { console.warn("Échec upload miniature:", thumbErr); }
       }
       setUploadProgress(90);
-      const result = await uploadMutation.mutateAsync({ title: title.trim(), description: caption.trim(), videoUrl, thumbnailUrl, musicUrl: selectedMusic?.url || null, musicName: selectedMusic?.name || null, visibility, language: contentLanguage, premiumOptions: premiumStatus?.isPremium ? premiumOptions : undefined });
+      const mediaType = file.type.startsWith("image/") ? "image" : "video";\n      const result = await uploadMutation.mutateAsync({ title: title.trim(), description: caption.trim(), videoUrl, thumbnailUrl, musicUrl: selectedMusic?.url || null, musicName: selectedMusic?.name || null, visibility, language: contentLanguage, mediaType, premiumOptions: premiumStatus?.isPremium ? premiumOptions : undefined });
       setUploadProgress(100);
       alert(result.success ? (premiumOptions.scheduledAt ? "Vidéo programmée avec succès ! ✅" : "Vidéo publiée avec succès ! ✅") : "Publication impossible");
       setTitle(""); setCaption(""); setVisibility("public"); setUploadProgress(0); navigate("/feed");
@@ -146,8 +146,8 @@ export default function Publish() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white flex flex-col p-4">
-      <h1 className="text-2xl font-bold mb-6">Publier une vidéo</h1>
-      {preview && <video src={preview} className="w-full h-60 object-cover rounded-lg mb-6" autoPlay loop muted />}
+      <h1 className="text-2xl font-bold mb-6">Publier {file?.type.startsWith("image/") ? "une photo" : "une vidéo"}</h1>
+      {preview && (file?.type.startsWith("image/") ? <img src={preview} alt="Aperçu de la publication" className="w-full h-60 object-cover rounded-lg mb-6" /> : <video src={preview} className="w-full h-60 object-cover rounded-lg mb-6" autoPlay loop muted />)}
       <input type="text" placeholder="Titre de la vidéo..." value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-slate-800 border border-purple-800/50 rounded-lg px-4 py-2 text-white mb-4" />
       <textarea placeholder="Description..." value={caption} onChange={e => setCaption(e.target.value)} className="w-full bg-slate-800 border border-purple-800/50 rounded-lg px-3 py-3 text-white mb-4 resize-none" rows={4} />
 
@@ -197,7 +197,7 @@ export default function Publish() {
       <PremiumPublishOptions enabled={premiumStatus?.isPremium === true} onChange={setPremiumOptions} />
       {uploadProgress > 0 && uploadProgress < 100 && <div className="w-full bg-slate-700 rounded-full h-2 mb-4"><div className="bg-gradient-to-r from-purple-600 to-pink-600 h-2 rounded-full transition-all" style={{ width: `${uploadProgress}%` }} /></div>}
       <button onClick={handlePublish} disabled={loading || !file || !title.trim()} className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 py-3 rounded-lg font-semibold flex justify-center items-center gap-2 transition">
-        {loading ? <><Loader2 className="animate-spin w-5 h-5" />Publication en cours... {uploadProgress}%</> : "Publier la vidéo"}
+        {loading ? <><Loader2 className="animate-spin w-5 h-5" />Publication en cours... {uploadProgress}%</> : file?.type.startsWith("image/") ? "Publier la photo" : "Publier la vidéo"}
       </button>
     </div>
   );

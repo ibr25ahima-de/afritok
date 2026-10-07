@@ -40,6 +40,7 @@ export const users = pgTable("users", {
   notifyMessages: boolean("notifyMessages").default(true).notNull(),
   notifyPromotions: boolean("notifyPromotions").default(false).notNull(),
   language: varchar("language", { length: 20 }).default("Français").notNull(),
+  mediaType: varchar("mediaType", { length: 20 }).default("video").notNull(),
   darkMode: varchar("darkMode", { length: 20 }).default("Système").notNull(),
   dataSaver: boolean("dataSaver").default(false).notNull(),
   autoPlay: varchar("autoPlay", { length: 30 }).default("Wi-Fi uniquement").notNull(),

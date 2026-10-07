@@ -10,7 +10,7 @@ import { FlowerIcon, BirdIcon, GemIcon, ButterflyIcon, LionAvatar, BaobabIcon, E
 
 interface Video {
   id: number; userId: number; title?: string | null; description: string | null;
-  videoUrl: string; thumbnailUrl?: string | null; views: number | null;
+  videoUrl: string; mediaType?: "video" | "image"; thumbnailUrl?: string | null; views: number | null;
   likes: number | null; comments: number | null; shares: number | null;
   favorites: number | null; createdAt: Date;
   user?: { id: number; name: string; avatarUrl?: string };
@@ -87,15 +87,18 @@ export default function Feed() {
 
   useEffect(() => {
     videos.forEach((video, index) => {
+      if (index === currentVideoIndex) {
+        if (!viewedVideos.current.has(video.id)) {
+          viewedVideos.current.add(video.id);
+          incrementViewsMutation.mutate({ videoId: video.id });
+        }
+      }
+      if (video.mediaType === "image") return;
       const player = videoRefs.current[video.id];
       if (!player) return;
       if (index === currentVideoIndex) {
         player.muted = muted;
         player.play()?.catch(() => console.log("Autoplay en attente d'interaction"));
-        if (!viewedVideos.current.has(video.id)) {
-          viewedVideos.current.add(video.id);
-          incrementViewsMutation.mutate({ videoId: video.id });
-        }
       } else {
         player.pause();
         if (Math.abs(index - currentVideoIndex) > 2) { player.src = ""; player.load(); }
@@ -154,7 +157,7 @@ export default function Feed() {
           const counter = videoCounters[video.id] || { likes: video.likes || 0, comments: video.comments || 0, shares: video.shares || 0, favorites: video.favorites || 0 };
           return <div key={video.id} data-index={i} className="video-item h-[100dvh] min-h-[100dvh] w-full relative snap-start bg-black flex-shrink-0">
             {video.thumbnailUrl && <img src={video.thumbnailUrl} alt="" className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${loadedVideos.has(video.id) ? "opacity-0" : "opacity-100"}`} />}
-            {isVisible && <video ref={el => { videoRefs.current[video.id] = el; }} src={video.videoUrl} className="w-full h-full object-cover" style={{ touchAction: "pan-y" }} loop playsInline muted={muted} autoPlay={i === currentVideoIndex} onPlaying={() => setLoadedVideos(prev => new Set(prev).add(video.id))} onLoadedData={e => { if (i === currentVideoIndex) e.currentTarget.play().catch(() => {}); }} />}
+            {isVisible && (video.mediaType === "image" ? <img src={video.videoUrl} alt={video.title || "Photo"} className="w-full h-full object-cover" /> : <video ref={el => { videoRefs.current[video.id] = el; }} src={video.videoUrl} className="w-full h-full object-cover" style={{ touchAction: "pan-y" }} loop playsInline muted={muted} autoPlay={i === currentVideoIndex} onPlaying={() => setLoadedVideos(prev => new Set(prev).add(video.id))} onLoadedData={e => { if (i === currentVideoIndex) e.currentTarget.play().catch(() => {}); }} />)}
             <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60 pointer-events-none" />
             <button onClick={() => setMuted(!muted)} className="absolute top-24 right-4 z-40 p-2 bg-black/30 rounded-full backdrop-blur-md">{muted ? <MuteIcon size={20} /> : <UnmuteIcon size={20} />}</button>
             <div className="absolute right-3 top-32 flex flex-col gap-5 z-40 items-center">
