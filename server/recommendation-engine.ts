@@ -11,7 +11,8 @@
 
 import { getDb } from './db';
 import { getLogger } from './logging';
-import { sql } from 'drizzle-orm';
+import { sql, eq } from 'drizzle-orm';
+import { users, followers, likes, blocks } from '../drizzle/schema';
 
 const logger = getLogger();
 
@@ -126,15 +127,19 @@ export class RecommendationEngine {
    */
   private async getUserProfile(userId: number): Promise<UserProfile | null> {
     try {
-      // TODO: Récupérer le profil utilisateur de la base de données
-      // Inclure : préférences, suivis, vidéos aimées, utilisateurs bloqués
-
+      const db = await getDb();
+      if (!db) return null;
+      const [user] = await db.select({ language: users.language }).from(users).where(eq(users.id, userId)).limit(1);
+      if (!user) return null;
+      const following = await db.select({ id: followers.followingId }).from(followers).where(eq(followers.followerId, userId));
+      const liked = await db.select({ videoId: likes.videoId }).from(likes).where(eq(likes.userId, userId)).limit(200);
+      const blocked = await db.select({ id: blocks.blockedUserId }).from(blocks).where(eq(blocks.userId, userId));
       return {
         userId,
-        preferences: {},
-        followingIds: [],
-        blockedIds: [],
-        likedVideoIds: [],
+        preferences: user.language ? { [user.language]: 1 } : {},
+        followingIds: following.map(row => row.id),
+        blockedIds: blocked.map(row => row.id),
+        likedVideoIds: liked.map(row => row.videoId),
       };
     } catch (error) {
       logger.error('Failed to get user profile', { error, userId });
@@ -199,7 +204,7 @@ export class RecommendationEngine {
       const filteredScores = Array.from(scores.values()).filter(
         (rec) =>
           !viewHistory.some((vh) => vh.videoId === rec.videoId) &&
-          true && // 🟡 AMÉLIORATION RAPIDE : blockedIds = users, pas vidéos
+          !userProfile.blockedIds.includes((rec as any).userId)
           !userProfile.likedVideoIds.includes(rec.videoId) // Optionnel : éviter les vidéos aimées
       );
 
@@ -255,9 +260,13 @@ export class RecommendationEngine {
    */
   private async getSimilarVideos(viewHistory: ViewHistory[], limit: number): Promise<any[]> {
     try {
-      // TODO: Implémenter la requête pour obtenir les vidéos similaires
-      // Basé sur les catégories, hashtags, créateurs des vidéos visionnées
-      return [];
+      const db = await getDb();
+      if (!db || viewHistory.length === 0) return [];
+      const recentIds = viewHistory.slice(0, 20).map(item => item.videoId);
+      const recent = await db.query.videos.findMany({ where: (v, { inArray }) => inArray(v.id, recentIds), limit: 20 });
+      const languages = Array.from(new Set(recent.map(video => video.language).filter(Boolean)));
+      if (languages.length === 0) return [];
+      return await db.query.videos.findMany({ where: (v, { inArray }) => inArray(v.language, languages), orderBy: (v, { desc }) => [desc(v.createdAt)], limit });
     } catch (error) {
       logger.error('Failed to get similar videos', { error });
       return [];
