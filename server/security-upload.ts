@@ -1,7 +1,8 @@
 import { randomUUID } from "crypto";
 
 export const ALLOWED_AVATAR_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
-export const ALLOWED_VIDEO_TYPES = new Set(["video/mp4", "video/webm", "video/quicktime"]);\nexport const ALLOWED_MEDIA_TYPES = new Set([...ALLOWED_VIDEO_TYPES, ...ALLOWED_AVATAR_TYPES]);
+export const ALLOWED_VIDEO_TYPES = new Set(["video/mp4", "video/webm", "video/quicktime"]);
+export const ALLOWED_MEDIA_TYPES = new Set([...ALLOWED_VIDEO_TYPES, ...ALLOWED_AVATAR_TYPES]);
 
 function ascii(buffer: Buffer, start: number, length: number): string {
   return buffer.subarray(start, start + length).toString("ascii");

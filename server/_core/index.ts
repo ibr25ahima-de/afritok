@@ -30,6 +30,7 @@ import {
 import {
   ALLOWED_AVATAR_TYPES,
   ALLOWED_VIDEO_TYPES,
+  ALLOWED_MEDIA_TYPES,
   hasValidMediaSignature,
 } from "../security-upload";
 
@@ -126,13 +127,13 @@ async function startServer() {
       if (!user) return res.status(401).json({ error: "Utilisateur non authentifié." });
       if (!req.file) return res.status(400).json({ error: "Aucun fichier fourni." });
       const mimeType = req.file.mimetype.toLowerCase();
-      if (!ALLOWED_VIDEO_TYPES.has(mimeType) || !hasValidMediaSignature(req.file.buffer, mimeType)) {
-        return res.status(400).json({ error: "Format vidéo non autorisé ou fichier invalide." });
+      if (!ALLOWED_MEDIA_TYPES.has(mimeType) || !hasValidMediaSignature(req.file.buffer, mimeType)) {
+        return res.status(400).json({ error: "Format média non autorisé ou fichier invalide." });
       }
       const extension = mimeType === "video/quicktime" ? "mov" : mimeType.split("/")[1];
       const fileName = `${randomUUID()}.${extension}`;
       const videoUrl = await uploadVideoToSupabase(req.file.buffer, fileName, user.id, mimeType);
-      return res.json({ videoUrl });
+      return res.json({ videoUrl, mediaType: mimeType.startsWith("image/") ? "image" : "video" });
     } catch (error) {
       console.error("[Upload] Error:", error);
       return res.status(500).json({ error: "Upload impossible." });
