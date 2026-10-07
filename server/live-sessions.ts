@@ -18,6 +18,8 @@ export class LiveSessionsManager {
     return undefined;
   }
   createSession(hostId: number, hostUsername: string, title: string, description: string, type: LiveType = 'video', isPublic = true, maxParticipants = 50, layout: LiveLayout = 'spotlight'): LiveSession {
+    const existing = this.getUserSession(hostId);
+    if (existing && existing.state !== 'ended') throw new Error('Host already has an active Live session');
     const sessionId = 'live_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9); const capacity = normalizeStageCapacity(maxParticipants);
     const session: LiveSession = { sessionId, hostId, hostUsername, title, description, type, layout, centerParticipantId: hostId, state: 'pending', participants: new Map(), maxParticipants: capacity, viewerCount: 0, startedAt: new Date(), isPublic, giftRevenue: 0 };
     session.participants.set(hostId, { userId: hostId, username: hostUsername, joinedAt: new Date(), role: 'host', isMuted: false, isVideoOff: false, stageSlot: 0 }); this.sessions.set(sessionId, session); this.userSessions.set(hostId, sessionId); logger.info('Live session created', { sessionId, hostId, title, type, layout, maxParticipants: capacity }); return session;
