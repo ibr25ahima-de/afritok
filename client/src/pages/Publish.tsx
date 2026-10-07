@@ -128,7 +128,8 @@ export default function Publish() {
         } catch (thumbErr) { console.warn("Échec upload miniature:", thumbErr); }
       }
       setUploadProgress(90);
-      const mediaType = file.type.startsWith("image/") ? "image" : "video";\n      const result = await uploadMutation.mutateAsync({ title: title.trim(), description: caption.trim(), videoUrl, thumbnailUrl, musicUrl: selectedMusic?.url || null, musicName: selectedMusic?.name || null, visibility, language: contentLanguage, mediaType, premiumOptions: premiumStatus?.isPremium ? premiumOptions : undefined });
+      const mediaType = file.type.startsWith("image/") ? "image" : "video";
+      const result = await uploadMutation.mutateAsync({ title: title.trim(), description: caption.trim(), videoUrl, thumbnailUrl, musicUrl: selectedMusic?.url || null, musicName: selectedMusic?.name || null, visibility, language: contentLanguage, mediaType, premiumOptions: premiumStatus?.isPremium ? premiumOptions : undefined });
       setUploadProgress(100);
       alert(result.success ? (premiumOptions.scheduledAt ? "Vidéo programmée avec succès ! ✅" : "Vidéo publiée avec succès ! ✅") : "Publication impossible");
       setTitle(""); setCaption(""); setVisibility("public"); setUploadProgress(0); navigate("/feed");
