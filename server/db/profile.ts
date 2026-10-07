@@ -12,6 +12,8 @@ export async function updateUserProfile(
     name: string;
     bio?: string;
     country?: string;
+    countryCode?: string;
+    currency?: string;
   }
 ) {
   await db
@@ -20,6 +22,8 @@ export async function updateUserProfile(
       name: data.name,
       bio: data.bio,
       country: data.country,
+      countryCode: data.countryCode,
+      currency: data.currency,
       updatedAt: new Date(),
     })
     .where(eq(users.id, userId));

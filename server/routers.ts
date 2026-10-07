@@ -25,6 +25,7 @@ import { platformFinanceRouter } from "./platform-finance-router";
 import { advertisingRouter } from "./routers-advertising";
 import { subscriptionRouter } from "./subscriptions/subscription-router";
 import { applyPremiumVideoOptions } from "./subscriptions/premium-video-publishing";
+import { AFRICAN_COUNTRIES, getCountryConfig } from "./country-config";
 import { getUserVideos, getVideoById, getFeedVideos, getFollowerCount, getFollowingCount, isFollowing, getUserEarnings, getUserWithdrawals, getDisplaySettings, updateDisplaySettings, db, createOTP, getLatestOTP, consumeOTPAttempt, deleteOTP, getUserByPhone, upsertUser, updateUserProfile, updateUserAvatar, canViewVideo } from "./db";
 import { storagePut, storageDeleteVideo } from "./storage";
 import { videos, followers, users, warnings, comments, likes, favorites, shares } from "../drizzle/schema";
@@ -59,6 +60,7 @@ function toSafeAuthUser(user: typeof users.$inferSelect) {
     avatarUrl: user.avatarUrl,
     country: user.country,
     currency: user.currency,
+    countryCode: user.countryCode,
     profilePublic: user.profilePublic,
     allowMessages: user.allowMessages,
     allowComments: user.allowComments,
@@ -128,12 +130,16 @@ export const appRouter = router({
   like: likeRouter, comment: commentRouter, favorite: favoriteRouter, share: shareRouter, admin: adminRouter,
   follower: router({ toggle: protectedProcedure.input(z.object({ userId: z.number().int().positive() })).mutation(async ({ ctx, input }) => { if (ctx.user.id === input.userId) throw new TRPCError({ code: "BAD_REQUEST", message: "Vous ne pouvez pas vous suivre vous-même." }); const following = await isFollowing(ctx.user.id, input.userId); if (following) { await db.delete(followers).where(and(eq(followers.followerId, ctx.user.id), eq(followers.followingId, input.userId))); return { following: false }; } const [target] = await db.select({ id: users.id, profilePublic: users.profilePublic }).from(users).where(eq(users.id, input.userId)).limit(1); if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Utilisateur introuvable." }); if (!target.profilePublic) throw new TRPCError({ code: "FORBIDDEN", message: "Ce profil est privé." }); await db.insert(followers).values({ followerId: ctx.user.id, followingId: input.userId }); return { following: true }; }), getCount: publicProcedure.input(z.object({ userId: z.number().int().positive() })).query(async ({ input }) => ({ followers: await getFollowerCount(input.userId), following: await getFollowingCount(input.userId) })), isFollowing: protectedProcedure.input(z.object({ userId: z.number().int().positive() })).query(async ({ ctx, input }) => ({ following: await isFollowing(ctx.user.id, input.userId) })) }),
   earnings: router({ getMyEarnings: protectedProcedure.query(({ ctx }) => getUserEarnings(ctx.user.id)), getMyWithdrawals: protectedProcedure.query(({ ctx }) => getUserWithdrawals(ctx.user.id)) }),
+  country: router({
+    list: publicProcedure.query(() => AFRICAN_COUNTRIES),
+    get: publicProcedure.input(z.object({ code: z.string().length(2) })).query(({ input }) => getCountryConfig(input.code)),
+  }),
   user: router({
     getProfile: publicProcedure.input(z.object({ userId: z.number().int().positive() })).query(async ({ input, ctx }) => { const [user] = await db.select().from(users).where(eq(users.id, input.userId)).limit(1); if (!user) return null; if (!user.profilePublic && ctx.user?.id !== user.id && ctx.user?.role !== "admin") return { id: user.id, name: user.name, avatarUrl: user.avatarUrl, country: user.country, profilePublic: false }; if (ctx.user?.id !== user.id && ctx.user?.role !== "admin") return { id: user.id, name: user.name, avatarUrl: user.avatarUrl, country: user.country, bio: user.bio, profilePublic: user.profilePublic, createdAt: user.createdAt }; return user; }),
     getMyWarnings: protectedProcedure.query(async ({ ctx }) => db.select({ id: warnings.id, reason: warnings.reason, message: warnings.message, createdAt: warnings.createdAt }).from(warnings).where(eq(warnings.userId, ctx.user.id)).orderBy(desc(warnings.createdAt))),
     getAll: publicProcedure.query(async () => db.select({ id: users.id, name: users.name, avatarUrl: users.avatarUrl, country: users.country, profilePublic: users.profilePublic }).from(users).where(eq(users.profilePublic, true)).orderBy(users.id).limit(500)),
     getVideos: publicProcedure.input(z.object({ userId: z.number().int().positive() })).query(async ({ input, ctx }) => { const [owner] = await db.select({ id: users.id, profilePublic: users.profilePublic }).from(users).where(eq(users.id, input.userId)).limit(1); if (!owner) throw new TRPCError({ code: "NOT_FOUND", message: "Utilisateur introuvable." }); if (!owner.profilePublic && ctx.user?.id !== owner.id && ctx.user?.role !== "admin") return []; return getUserVideos(input.userId, ctx.user?.id ?? null); }),
-    updateProfile: protectedProcedure.input(z.object({ name: z.string().trim().min(1).max(100), bio: z.string().trim().max(1000).optional(), country: z.string().trim().max(100).optional() })).mutation(async ({ ctx, input }) => updateUserProfile(ctx.user.id, input)),
+    updateProfile: protectedProcedure.input(z.object({ name: z.string().trim().min(1).max(100), bio: z.string().trim().max(1000).optional(), country: z.string().trim().max(100).optional(), countryCode: z.string().length(2).optional(), currency: z.string().length(3).optional() })).mutation(async ({ ctx, input }) => { const config = getCountryConfig(input.countryCode); if (input.countryCode && !config) throw new TRPCError({ code: "BAD_REQUEST", message: "Pays africain non pris en charge." }); return updateUserProfile(ctx.user.id, { ...input, currency: config?.currency ?? input.currency }); }),
     uploadAvatar: protectedProcedure.input(z.object({ avatarUrl: z.string().url().max(2048) })).mutation(async ({ ctx, input }) => updateUserAvatar(ctx.user.id, input)),
     getDisplaySettings: protectedProcedure.query(async ({ ctx }) => getDisplaySettings(ctx.user.id)),
     updateDisplaySettings: protectedProcedure.input(settingsSchema).mutation(async ({ ctx, input }) => updateDisplaySettings(ctx.user.id, input)),

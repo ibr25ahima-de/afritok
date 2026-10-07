@@ -23,6 +23,7 @@ export const users = pgTable("users", {
   bio: text("bio"),
   avatarUrl: text("avatarUrl"),
   country: varchar("country", { length: 64 }),
+  countryCode: varchar("countryCode", { length: 2 }),
   currency: varchar("currency", { length: 3 }).default("USD"),
   totalEarnings: numeric("totalEarnings", { precision: 10, scale: 4 }).default("0"),
   totalWithdrawals: numeric("totalWithdrawals", { precision: 10, scale: 4 }).default("0"),

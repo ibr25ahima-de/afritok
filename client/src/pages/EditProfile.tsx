@@ -23,7 +23,9 @@ export default function EditProfile() {
   const [name, setName] = useState(user?.name || "");
   const [bio, setBio] = useState("");
   const [country, setCountry] = useState("");
+  const [countryCode, setCountryCode] = useState("");
   const [currency, setCurrency] = useState("USD");
+  const { data: countries = [] } = trpc.country.list.useQuery();
   const [isSaving, setIsSaving] = useState(false);
   const [theme, setTheme] = useState<string>(() => localStorage.getItem("afritok-premium-theme") || "gold");
 
@@ -45,7 +47,7 @@ export default function EditProfile() {
     }
     setIsSaving(true);
     try {
-      await updateProfileMutation.mutateAsync({ name, bio, country });
+      await updateProfileMutation.mutateAsync({ name, bio, country, countryCode, currency });
       alert("Profil mis à jour");
       navigate(`/profile/${user?.id}`);
     } catch {

@@ -47,6 +47,7 @@ async function createTables(pool: Pool) {
 
     await pool.query(`
       ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS "countryCode" VARCHAR(2),
       ADD COLUMN IF NOT EXISTS "isBanned" BOOLEAN NOT NULL DEFAULT false,
       ADD COLUMN IF NOT EXISTS "banReason" TEXT,
       ADD COLUMN IF NOT EXISTS "bannedAt" TIMESTAMP,
