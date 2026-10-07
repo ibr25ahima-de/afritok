@@ -4,6 +4,7 @@ import type { BeautyConfig } from "./BeautyConfig";
 import { normalizeBeautyConfig } from "./BeautyConfig";
 import { SUPPORTS_CTX_FILTER, blurInto } from "./canvasBlur";
 import { pooled } from "./canvasPool";
+import { applyFilterFallback } from "./filterFallback";
 
 type Point = { x: number; y: number };
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
@@ -63,9 +64,20 @@ function maskedImage(
   const out = pooled(key, source.width, source.height);
   const o = out.getContext("2d");
   if (!o) return null;
-  o.filter = filter;
   o.drawImage(source, 0, 0);
-  o.filter = "none";
+  // Safari/iOS peut exposer la propriété `filter` sans appliquer réellement
+  // les filtres sur un canvas. Utiliser le même fallback pixel que le moteur
+  // de filtres global évite que la retouche soit ignorée sur iPhone.
+  if (filter !== "none") {
+    if (SUPPORTS_CTX_FILTER) {
+      o.filter = filter;
+      o.clearRect(0, 0, source.width, source.height);
+      o.drawImage(source, 0, 0);
+      o.filter = "none";
+    } else {
+      applyFilterFallback(o, source.width, source.height, filter);
+    }
+  }
   o.globalCompositeOperation = "destination-in";
   o.drawImage(mask, 0, 0);
   o.globalCompositeOperation = "source-over";
