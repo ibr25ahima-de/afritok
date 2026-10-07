@@ -119,7 +119,8 @@ async function createTables(pool: Pool) {
       ADD COLUMN IF NOT EXISTS "scheduledAt" TIMESTAMP,
       ADD COLUMN IF NOT EXISTS "commentsMode" TEXT,
       ADD COLUMN IF NOT EXISTS "hdVideoUrl" TEXT,
-      ADD COLUMN IF NOT EXISTS "visibility" VARCHAR(20) NOT NULL DEFAULT 'public';
+      ADD COLUMN IF NOT EXISTS "visibility" VARCHAR(20) NOT NULL DEFAULT 'public',
+      ADD COLUMN IF NOT EXISTS "language" VARCHAR(20) NOT NULL DEFAULT 'Français';
 
       UPDATE videos
       SET "visibility" = CASE WHEN "isPublic" = false THEN 'private' ELSE 'public' END

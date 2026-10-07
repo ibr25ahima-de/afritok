@@ -17,6 +17,7 @@ export default function Publish() {
   const [loading, setLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [visibility, setVisibility] = useState<VideoVisibility>("public");
+  const [contentLanguage, setContentLanguage] = useState("Français");
   const [premiumOptions, setPremiumOptions] = useState<PremiumPublishOptionsValue>({ quality: "standard", scheduledAt: null, commentsMode: "all" });
 
   const uploadMutation = trpc.video.upload.useMutation();
@@ -127,7 +128,7 @@ export default function Publish() {
         } catch (thumbErr) { console.warn("Échec upload miniature:", thumbErr); }
       }
       setUploadProgress(90);
-      const result = await uploadMutation.mutateAsync({ title: title.trim(), description: caption.trim(), videoUrl, thumbnailUrl, musicUrl: selectedMusic?.url || null, musicName: selectedMusic?.name || null, visibility, premiumOptions: premiumStatus?.isPremium ? premiumOptions : undefined });
+      const result = await uploadMutation.mutateAsync({ title: title.trim(), description: caption.trim(), videoUrl, thumbnailUrl, musicUrl: selectedMusic?.url || null, musicName: selectedMusic?.name || null, visibility, language: contentLanguage, premiumOptions: premiumStatus?.isPremium ? premiumOptions : undefined });
       setUploadProgress(100);
       alert(result.success ? (premiumOptions.scheduledAt ? "Vidéo programmée avec succès ! ✅" : "Vidéo publiée avec succès ! ✅") : "Publication impossible");
       setTitle(""); setCaption(""); setVisibility("public"); setUploadProgress(0); navigate("/feed");
@@ -149,6 +150,16 @@ export default function Publish() {
       {preview && <video src={preview} className="w-full h-60 object-cover rounded-lg mb-6" autoPlay loop muted />}
       <input type="text" placeholder="Titre de la vidéo..." value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-slate-800 border border-purple-800/50 rounded-lg px-4 py-2 text-white mb-4" />
       <textarea placeholder="Description..." value={caption} onChange={e => setCaption(e.target.value)} className="w-full bg-slate-800 border border-purple-800/50 rounded-lg px-3 py-3 text-white mb-4 resize-none" rows={4} />
+
+      <section className="mb-5">
+        <div className="mb-2">
+          <h2 className="text-base font-semibold">Langue du contenu</h2>
+          <p className="text-xs text-slate-300 mt-1">Indique la langue principalement utilisée dans cette vidéo pour mieux organiser les contenus africains.</p>
+        </div>
+        <select value={contentLanguage} onChange={e => setContentLanguage(e.target.value)} disabled={loading} className="w-full bg-slate-800 border border-purple-800/50 rounded-lg px-4 py-3 text-white">
+          {["Français", "English", "Kiswahili", "Yorùbá", "Hausa", "isiZulu", "Español", "العربية", "Português"].map(language => <option key={language} value={language}>{language}</option>)}
+        </select>
+      </section>
 
       <section className="mb-5">
         <div className="mb-2">
