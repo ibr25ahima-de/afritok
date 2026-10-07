@@ -26,6 +26,7 @@ import {
   validateInput,
   uploadRateLimiter,
   errorHandler,
+  checkSecurityHeaders,
 } from "../security";
 import {
   ALLOWED_AVATAR_TYPES,
@@ -74,6 +75,7 @@ async function startServer() {
   const server = createServer(app);
 
   app.use(helmetConfig);
+  app.use(checkSecurityHeaders);
   app.use(createRateLimiter(15 * 60 * 1000, 300));
   app.use(csrfProtection);
   app.use(securityLogger);
