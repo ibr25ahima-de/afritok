@@ -14,7 +14,14 @@ const queryClient = new QueryClient();
 
 const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!(error instanceof TRPCClientError) || typeof window === "undefined") return;
-  if (error.message === UNAUTHED_ERR_MSG) window.location.href = "/";
+  if (error.message !== UNAUTHED_ERR_MSG) return;
+
+  // An unauthenticated session is expected on the public home/login pages.
+  // Never reload those pages in response to auth.me or another public query.
+  const path = window.location.pathname;
+  if (path === "/" || path === "/login") return;
+
+  window.location.href = "/";
 };
 
 queryClient.getQueryCache().subscribe(event => {
