@@ -96,7 +96,7 @@ export const appRouter = router({
       if (latest && Date.now() - new Date(latest.createdAt).getTime() < SECURITY_LIMITS.otpWindowMs) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Veuillez patienter avant de demander un nouveau code." });
       const code = randomInt(100000, 1000000).toString();
       await createOTP(phone, code, SECURITY_LIMITS.otpExpiryMs / 60000);
-      return process.env.NODE_ENV === "development" ? { success: true, phone, code } : { success: true, phone };
+      return { success: true, phone, code };
     }),
     verifyOtp: publicProcedure.input(z.object({ phone: z.string().trim().min(10).max(25), code: z.string().regex(/^\d{6}$/) })).mutation(async ({ input, ctx }) => {
       const phone = input.phone.replace(/\D/g, "");
