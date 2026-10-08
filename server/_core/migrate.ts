@@ -60,6 +60,7 @@ async function createTables(pool: Pool) {
 
     await pool.query(`
       ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS "mediaType" VARCHAR(20) NOT NULL DEFAULT 'video',
       ADD COLUMN IF NOT EXISTS "profilePublic" BOOLEAN NOT NULL DEFAULT true,
       ADD COLUMN IF NOT EXISTS "allowMessages" BOOLEAN NOT NULL DEFAULT true,
       ADD COLUMN IF NOT EXISTS "allowComments" BOOLEAN NOT NULL DEFAULT true,
