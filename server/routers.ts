@@ -84,7 +84,7 @@ function toSafeAuthUser(user: typeof users.$inferSelect) {
 }
 
 export const appRouter = router({
-  system: systemRouter, feed: feedRouter, music: musicRouter, adminMusic: adminMusicRouter, coins: coinsRouter, gifts: giftRouter, wallet: walletRouter, payment: paymentRouter, platformFinance: platformFinanceRouter, advertising: advertisingRouter, subscription: subscriptionRouter, live: liveRouter, liveChat: liveChatRouter, directMessages: directMessagesRouter, instantWithdrawal: instantWithdrawalRouter, monetization: monetizationRouter,
+  system: systemRouter, feed: feedRouter, like: likeRouter, comment: commentRouter, favorite: favoriteRouter, share: shareRouter, music: musicRouter, adminMusic: adminMusicRouter, coins: coinsRouter, gifts: giftRouter, wallet: walletRouter, payment: paymentRouter, platformFinance: platformFinanceRouter, advertising: advertisingRouter, subscription: subscriptionRouter, live: liveRouter, liveChat: liveChatRouter, directMessages: directMessagesRouter, instantWithdrawal: instantWithdrawalRouter, monetization: monetizationRouter,
   auth: router({
     me: publicProcedure.query(({ ctx }) => ctx.user ? toSafeAuthUser(ctx.user) : null),
     logout: publicProcedure.mutation(({ ctx }) => { const cookieOptions = getSessionCookieOptions(ctx.req); ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 }); return { success: true }; }),
