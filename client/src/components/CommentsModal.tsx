@@ -11,6 +11,7 @@ interface CommentsModalProps {
 
 export default function CommentsModal({ videoId, onClose, onCommentAdded }: CommentsModalProps) {
   const [newComment, setNewComment] = useState("");
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const commentsQuery = trpc.comment.getByVideo.useQuery(
     { videoId },
@@ -25,6 +26,7 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
   const handleSubmitComment = async () => {
     if (!newComment.trim()) return;
 
+    setSubmitError(null);
     try {
       const res = await createCommentMutation.mutateAsync({
         videoId,
@@ -60,6 +62,7 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
 
     } catch (error) {
       console.error("Comment error", error);
+      setSubmitError(error instanceof Error ? error.message : "Impossible d’envoyer le commentaire. Réessayez.");
     }
 
   };
@@ -85,6 +88,8 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
             <p className="text-purple-300 text-center py-8">
               Chargement...
             </p>
+          ) : commentsQuery.isError ? (
+            <p className="text-red-300 text-center py-8">Impossible de charger les commentaires. Réessayez.</p>
           ) : commentsQuery.data && commentsQuery.data.length > 0 ? (
             commentsQuery.data.map((comment) => (
               <div key={comment.id} className="flex gap-3">
@@ -113,6 +118,7 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
 
         {/* Comment Input */}
         <div className="border-t border-purple-800/30 p-4 bg-slate-900 sticky bottom-0">
+  {submitError && <p role="alert" className="text-red-300 text-xs mb-2">{submitError}</p>}
   <div className="flex items-center gap-2 bg-slate-800 border border-purple-800/50 rounded-full px-4 py-1">
     <input
       type="text"
