@@ -182,7 +182,7 @@ export default function Feed() {
           <button onClick={() => navigate(`/profile/${user?.id}`)} className="flex min-w-0 flex-1 flex-col items-center gap-0.5 py-1 opacity-60"><LeopardIcon size={21} /><span className="truncate text-[9px] font-bold">Profil</span></button>
         </div>
       </nav>
-      {showComments && selectedVideoId && <CommentsModal videoId={selectedVideoId} onClose={() => setShowComments(false)} onCommentAdded={() => setVideoCounters(prev => ({ ...prev, [selectedVideoId]: { ...(prev[selectedVideoId] || { likes: 0, comments: 0, shares: 0, favorites: 0 }), comments: (prev[selectedVideoId]?.comments || 0) + 1 } }))} />}
+      {showComments && selectedVideoId && <CommentsModal videoId={selectedVideoId} onClose={() => setShowComments(false)} onCommentAdded={(commentCount) => setVideoCounters(prev => ({ ...prev, [selectedVideoId]: { ...(prev[selectedVideoId] || { likes: 0, comments: 0, shares: 0, favorites: 0 }), comments: commentCount } }))} />}
       {showShare && selectedVideoId && <ShareModal videoId={selectedVideoId} onClose={() => setShowShare(false)} />}
       {showGiftSelector && selectedVideoId && <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4"><div className="w-full max-w-md max-h-[85vh] overflow-y-auto"><GiftSelector receiverId={videos.find(v => v.id === selectedVideoId)?.userId ?? 0} videoId={selectedVideoId} onClose={() => setShowGiftSelector(false)} /></div></div>}
     </div>
