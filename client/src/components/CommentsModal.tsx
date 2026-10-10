@@ -12,13 +12,26 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
   const [newComment, setNewComment] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [keyboardInset, setKeyboardInset] = useState(0);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => inputRef.current?.focus(), 100);
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+
+    const updateKeyboardInset = () => {
+      const viewport = window.visualViewport;
+      if (!viewport) return;
+      const inset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+      setKeyboardInset(Math.round(inset));
+    };
+
+    updateKeyboardInset();
+    window.visualViewport?.addEventListener("resize", updateKeyboardInset);
+    window.visualViewport?.addEventListener("scroll", updateKeyboardInset);
+
     return () => {
-      window.clearTimeout(timer);
+      window.visualViewport?.removeEventListener("resize", updateKeyboardInset);
+      window.visualViewport?.removeEventListener("scroll", updateKeyboardInset);
       document.body.style.overflow = previousOverflow;
     };
   }, []);
@@ -55,7 +68,13 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
   };
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-end bg-black/80" role="dialog" aria-modal="true" aria-label="Commentaires">
+    <div
+      className="fixed inset-x-0 top-0 z-[300] flex items-end bg-black/80"
+      style={{ bottom: keyboardInset }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Commentaires"
+    >
       <div
         className="flex h-[min(70dvh,32rem)] max-h-[calc(100dvh-env(safe-area-inset-top,0px))] w-full min-h-0 flex-col overflow-hidden rounded-t-lg bg-slate-900 shadow-2xl"
         style={{ WebkitTextSizeAdjust: "100%" }}
@@ -112,7 +131,7 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
               type="button"
               onClick={() => void handleSubmitComment()}
               disabled={!newComment.trim() || createCommentMutation.isPending}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full p-1 text-purple-400 hover:text-purple-300 disabled:text-gray-600"
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full p-1 transition-colors ${newComment.trim() ? "bg-red-500 text-white hover:bg-red-400" : "text-purple-400 hover:text-purple-300 disabled:text-gray-600"}`}
               aria-label="Envoyer le commentaire"
             >
               <Send className="h-5 w-5" />
