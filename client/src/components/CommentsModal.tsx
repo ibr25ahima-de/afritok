@@ -115,35 +115,33 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
           style={{ bottom: keyboardInset }}
         >
           {submitError && <p role="alert" className="mb-2 text-xs text-red-300">{submitError}</p>}
-          <div className="mx-auto w-full max-w-2xl space-y-3">
-            <div className="rounded-2xl border border-purple-800/50 bg-slate-800 px-4 py-2">
-            <input
-              ref={inputRef}
-              type="text"
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              placeholder="Add a comment..."
-              autoComplete="off"
-              enterKeyHint="send"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void handleSubmitComment();
-              }}
-              className="min-w-0 flex-1 border-none bg-transparent py-2 text-base text-white outline-none placeholder:text-gray-500"
-              style={{ fontSize: "16px" }}
-              aria-label="Écrire un commentaire"
-            />
+          <div className="mx-auto flex w-full max-w-2xl items-center gap-3">
+            <div className="min-w-0 flex-1 rounded-2xl border border-purple-800/50 bg-slate-800 px-4 py-2">
+              <input
+                ref={inputRef}
+                type="text"
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                placeholder="Add a comment..."
+                autoComplete="off"
+                enterKeyHint="send"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void handleSubmitComment();
+                }}
+                className="w-full min-w-0 border-none bg-transparent py-2 text-base text-white outline-none placeholder:text-gray-500"
+                style={{ fontSize: "16px" }}
+                aria-label="Écrire un commentaire"
+              />
             </div>
-            <div className="flex min-h-12 items-center justify-end pr-8">
             <button
               type="button"
               onClick={() => void handleSubmitComment()}
               disabled={!newComment.trim() || createCommentMutation.isPending}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500 p-1 text-white transition-colors hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-45"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-500 p-1 text-white transition-colors hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-70"
               aria-label="Envoyer le commentaire"
             >
               <Send className="h-5 w-5" />
             </button>
-            </div>
           </div>
         </div>
       </div>
