@@ -21,7 +21,8 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
     const updateKeyboardInset = () => {
       const viewport = window.visualViewport;
       if (!viewport) return;
-      const inset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+      const layoutHeight = document.documentElement.clientHeight || window.innerHeight;
+      const inset = Math.max(0, layoutHeight - viewport.height - viewport.offsetTop);
       setKeyboardInset(Math.round(inset));
     };
 
@@ -86,7 +87,7 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 pb-24">
           {commentsQuery.isLoading ? (
             <p className="py-8 text-center text-purple-300">Chargement...</p>
           ) : commentsQuery.isError ? (
@@ -109,9 +110,12 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
           )}
         </div>
 
-        <div className="sticky bottom-0 z-10 shrink-0 border-t border-purple-800/30 bg-slate-900 p-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))]">
+        <div
+          className="fixed inset-x-0 z-[310] border-t border-purple-800/30 bg-slate-900 p-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))]"
+          style={{ bottom: keyboardInset }}
+        >
           {submitError && <p role="alert" className="mb-2 text-xs text-red-300">{submitError}</p>}
-          <div className="flex min-h-12 items-center gap-2 rounded-full border border-purple-800/50 bg-slate-800 px-4 py-1">
+          <div className="mx-auto flex min-h-12 w-full max-w-2xl items-center gap-2 rounded-full border border-purple-800/50 bg-slate-800 px-4 py-1">
             <input
               ref={inputRef}
               type="text"
