@@ -1,13 +1,25 @@
 import { eq, sql } from "drizzle-orm";
 import { db } from "./index";
-import { comments, videos } from "../../drizzle/schema";
+import { comments, users, videos } from "../../drizzle/schema";
 
 /* =====================
 COMMENTS
 ===================== */
 
 export async function getVideoComments(videoId: number) {
-  return db.select().from(comments).where(eq(comments.videoId, videoId));
+  return db
+    .select({
+      id: comments.id,
+      userId: comments.userId,
+      videoId: comments.videoId,
+      text: comments.text,
+      createdAt: comments.createdAt,
+      userName: users.name,
+    })
+    .from(comments)
+    .leftJoin(users, eq(comments.userId, users.id))
+    .where(eq(comments.videoId, videoId))
+    .orderBy(comments.createdAt);
 }
 
 export async function addComment(userId: number, videoId: number, text: string) {
