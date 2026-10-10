@@ -47,6 +47,10 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
 
   const createCommentMutation = trpc.comment.create.useMutation();
 
+  useEffect(() => {
+    if (commentsQuery.data) onCommentAdded?.(commentsQuery.data.length);
+  }, [commentsQuery.data]);
+
   const handleSubmitComment = async () => {
     const text = newComment.trim();
     if (!text) return;
