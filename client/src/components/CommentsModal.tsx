@@ -133,7 +133,7 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
               aria-label="Écrire un commentaire"
             />
             </div>
-            <div className="flex min-h-12 items-center justify-end">
+            <div className="flex min-h-12 items-center justify-end pr-8">
             <button
               type="button"
               onClick={() => void handleSubmitComment()}
