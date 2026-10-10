@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { useLocation } from "wouter";
 import { X, Send, User } from "lucide-react";
 
 interface CommentsModalProps {
@@ -9,6 +10,7 @@ interface CommentsModalProps {
 }
 
 export default function CommentsModal({ videoId, onClose, onCommentAdded }: CommentsModalProps) {
+  const [, navigate] = useLocation();
   const [newComment, setNewComment] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -99,11 +101,22 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
           ) : commentsQuery.data && commentsQuery.data.length > 0 ? (
             commentsQuery.data.map((comment) => (
               <div key={comment.id} className="flex gap-3">
-                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-purple-400 to-pink-400">
+                <button
+                  type="button"
+                  onClick={() => navigate(`/profile/${comment.userId}`)}
+                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-purple-400 to-pink-400"
+                  aria-label={`Voir le profil de ${comment.userName || "cet utilisateur"}`}
+                >
                   <User className="h-4 w-4 text-white" />
-                </div>
+                </button>
                 <div className="flex-1">
-                  <p className="text-sm font-semibold text-white">{comment.userName || "Utilisateur"}</p>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/profile/${comment.userId}`)}
+                    className="text-left text-sm font-semibold text-white hover:underline"
+                  >
+                    {comment.userName || "Utilisateur"}
+                  </button>
                   <p className="mt-1 text-sm text-purple-300">{comment.text}</p>
                   <p className="mt-1 text-xs text-gray-500">{new Date(comment.createdAt).toLocaleDateString()}</p>
                 </div>
