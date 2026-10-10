@@ -115,8 +115,8 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
           style={{ bottom: keyboardInset }}
         >
           {submitError && <p role="alert" className="mb-2 text-xs text-red-300">{submitError}</p>}
-          <div className="mx-auto flex w-full max-w-2xl items-center gap-3">
-            <div className="min-w-0 flex-1 rounded-2xl border border-purple-800/50 bg-slate-800 px-4 py-2">
+          <div className="mx-auto flex w-full max-w-2xl flex-col items-start gap-3">
+            <div className="w-full min-w-0 rounded-2xl border border-purple-800/50 bg-slate-800 px-4 py-2">
               <input
                 ref={inputRef}
                 type="text"
@@ -137,10 +137,11 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
               type="button"
               onClick={() => void handleSubmitComment()}
               disabled={!newComment.trim() || createCommentMutation.isPending}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-500 p-1 text-white transition-colors hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-70"
+              className="flex h-11 items-center justify-center gap-2 rounded-full bg-red-500 px-5 text-white transition-colors hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-70"
               aria-label="Envoyer le commentaire"
             >
               <Send className="h-5 w-5" />
+              <span>Envoyer</span>
             </button>
           </div>
         </div>
