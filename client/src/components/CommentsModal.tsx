@@ -87,7 +87,7 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 pb-24">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 pb-40">
           {commentsQuery.isLoading ? (
             <p className="py-8 text-center text-purple-300">Chargement...</p>
           ) : commentsQuery.isError ? (
@@ -115,7 +115,8 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
           style={{ bottom: keyboardInset }}
         >
           {submitError && <p role="alert" className="mb-2 text-xs text-red-300">{submitError}</p>}
-          <div className="mx-auto flex min-h-12 w-full max-w-2xl items-center gap-2 rounded-full border border-purple-800/50 bg-slate-800 px-4 py-1">
+          <div className="mx-auto w-full max-w-2xl space-y-3">
+            <div className="rounded-2xl border border-purple-800/50 bg-slate-800 px-4 py-2">
             <input
               ref={inputRef}
               type="text"
@@ -131,6 +132,8 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
               style={{ fontSize: "16px" }}
               aria-label="Écrire un commentaire"
             />
+            </div>
+            <div className="flex min-h-12 items-center justify-end">
             <button
               type="button"
               onClick={() => void handleSubmitComment()}
@@ -140,6 +143,7 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
             >
               <Send className="h-5 w-5" />
             </button>
+            </div>
           </div>
         </div>
       </div>
