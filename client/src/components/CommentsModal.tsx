@@ -5,7 +5,7 @@ import { X, Send, User } from "lucide-react";
 interface CommentsModalProps {
   videoId: number;
   onClose: () => void;
-  onCommentAdded?: () => void;
+  onCommentAdded?: (commentCount: number) => void;
 }
 
 export default function CommentsModal({ videoId, onClose, onCommentAdded }: CommentsModalProps) {
@@ -55,8 +55,8 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
     try {
       const res = await createCommentMutation.mutateAsync({ videoId, text });
       setNewComment("");
-      await commentsQuery.refetch();
-      onCommentAdded?.();
+      const refreshedComments = await commentsQuery.refetch();
+      onCommentAdded?.(refreshedComments.data?.length ?? 0);
 
       if (res?.earning?.success) alert("💰 + gain commentaire !");
       if (res?.earning?.shadow) alert("⚠️ Limite atteinte aujourd'hui");
@@ -99,7 +99,7 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
                   <User className="h-4 w-4 text-white" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-semibold text-white">Creator #{comment.userId}</p>
+                  <p className="text-sm font-semibold text-white">{comment.userName || "Utilisateur"}</p>
                   <p className="mt-1 text-sm text-purple-300">{comment.text}</p>
                   <p className="mt-1 text-xs text-gray-500">{new Date(comment.createdAt).toLocaleDateString()}</p>
                 </div>
