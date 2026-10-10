@@ -61,7 +61,6 @@ export const commentRouter = router({
     if (mode === "off") throw new TRPCError({ code: "FORBIDDEN", message: "Les commentaires sont désactivés pour cette vidéo." });
     if (mode === "followers" && user.id !== video.userId && !(await isFollowing(user.id, video.userId))) throw new TRPCError({ code: "FORBIDDEN", message: "Cette vidéo accepte uniquement les commentaires des abonnés." });
     await addComment(user.id, input.videoId, input.text);
-    await db.update(videos).set({ comments: sql`COALESCE(${videos.comments}, 0) + 1` }).where(eq(videos.id, input.videoId));
     return { success: true, comments: (video.comments || 0) + 1, earning: await recordCommentEarning(user.id, input.videoId) };
   }),
   delete: protectedProcedure.input(z.object({ commentId: positiveId })).mutation(async ({ ctx, input }) => {
@@ -69,7 +68,6 @@ export const commentRouter = router({
     if (!comment) throw new TRPCError({ code: "NOT_FOUND", message: "Commentaire introuvable." });
     if (comment.userId !== ctx.user.id && ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "Vous ne pouvez supprimer que vos propres commentaires." });
     await deleteComment(input.commentId);
-    await db.update(videos).set({ comments: sql`GREATEST(COALESCE(${videos.comments}, 0) - 1, 0)` }).where(eq(videos.id, comment.videoId));
     return { success: true, message: "Commentaire supprimé avec succès." };
   }),
 });
