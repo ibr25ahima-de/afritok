@@ -115,7 +115,7 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
           style={{ bottom: keyboardInset }}
         >
           {submitError && <p role="alert" className="mb-2 text-xs text-red-300">{submitError}</p>}
-          <div className="mx-auto flex w-full max-w-2xl flex-col items-start gap-3">
+          <div className="mx-auto flex w-full max-w-2xl flex-col items-start gap-3 pl-2">
             <div className="w-full min-w-0 rounded-2xl border border-purple-800/50 bg-slate-800 px-4 py-2">
               <input
                 ref={inputRef}
