@@ -15,7 +15,12 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
 
   useEffect(() => {
     const timer = window.setTimeout(() => inputRef.current?.focus(), 100);
-    return () => window.clearTimeout(timer);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.clearTimeout(timer);
+      document.body.style.overflow = previousOverflow;
+    };
   }, []);
 
   const commentsQuery = trpc.comment.getByVideo.useQuery(
@@ -51,7 +56,10 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
 
   return (
     <div className="fixed inset-0 z-[300] flex items-end bg-black/80" role="dialog" aria-modal="true" aria-label="Commentaires">
-      <div className="flex h-[70dvh] max-h-[70dvh] w-full flex-col overflow-hidden rounded-t-lg bg-slate-900 shadow-2xl">
+      <div
+        className="flex h-[min(70dvh,32rem)] max-h-[calc(100dvh-env(safe-area-inset-top,0px))] w-full min-h-0 flex-col overflow-hidden rounded-t-lg bg-slate-900 shadow-2xl"
+        style={{ WebkitTextSizeAdjust: "100%" }}
+      >
         <div className="flex items-center justify-between border-b border-purple-800/30 p-4">
           <h2 className="font-semibold text-white">Comments</h2>
           <button type="button" onClick={onClose} className="text-purple-400 hover:text-purple-300" aria-label="Fermer les commentaires">
@@ -59,7 +67,7 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
           </button>
         </div>
 
-        <div className="flex-1 space-y-4 overflow-y-auto p-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
           {commentsQuery.isLoading ? (
             <p className="py-8 text-center text-purple-300">Chargement...</p>
           ) : commentsQuery.isError ? (
@@ -82,9 +90,9 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
           )}
         </div>
 
-        <div className="sticky bottom-0 border-t border-purple-800/30 bg-slate-900 p-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))]">
+        <div className="sticky bottom-0 z-10 shrink-0 border-t border-purple-800/30 bg-slate-900 p-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))]">
           {submitError && <p role="alert" className="mb-2 text-xs text-red-300">{submitError}</p>}
-          <div className="flex items-center gap-2 rounded-full border border-purple-800/50 bg-slate-800 px-4 py-1">
+          <div className="flex min-h-12 items-center gap-2 rounded-full border border-purple-800/50 bg-slate-800 px-4 py-1">
             <input
               ref={inputRef}
               type="text"
@@ -96,14 +104,15 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
               onKeyDown={(e) => {
                 if (e.key === "Enter") void handleSubmitComment();
               }}
-              className="min-w-0 flex-1 border-none bg-transparent py-2 text-sm text-white outline-none placeholder:text-gray-500"
+              className="min-w-0 flex-1 border-none bg-transparent py-2 text-base text-white outline-none placeholder:text-gray-500"
+              style={{ fontSize: "16px" }}
               aria-label="Écrire un commentaire"
             />
             <button
               type="button"
               onClick={() => void handleSubmitComment()}
               disabled={!newComment.trim() || createCommentMutation.isPending}
-              className="p-1 text-purple-400 hover:text-purple-300 disabled:text-gray-600"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full p-1 text-purple-400 hover:text-purple-300 disabled:text-gray-600"
               aria-label="Envoyer le commentaire"
             >
               <Send className="h-5 w-5" />
