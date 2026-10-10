@@ -138,7 +138,7 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
               type="button"
               onClick={() => void handleSubmitComment()}
               disabled={!newComment.trim() || createCommentMutation.isPending}
-              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full p-1 transition-colors ${newComment.trim() ? "bg-red-500 text-white hover:bg-red-400" : "text-purple-400 hover:text-purple-300 disabled:text-gray-600"}`}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500 p-1 text-white transition-colors hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-45"
               aria-label="Envoyer le commentaire"
             >
               <Send className="h-5 w-5" />
