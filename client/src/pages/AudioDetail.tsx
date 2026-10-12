@@ -1,4 +1,5 @@
 import { useRoute, useLocation } from "wouter";
+import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import {
   ChevronLeft,
@@ -13,6 +14,8 @@ export default function AudioDetail() {
   const [, params] = useRoute("/audio/:videoId");
   const [, navigate] = useLocation();
   const videoId = params?.videoId ? parseInt(params.videoId) : null;
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const { data: video, isLoading } = trpc.music.getSourceVideo.useQuery(
     { videoId: videoId! },
@@ -22,6 +25,31 @@ export default function AudioDetail() {
   // On réutilise donc cette URL comme source audio de secours.
   const soundUrl = video?.music?.audioUrl || video?.musicUrl || video?.videoUrl || null;
   const soundName = video?.music?.title || video?.musicName || `Son original - ${video?.user?.name || "Artiste"}`;
+
+  useEffect(() => {
+    setIsPlaying(false);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+  }, [soundUrl]);
+
+  const toggleSoundPreview = async () => {
+    const audio = audioRef.current;
+    if (!audio || !soundUrl) return;
+    if (!audio.paused) {
+      audio.pause();
+      setIsPlaying(false);
+      return;
+    }
+    try {
+      await audio.play();
+      setIsPlaying(true);
+    } catch (error) {
+      console.warn("Impossible de lire l'aperçu du son", error);
+      setIsPlaying(false);
+    }
+  };
 
   // Le serveur filtre par l’URL audio persistée, comme la page d’un son TikTok.
   const { data: relatedVideos = [] } = trpc.music.getVideosBySound.useQuery(
@@ -39,6 +67,8 @@ export default function AudioDetail() {
 
   return (
     <div className="min-h-[100dvh] bg-black text-white flex flex-col pb-24">
+      {soundUrl && <audio ref={audioRef} src={soundUrl} preload="metadata" onEnded={() => setIsPlaying(false)} onPause={() => setIsPlaying(false)} onPlay={() => setIsPlaying(true)} />}
+
       <header className="p-4 flex items-center justify-between sticky top-0 bg-black z-50">
         <button onClick={() => window.history.back()} className="p-2 min-h-11 min-w-11 touch-manipulation">
           <ChevronLeft size={28} />
@@ -56,22 +86,20 @@ export default function AudioDetail() {
       </header>
 
       <div className="px-6 py-4 flex gap-4 items-start">
-        <div className="relative group">
-          <div className="w-24 h-24 bg-gradient-to-br from-gray-800 to-gray-900 rounded-lg overflow-hidden border border-white/10 shadow-xl">
+        <button type="button" onClick={() => void toggleSoundPreview()} disabled={!soundUrl} aria-label={isPlaying ? "Mettre le son en pause" : "Écouter le son"} className="relative group shrink-0 disabled:opacity-50">
+          <div className={`w-24 h-24 bg-gradient-to-br from-gray-800 to-gray-900 rounded-full overflow-hidden border-4 border-gray-700 shadow-xl flex items-center justify-center ${isPlaying ? "animate-[spin_3s_linear_infinite]" : ""}`}>
             {video?.thumbnailUrl ? (
-              <img src={video.thumbnailUrl} alt="Couverture du son" className="w-full h-full object-cover opacity-60" />
+              <img src={video.thumbnailUrl} alt="Couverture du son" className="w-full h-full object-cover opacity-75" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <Music2 size={40} className="text-amber-400" />
-              </div>
+              <Music2 size={40} className="text-amber-400" />
             )}
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-10 h-10 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center">
-                <Play size={20} fill="white" />
+              <div className="w-10 h-10 bg-black/55 backdrop-blur-md rounded-full flex items-center justify-center">
+                {isPlaying ? <span className="text-lg font-black">Ⅱ</span> : <Play size={20} fill="white" />}
               </div>
             </div>
           </div>
-        </div>
+        </button>
 
         <div className="flex-1">
           <h1 className="text-xl font-bold mb-1">{soundName}</h1>
