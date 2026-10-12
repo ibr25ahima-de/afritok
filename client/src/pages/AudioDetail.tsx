@@ -14,6 +14,8 @@ export default function AudioDetail() {
   const [match, params] = useRoute("/audio/:videoId");
   const [, navigate] = useLocation();
   const videoId = params?.videoId ? parseInt(params.videoId) : null;
+  const soundUrl = video?.music?.audioUrl || video?.musicUrl || null;
+  const soundName = video?.music?.title || video?.musicName || `Son original - ${video?.user?.name || "Artiste"}`;
 
   // On récupère les détails de la vidéo pour avoir les infos du son
   const { data: video, isLoading } = trpc.video.getById.useQuery(
@@ -68,10 +70,16 @@ export default function AudioDetail() {
 
         <div className="flex-1">
           <h1 className="text-xl font-bold mb-1">Son original - {video?.user?.name || "Artiste"}</h1>
-          <p className="text-gray-400 text-sm mb-3">1.2M de vidéos</p>
-          <button className="flex items-center gap-2 bg-white/10 px-4 py-1.5 rounded-md text-sm font-semibold hover:bg-white/20 transition">
-            <Bookmark size={18} />
-            Ajouter aux favoris
+          <p className="text-gray-400 text-sm mb-3">Son utilisé dans cette vidéo</p>
+          <button
+            onClick={() => {
+              if (navigator.share) void navigator.share({ title: soundName, text: "Découvre ce son sur biYaloxi" }).catch(() => {});
+              else void navigator.clipboard?.writeText(window.location.href);
+            }}
+            className="flex items-center gap-2 bg-white/10 px-4 py-1.5 rounded-md text-sm font-semibold hover:bg-white/20 transition"
+          >
+            <Share2 size={18} />
+            Partager ce son
           </button>
         </div>
       </div>
@@ -79,10 +87,10 @@ export default function AudioDetail() {
       {/* GRID DES VIDÉOS */}
       <div className="flex-1 px-1">
         <div className="grid grid-cols-3 gap-0.5">
-          {relatedVideos?.map((v) => (
+          {(relatedVideos || []).filter((v) => v.id === videoId || (!!video?.musicId && v.musicId === video.musicId)).map((v) => (
             <div 
               key={v.id} 
-              onClick={() => navigate(`/feed`)}
+              onClick={() => navigate(`/feed?videoId=${v.id}`)}
               className="aspect-[3/4] bg-gray-900 relative overflow-hidden group cursor-pointer"
             >
               {v.thumbnailUrl && (
@@ -100,7 +108,13 @@ export default function AudioDetail() {
       {/* BOUTON "UTILISER CE SON" */}
       <div className="fixed bottom-[calc(1.5rem+var(--afritok-safe-bottom))] left-3 right-3 z-50 flex justify-center">
         <button 
-          onClick={() => navigate("/upload")}
+          onClick={() => {
+            if (soundUrl) {
+              navigate(`/upload?audioUrl=${encodeURIComponent(soundUrl)}&audioName=${encodeURIComponent(soundName)}`);
+            } else {
+              navigate("/upload");
+            }
+          }}
           className="bg-amber-500 text-black px-8 py-3 rounded-full font-black flex items-center gap-3 shadow-[0_0_30px_rgba(245,158,11,0.4)] hover:scale-105 transition-transform active:scale-95"
         >
           <VideoIcon size={22} fill="black" />
