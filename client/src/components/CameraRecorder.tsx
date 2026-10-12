@@ -338,8 +338,13 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       };
       drawRecordingFrame();
 
-      const canvasStream = canvas.captureStream(30);
-      recordingStreamRef.current = canvasStream;
+      // Record the live camera track directly. On some Android browsers the
+      // canvas capture track can be emitted as a frozen first frame even while
+      // the preview is moving. Cloning the camera stream preserves real motion.
+      // (The canvas above is retained for preview/effect processing, but is not
+      // used as the recorded video source.)
+      const recordingStream = sourceStream.clone();
+      recordingStreamRef.current = recordingStream;
 
       // Mix the selected sound into the camera recording itself, not just the editor preview.
       if (selectedMusic?.url) {
@@ -356,7 +361,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
           // Also play the selected sound through the device speakers/headphones.
           source.connect(audioContext.destination);
           const audioTrack = destination.stream.getAudioTracks()[0];
-          if (audioTrack) canvasStream.addTrack(audioTrack);
+          if (audioTrack) recordingStream.addTrack(audioTrack);
           musicAudioRef.current = musicAudio;
           musicContextRef.current = audioContext;
           await audioContext.resume();
@@ -374,8 +379,8 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       }
 
       const recorder = mime
-        ? new MediaRecorder(canvasStream, { mimeType: mime })
-        : new MediaRecorder(canvasStream);
+        ? new MediaRecorder(recordingStream, { mimeType: mime })
+        : new MediaRecorder(recordingStream);
 
       chunksRef.current = [];
       recorderRef.current = recorder;
