@@ -127,16 +127,32 @@ export default function Upload() {
         return;
       }
       setProgress(video.duration ? current / video.duration : 0);
-      if (musicRef.current && Math.abs(musicRef.current.currentTime - current) > 0.25) musicRef.current.currentTime = current;
     };
-    const onPlay = () => { setIsPlaying(true); musicRef.current?.play().catch(() => {}); };
+    // Synchronize music only on playback start or an actual seek. Repeatedly
+    // assigning currentTime during playback can cause audible clicks/crackling.
+    const syncMusic = () => {
+      const music = musicRef.current;
+      if (!music) return;
+      const target = Math.max(0, video.currentTime);
+      if (Math.abs(music.currentTime - target) > 0.75) {
+        try { music.currentTime = target; } catch { /* wait until metadata is ready */ }
+      }
+    };
+    const onPlay = () => {
+      setIsPlaying(true);
+      syncMusic();
+      musicRef.current?.play().catch(() => {});
+    };
+    const onSeeking = () => syncMusic();
     const onPause = () => { setIsPlaying(false); musicRef.current?.pause(); };
     video.addEventListener("timeupdate", onTime);
     video.addEventListener("play", onPlay);
+    video.addEventListener("seeking", onSeeking);
     video.addEventListener("pause", onPause);
     return () => {
       video.removeEventListener("timeupdate", onTime);
       video.removeEventListener("play", onPlay);
+      video.removeEventListener("seeking", onSeeking);
       video.removeEventListener("pause", onPause);
     };
   }, [step, cuts, trimStart, trimEnd, duration]);
@@ -383,15 +399,21 @@ export default function Upload() {
 
       if (selectedMusic?.url) {
         try {
-          audio = new Audio(selectedMusic.url);
+          // The camera recorder captures video without microphone audio, so
+          // export only the chosen music track. Routing the muted preview video
+          // through AudioContext can produce silence or unstable audio on mobile.
+          audio = new Audio();
           audio.crossOrigin = "anonymous";
           audio.preload = "auto";
-          audioContext = new AudioContext();
+          audio.loop = true;
+          audio.src = selectedMusic.url;
+          audioContext = new AudioContext({ sampleRate: 48000 });
           const destination = audioContext.createMediaStreamDestination();
-          const videoSource = audioContext.createMediaElementSource(video);
-          videoSource.connect(destination);
           const musicSource = audioContext.createMediaElementSource(audio);
-          musicSource.connect(destination);
+          const musicGain = audioContext.createGain();
+          musicGain.gain.value = 1;
+          musicSource.connect(musicGain);
+          musicGain.connect(destination);
           await new Promise<void>((resolve, reject) => {
             if (audio.readyState >= HTMLMediaElement.HAVE_METADATA) return resolve();
             const onReady = () => { cleanup(); resolve(); };
@@ -601,7 +623,7 @@ export default function Upload() {
       {showEffects && <div className="absolute inset-0 z-50 bg-black/95 p-4 overflow-y-auto"><div className="flex justify-between items-center mb-5"><div><h2 className="font-bold">Effets</h2><p className="text-xs text-white/55 mt-1">L’effet choisi s’applique à l’aperçu et à la vidéo exportée.</p></div><button onClick={() => setShowEffects(false)} aria-label="Fermer les effets"><X /></button></div><div className="mb-4 flex items-center justify-between rounded-xl bg-white/10 px-3 py-2 text-sm"><span>{activeEffect ? `Actif : ${activeEffect}` : "Aucun effet actif"}</span>{activeEffect && <button onClick={() => setActiveEffect(null)} className="text-red-300">Réinitialiser</button>}</div><EffectsLibrary onEffectSelect={(effect) => { setActiveEffect(effect.id); toast.success(`Effet « ${effect.name} » appliqué`); }} selectedEffects={activeEffect ? [activeEffect] : []} onEffectRemove={(effectId) => { if (effectId === activeEffect) setActiveEffect(null); }} /></div>}
       {showAudio && <AudioSelector onClose={() => setShowAudio(false)} onSelectAudio={(url, name, id) => { setSelectedMusic({ url, name, id }); setShowAudio(false); }} />}
       {showModifierEditor && preview && !isImage && <ClipEditorFixed src={preview} duration={duration} trimStart={trimStart} trimEnd={trimEnd || duration} cuts={cuts} onTrimChange={setTimelineTrim} onCutsChange={setCuts} onCurrentTimeChange={setTimelineTime} onClose={() => setShowModifierEditor(false)} />}
-      {selectedMusic && <audio ref={musicRef} src={selectedMusic.url} preload="auto" />}
+      {selectedMusic && <audio ref={musicRef} src={selectedMusic.url} preload="auto" loop />}
     </div>;
   }
   return <Publish />;
