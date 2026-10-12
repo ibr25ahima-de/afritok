@@ -34,6 +34,28 @@ export function hasValidMediaSignature(buffer: Buffer, mimeType: string): boolea
   }
 }
 
+
+/**
+ * Detect supported video containers from their file signature instead of
+ * trusting the MIME type supplied by a mobile browser.
+ */
+export function detectVideoMimeType(buffer: Buffer, claimedMimeType: string): string | null {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 12) return null;
+
+  // WebM/Matroska EBML header.
+  if (buffer.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))) {
+    return "video/webm";
+  }
+
+  // ISO Base Media File Format used by MP4 and QuickTime MOV.
+  if (ascii(buffer, 4, 4) === "ftyp") {
+    return ascii(buffer, 8, 4) === "qt  " ? "video/quicktime" : "video/mp4";
+  }
+
+  // Do not accept a video based on its claimed MIME type alone.
+  return null;
+}
+
 export function createStorageKey(folder: string, extension: string): string {
   const safeExtension = extension.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 8);
   return `${folder}/${randomUUID()}${safeExtension ? `.${safeExtension}` : ""}`;
