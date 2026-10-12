@@ -10,7 +10,8 @@ import { FlowerIcon, BirdIcon, GemIcon, ButterflyIcon, LionAvatar, BaobabIcon, E
 
 interface Video {
   id: number; userId: number; title?: string | null; description: string | null;
-  videoUrl: string; mediaType?: "video" | "image"; thumbnailUrl?: string | null; views: number | null;
+  videoUrl: string; mediaType?: "video" | "image"; thumbnailUrl?: string | null;
+  musicUrl?: string | null; musicName?: string | null; views: number | null;
   likes: number | null; comments: number | null; shares: number | null;
   favorites: number | null; createdAt: Date;
   user?: { id: number; name: string; avatarUrl?: string };
@@ -37,6 +38,7 @@ export default function Feed() {
   const [loadedVideos, setLoadedVideos] = useState<Set<number>>(new Set());
   const viewedVideos = useRef(new Set<number>());
   const videoRefs = useRef<Record<number, HTMLVideoElement | null>>({});
+  const audioRefs = useRef<Record<number, HTMLAudioElement | null>>({});
   const containerRef = useRef<HTMLDivElement>(null);
 
   const likeToggleMutation = trpc.like.toggle.useMutation();
@@ -96,15 +98,24 @@ export default function Feed() {
       if (video.mediaType === "image") return;
       const player = videoRefs.current[video.id];
       if (!player) return;
+      const soundtrack = audioRefs.current[video.id];
       if (index === currentVideoIndex) {
         player.muted = muted;
         player.play()?.catch(() => console.log("Autoplay en attente d'interaction"));
+        if (soundtrack) {
+          soundtrack.muted = muted;
+          soundtrack.volume = 1;
+          soundtrack.currentTime = player.currentTime || 0;
+          if (!muted) soundtrack.play().catch(() => console.log("Lecture de la musique en attente d'interaction"));
+          else soundtrack.pause();
+        }
       } else {
         // Pause off-screen videos without clearing their src. Setting src to an
         // empty string resolves to the current page URL in browsers, and React
         // may not reapply an unchanged src prop when the video becomes visible
         // again. Keeping the original source lets the player resume reliably.
         player.pause();
+        soundtrack?.pause();
         if (Math.abs(index - currentVideoIndex) > 2) {
           player.preload = "metadata";
         } else {
@@ -164,7 +175,29 @@ export default function Feed() {
           const counter = videoCounters[video.id] || { likes: video.likes || 0, comments: video.comments || 0, shares: video.shares || 0, favorites: video.favorites || 0 };
           return <div key={video.id} data-index={i} className="video-item h-[100dvh] min-h-[100dvh] w-full relative snap-start bg-black flex-shrink-0">
             {video.thumbnailUrl && <img src={video.thumbnailUrl} alt="" className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${loadedVideos.has(video.id) ? "opacity-0" : "opacity-100"}`} />}
-            {isVisible && (video.mediaType === "image" ? <img src={video.videoUrl} alt={video.title || "Photo"} className="w-full h-full object-cover" /> : <video ref={el => { videoRefs.current[video.id] = el; }} src={video.videoUrl} className="w-full h-full object-cover" style={{ touchAction: "pan-y" }} loop playsInline muted={muted} autoPlay={i === currentVideoIndex} onPlaying={() => setLoadedVideos(prev => new Set(prev).add(video.id))} onLoadedData={e => { if (i === currentVideoIndex) { e.currentTarget.muted = muted; e.currentTarget.play().catch(() => {}); } }} />)}
+            {isVisible && (video.mediaType === "image" ? <img src={video.videoUrl} alt={video.title || "Photo"} className="w-full h-full object-cover" /> : <>
+              <video
+                ref={el => { videoRefs.current[video.id] = el; }}
+                src={video.videoUrl}
+                className="w-full h-full object-cover"
+                style={{ touchAction: "pan-y" }}
+                loop
+                playsInline
+                preload={i === currentVideoIndex ? "auto" : "metadata"}
+                muted={muted}
+                autoPlay={i === currentVideoIndex}
+                onPlaying={() => setLoadedVideos(prev => new Set(prev).add(video.id))}
+                onLoadedMetadata={e => { if (i === currentVideoIndex) { e.currentTarget.muted = muted; e.currentTarget.play().catch(() => {}); } }}
+                onLoadedData={e => { if (i === currentVideoIndex) { e.currentTarget.muted = muted; e.currentTarget.play().catch(() => {}); } }}
+                onTimeUpdate={e => {
+                  const soundtrack = audioRefs.current[video.id];
+                  if (soundtrack && Math.abs(soundtrack.currentTime - e.currentTarget.currentTime) > 0.25) soundtrack.currentTime = e.currentTarget.currentTime;
+                }}
+                onPlay={() => { const soundtrack = audioRefs.current[video.id]; if (soundtrack && !muted) soundtrack.play().catch(() => {}); }}
+                onPause={() => audioRefs.current[video.id]?.pause()}
+              />
+              {video.musicUrl && <audio ref={el => { audioRefs.current[video.id] = el; }} src={video.musicUrl} preload="auto" loop={false} />}
+            </>)}
             <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60 pointer-events-none" />
             <button onClick={() => setMuted(!muted)} className="absolute top-24 right-4 z-40 p-2 bg-black/30 rounded-full backdrop-blur-md">{muted ? <MuteIcon size={20} /> : <UnmuteIcon size={20} />}</button>
             <div className="absolute right-3 top-32 flex flex-col gap-5 z-40 items-center">
