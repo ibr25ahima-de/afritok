@@ -8,11 +8,13 @@ type UploadContextType = {
   selectedMusic: {
     url: string;
     name: string;
+    id?: string;
   } | null;
   setSelectedMusic: (
     music: {
       url: string;
       name: string;
+      id?: string;
     } | null
   ) => void;
 };
@@ -25,6 +27,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
   const [selectedMusic, setSelectedMusic] = useState<{
     url: string;
     name: string;
+    id?: string;
   } | null>(null);
 
   const setPreview = useCallback((url: string | null) => {

@@ -313,6 +313,6 @@ export function ClipEditor({ src, duration, trimStart, trimEnd, cuts, onTrimChan
         </div>
       </div>
     </div>
-    {showAudio && <AudioSelector onClose={() => setShowAudio(false)} onSelectAudio={(url, name) => { setSelectedMusic({ url, name }); setShowAudio(false); }} />}
+    {showAudio && <AudioSelector onClose={() => setShowAudio(false)} onSelectAudio={(url, name, id) => { setSelectedMusic({ url, name, id }); setShowAudio(false); }} />}
   </div>;
 }

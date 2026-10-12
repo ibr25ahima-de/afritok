@@ -117,6 +117,8 @@ async function createTables(pool: Pool) {
       ALTER TABLE videos
       ADD COLUMN IF NOT EXISTS favorites INTEGER DEFAULT 0,
       ADD COLUMN IF NOT EXISTS "musicId" INTEGER,
+      ADD COLUMN IF NOT EXISTS "musicUrl" TEXT,
+      ADD COLUMN IF NOT EXISTS "musicName" TEXT,
       ADD COLUMN IF NOT EXISTS "premiumQuality" TEXT,
       ADD COLUMN IF NOT EXISTS "scheduledAt" TIMESTAMP,
       ADD COLUMN IF NOT EXISTS "commentsMode" TEXT,
