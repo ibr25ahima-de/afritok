@@ -356,10 +356,15 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
           musicAudio.loop = false;
           const audioContext = new AudioContext();
           const source = audioContext.createMediaElementSource(musicAudio);
+          const gain = audioContext.createGain();
+          // Leave headroom so loud source tracks do not clip and sound crackly
+          // after being encoded together with the video.
+          gain.gain.value = 0.7;
           const destination = audioContext.createMediaStreamDestination();
-          source.connect(destination);
-          // Also play the selected sound through the device speakers/headphones.
-          source.connect(audioContext.destination);
+          source.connect(gain);
+          gain.connect(destination);
+          // Monitor the same level that is sent to the recording.
+          gain.connect(audioContext.destination);
           const audioTrack = destination.stream.getAudioTracks()[0];
           if (audioTrack) recordingStream.addTrack(audioTrack);
           musicAudioRef.current = musicAudio;
@@ -378,9 +383,12 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
         }
       }
 
-      const recorder = mime
-        ? new MediaRecorder(recordingStream, { mimeType: mime })
-        : new MediaRecorder(recordingStream);
+      const recorderOptions: MediaRecorderOptions = {
+        ...(mime ? { mimeType: mime } : {}),
+        audioBitsPerSecond: 128_000,
+        videoBitsPerSecond: 2_500_000,
+      };
+      const recorder = new MediaRecorder(recordingStream, recorderOptions);
 
       chunksRef.current = [];
       recorderRef.current = recorder;
