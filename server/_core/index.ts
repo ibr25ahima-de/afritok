@@ -132,7 +132,7 @@ async function startServer() {
       const claimedMimeType = req.file.mimetype.toLowerCase().split(";")[0].trim();
       // Mobile browsers can label MP4/WebM recordings inconsistently. Detect the
       // actual supported video container from its signature before validating it.
-      const mimeType = detectVideoMimeType(req.file.buffer, claimedMimeType) || claimedMimeType;
+      const mimeType = detectVideoMimeType(req.file.buffer) || claimedMimeType;
       if (!ALLOWED_MEDIA_TYPES.has(mimeType) || !hasValidMediaSignature(req.file.buffer, mimeType)) {
         return res.status(400).json({ error: "Format média non autorisé ou fichier invalide." });
       }
