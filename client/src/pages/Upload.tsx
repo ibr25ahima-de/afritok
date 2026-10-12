@@ -37,6 +37,15 @@ export default function Upload() {
   const [, navigate] = useLocation();
   const { isAuthenticated } = useAuth();
   const { file, setFile, preview, setPreview, selectedMusic, setSelectedMusic } = useUpload();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const audioUrl = params.get("audioUrl");
+    const audioName = params.get("audioName");
+    if (audioUrl) {
+      setSelectedMusic({ url: audioUrl, name: audioName || "Son original" });
+    }
+  }, [setSelectedMusic]);
   const [step, setStep] = useState<Step>("capture");
   const [showAudio, setShowAudio] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
