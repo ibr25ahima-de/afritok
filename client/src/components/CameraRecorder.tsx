@@ -37,6 +37,8 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
   const drawFrameRef = useRef<number | null>(null);
   const recordingCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const recordingStreamRef = useRef<MediaStream | null>(null);
+  const musicAudioRef = useRef<HTMLAudioElement | null>(null);
+  const musicContextRef = useRef<AudioContext | null>(null);
   const mountedRef = useRef(true);
   const activeRecordingStartedAtRef = useRef(0);
   const accumulatedRecordingMsRef = useRef(0);
@@ -306,6 +308,38 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       const canvasStream = canvas.captureStream(30);
       recordingStreamRef.current = canvasStream;
 
+      // Mix the selected sound into the camera recording itself, not just the editor preview.
+      if (selectedMusic?.url) {
+        try {
+          const musicAudio = new Audio();
+          musicAudio.crossOrigin = "anonymous";
+          musicAudio.src = selectedMusic.url;
+          musicAudio.preload = "auto";
+          musicAudio.loop = false;
+          const audioContext = new AudioContext();
+          const source = audioContext.createMediaElementSource(musicAudio);
+          const destination = audioContext.createMediaStreamDestination();
+          source.connect(destination);
+          // Also play the selected sound through the device speakers/headphones.
+          source.connect(audioContext.destination);
+          const audioTrack = destination.stream.getAudioTracks()[0];
+          if (audioTrack) canvasStream.addTrack(audioTrack);
+          musicAudioRef.current = musicAudio;
+          musicContextRef.current = audioContext;
+          await audioContext.resume();
+          await musicAudio.play();
+        } catch (musicError) {
+          console.warn("[CameraRecorder] selected sound could not be mixed into recording", musicError);
+          musicAudioRef.current?.pause();
+          musicAudioRef.current = null;
+          if (musicContextRef.current) {
+            await musicContextRef.current.close().catch(() => {});
+            musicContextRef.current = null;
+          }
+          toast.error("Le son n'a pas pu démarrer. Vérifie le son sélectionné et réessaie.");
+        }
+      }
+
       const recorder = mime
         ? new MediaRecorder(canvasStream, { mimeType: mime })
         : new MediaRecorder(canvasStream);
@@ -349,6 +383,12 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
         stopTracks(recordingStreamRef.current);
         recordingStreamRef.current = null;
         recordingCanvasRef.current = null;
+        musicAudioRef.current?.pause();
+        musicAudioRef.current = null;
+        if (musicContextRef.current) {
+          void musicContextRef.current.close().catch(() => {});
+          musicContextRef.current = null;
+        }
         recorderRef.current = null;
         activeRecordingStartedAtRef.current = 0;
 
@@ -402,6 +442,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
     accumulatedRecordingMsRef.current += Math.max(0, performance.now() - activeRecordingStartedAtRef.current);
     activeRecordingStartedAtRef.current = 0;
     recorder.pause();
+    musicAudioRef.current?.pause();
     clearLimitTimeout();
     setPaused(true);
   };
@@ -417,6 +458,10 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
     }
 
     recorder.resume();
+    if (musicAudioRef.current) {
+      void musicContextRef.current?.resume().catch(() => {});
+      void musicAudioRef.current.play().catch((error) => console.warn("[CameraRecorder] sound resume failed", error));
+    }
     activeRecordingStartedAtRef.current = performance.now();
     clearLimitTimeout();
     limitTimeoutRef.current = window.setTimeout(() => {
