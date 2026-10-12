@@ -18,7 +18,9 @@ export default function AudioDetail() {
     { videoId: videoId! },
     { enabled: !!videoId }
   );
-  const soundUrl = video?.music?.audioUrl || video?.musicUrl || null;
+  // Les anciennes vidéos contiennent leur son directement dans le fichier vidéo.
+  // On réutilise donc cette URL comme source audio de secours.
+  const soundUrl = video?.music?.audioUrl || video?.musicUrl || video?.videoUrl || null;
   const soundName = video?.music?.title || video?.musicName || `Son original - ${video?.user?.name || "Artiste"}`;
 
   // Le serveur filtre par l’URL audio persistée, comme la page d’un son TikTok.

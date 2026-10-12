@@ -76,7 +76,8 @@ export const musicRouter = router({
     .input(z.object({ videoId: z.number().int().positive(), limit: z.number().int().min(1).max(50).default(30), offset: z.number().int().min(0).default(0) }))
     .query(async ({ input }) => {
       const sourceVideo = await getVideoById(input.videoId);
-      if (!sourceVideo?.musicUrl) return [];
+      const soundUrl = sourceVideo?.musicUrl || sourceVideo?.videoUrl;
+      if (!soundUrl) return [];
 
       return db
         .select({
@@ -97,7 +98,7 @@ export const musicRouter = router({
         .from(videos)
         .leftJoin(users, eq(videos.userId, users.id))
         .where(and(
-          eq(videos.musicUrl, sourceVideo.musicUrl),
+          sql`COALESCE(${videos.musicUrl}, ${videos.videoUrl}) = ${soundUrl}`,
           sql`${videos.visibility} = 'public'`,
           sql`${videos.videoUrl} IS NOT NULL`,
         ))
