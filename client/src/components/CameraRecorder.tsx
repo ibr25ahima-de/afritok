@@ -354,17 +354,24 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
           musicAudio.src = selectedMusic.url;
           musicAudio.preload = "auto";
           musicAudio.loop = false;
-          const audioContext = new AudioContext();
+          // Use a consistent 48 kHz mix rate for video recording and gently
+          // limit peaks before MediaRecorder encodes the audio track.
+          const audioContext = new AudioContext({ sampleRate: 48000 });
           const source = audioContext.createMediaElementSource(musicAudio);
           const gain = audioContext.createGain();
-          // Leave headroom so loud source tracks do not clip and sound crackly
-          // after being encoded together with the video.
-          gain.gain.value = 0.7;
+          gain.gain.value = 0.65;
+          const compressor = audioContext.createDynamicsCompressor();
+          compressor.threshold.value = -8;
+          compressor.knee.value = 6;
+          compressor.ratio.value = 12;
+          compressor.attack.value = 0.003;
+          compressor.release.value = 0.25;
           const destination = audioContext.createMediaStreamDestination();
           source.connect(gain);
-          gain.connect(destination);
-          // Monitor the same level that is sent to the recording.
-          gain.connect(audioContext.destination);
+          gain.connect(compressor);
+          compressor.connect(destination);
+          // Monitor the same processed audio that is sent to the recording.
+          compressor.connect(audioContext.destination);
           const audioTrack = destination.stream.getAudioTracks()[0];
           if (audioTrack) recordingStream.addTrack(audioTrack);
           musicAudioRef.current = musicAudio;
