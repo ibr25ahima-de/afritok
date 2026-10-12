@@ -24,6 +24,14 @@ type Overlay = {
   start: number; end: number; kind: "text" | "sticker" | "subtitle";
 };
 
+function recordedVideoExtension(mimeType: string): string {
+  const mime = mimeType.toLowerCase().split(";")[0].trim();
+  if (mime === "video/mp4" || mime === "video/quicktime") return ".mp4";
+  if (mime === "video/webm") return ".webm";
+  if (mime === "video/x-m4v") return ".m4v";
+  return ".mp4";
+}
+
 const QUICK_FILTERS: { id: string; name: string; cssFilter: string }[] = [
   { id: "none", name: "Normal", cssFilter: "none" },
   { id: "smooth", name: "Smooth", cssFilter: "brightness(1.05) blur(.5px)" },
@@ -464,7 +472,8 @@ export default function Upload() {
 
       if (blob.size < 1024) throw new Error("Export vide vide");
 
-      setFile(new File([blob], "afritok-montage.webm", { type: blob.type.toLowerCase().startsWith("video/webm") ? "video/webm" : (blob.type || "video/webm") }));
+      const mimeType = blob.type || "video/mp4";
+      setFile(new File([blob], `afritok-montage${recordedVideoExtension(mimeType)}`, { type: mimeType }));
       toast.success("Montage enregistré");
       return true;
     } catch (error) {
@@ -482,7 +491,7 @@ export default function Upload() {
   };
 
   if (!isAuthenticated) return <div className="h-screen bg-black flex items-center justify-center text-white">Connexion requise</div>;
-  if (step === "capture") return <><CameraRecorder onVideoRecorded={(blob, recordedDuration) => { if (blob.size < 1024) return toast.error("La vidéo enregistrée est vide. Réessaie."); const recordedFile = new File([blob], "video.webm", { type: blob.type.toLowerCase().startsWith("video/webm") ? "video/webm" : (blob.type || "video/webm") }); setFile(recordedFile); setStep("edit"); toast.success(`Vidéo prête pour le montage · ${recordedDuration}s`); }} onPhotoTaken={(blob) => { setFile(new File([blob], "photo.jpg", { type: "image/jpeg" })); setStep("edit"); }} onClose={() => navigate("/feed")} onOpenMusic={() => setShowAudio(true)} selectedMusic={selectedMusic} />{showAudio && <AudioSelector onClose={() => setShowAudio(false)} onSelectAudio={(url, name, id) => { setSelectedMusic({ url, name, id }); setShowAudio(false); }} />}</>;
+  if (step === "capture") return <><CameraRecorder onVideoRecorded={(blob, recordedDuration) => { if (blob.size < 1024) return toast.error("La vidéo enregistrée est vide. Réessaie."); const mimeType = blob.type || "video/mp4"; const recordedFile = new File([blob], `video${recordedVideoExtension(mimeType)}`, { type: mimeType }); setFile(recordedFile); setStep("edit"); toast.success(`Vidéo prête pour le montage · ${recordedDuration}s`); }} onPhotoTaken={(blob) => { setFile(new File([blob], "photo.jpg", { type: "image/jpeg" })); setStep("edit"); }} onClose={() => navigate("/feed")} onOpenMusic={() => setShowAudio(true)} selectedMusic={selectedMusic} />{showAudio && <AudioSelector onClose={() => setShowAudio(false)} onSelectAudio={(url, name, id) => { setSelectedMusic({ url, name, id }); setShowAudio(false); }} />}</>;
   if (step === "edit") {
     const isImage = isImageFile(file);
     const selectedOverlay = overlays.find((item) => item.id === selectedOverlayId) || null;
