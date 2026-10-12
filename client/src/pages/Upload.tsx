@@ -464,7 +464,7 @@ export default function Upload() {
 
       if (blob.size < 1024) throw new Error("Export vide vide");
 
-      setFile(new File([blob], "afritok-montage.webm", { type: blob.type || "video/webm" }));
+      setFile(new File([blob], "afritok-montage.webm", { type: blob.type.toLowerCase().startsWith("video/webm") ? "video/webm" : (blob.type || "video/webm") }));
       toast.success("Montage enregistré");
       return true;
     } catch (error) {
@@ -482,7 +482,7 @@ export default function Upload() {
   };
 
   if (!isAuthenticated) return <div className="h-screen bg-black flex items-center justify-center text-white">Connexion requise</div>;
-  if (step === "capture") return <><CameraRecorder onVideoRecorded={(blob, recordedDuration) => { if (blob.size < 1024) return toast.error("La vidéo enregistrée est vide. Réessaie."); const recordedFile = new File([blob], "video.webm", { type: blob.type || "video/webm" }); setFile(recordedFile); setStep("edit"); toast.success(`Vidéo prête pour le montage · ${recordedDuration}s`); }} onPhotoTaken={(blob) => { setFile(new File([blob], "photo.jpg", { type: "image/jpeg" })); setStep("edit"); }} onClose={() => navigate("/feed")} onOpenMusic={() => setShowAudio(true)} selectedMusic={selectedMusic} />{showAudio && <AudioSelector onClose={() => setShowAudio(false)} onSelectAudio={(url, name, id) => { setSelectedMusic({ url, name, id }); setShowAudio(false); }} />}</>;
+  if (step === "capture") return <><CameraRecorder onVideoRecorded={(blob, recordedDuration) => { if (blob.size < 1024) return toast.error("La vidéo enregistrée est vide. Réessaie."); const recordedFile = new File([blob], "video.webm", { type: blob.type.toLowerCase().startsWith("video/webm") ? "video/webm" : (blob.type || "video/webm") }); setFile(recordedFile); setStep("edit"); toast.success(`Vidéo prête pour le montage · ${recordedDuration}s`); }} onPhotoTaken={(blob) => { setFile(new File([blob], "photo.jpg", { type: "image/jpeg" })); setStep("edit"); }} onClose={() => navigate("/feed")} onOpenMusic={() => setShowAudio(true)} selectedMusic={selectedMusic} />{showAudio && <AudioSelector onClose={() => setShowAudio(false)} onSelectAudio={(url, name, id) => { setSelectedMusic({ url, name, id }); setShowAudio(false); }} />}</>;
   if (step === "edit") {
     const isImage = isImageFile(file);
     const selectedOverlay = overlays.find((item) => item.id === selectedOverlayId) || null;
