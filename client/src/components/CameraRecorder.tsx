@@ -346,48 +346,22 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       const recordingStream = sourceStream.clone();
       recordingStreamRef.current = recordingStream;
 
-      // Mix the selected sound into the camera recording itself, not just the editor preview.
+      // Play the selected music for the creator while recording, but do not
+      // mix it into the live MediaRecorder stream. The editor adds the selected
+      // music to the video afterward, avoiding real-time audio mixing artifacts
+      // on Android and iOS.
       if (selectedMusic?.url) {
         try {
-          const musicAudio = new Audio();
-          musicAudio.crossOrigin = "anonymous";
-          musicAudio.src = selectedMusic.url;
+          const musicAudio = new Audio(selectedMusic.url);
           musicAudio.preload = "auto";
           musicAudio.loop = false;
-          // Use a consistent 48 kHz mix rate for video recording and gently
-          // limit peaks before MediaRecorder encodes the audio track.
-          const audioContext = new AudioContext({ sampleRate: 48000 });
-          const source = audioContext.createMediaElementSource(musicAudio);
-          const gain = audioContext.createGain();
-          gain.gain.value = 0.65;
-          const compressor = audioContext.createDynamicsCompressor();
-          compressor.threshold.value = -8;
-          compressor.knee.value = 6;
-          compressor.ratio.value = 12;
-          compressor.attack.value = 0.003;
-          compressor.release.value = 0.25;
-          const destination = audioContext.createMediaStreamDestination();
-          source.connect(gain);
-          gain.connect(compressor);
-          compressor.connect(destination);
-          // Monitor the same processed audio that is sent to the recording.
-          compressor.connect(audioContext.destination);
-          // Keep the selected music in the live monitor only. The editor mixes
-          // selectedMusic into the recorded video preview/export; embedding it here too
-          // makes the editor play the same song twice and causes distorted/crackling audio.
           musicAudioRef.current = musicAudio;
-          musicContextRef.current = audioContext;
-          await audioContext.resume();
           await musicAudio.play();
         } catch (musicError) {
-          console.warn("[CameraRecorder] selected sound could not be mixed into recording", musicError);
+          console.warn("[CameraRecorder] selected sound preview could not start", musicError);
           musicAudioRef.current?.pause();
           musicAudioRef.current = null;
-          if (musicContextRef.current) {
-            await musicContextRef.current.close().catch(() => {});
-            musicContextRef.current = null;
-          }
-          toast.error("Le son n'a pas pu démarrer. Vérifie le son sélectionné et réessaie.");
+          toast.error("La musique n'a pas pu démarrer. Vérifie le son sélectionné et réessaie.");
         }
       }
 
