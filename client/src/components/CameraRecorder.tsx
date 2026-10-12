@@ -282,10 +282,13 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       return;
     }
 
+    // Prefer a container that explicitly includes Opus audio. Some mobile browsers
+    // accept "video/webm;codecs=vp9" but then omit the selected music track.
     const mime = [
-      "video/webm;codecs=vp9",
-      "video/webm;codecs=vp8",
+      "video/webm;codecs=vp9,opus",
+      "video/webm;codecs=vp8,opus",
       "video/webm",
+      "video/mp4",
     ].find((type) => MediaRecorder.isTypeSupported(type));
 
     try {
