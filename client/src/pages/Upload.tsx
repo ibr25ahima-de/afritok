@@ -377,6 +377,11 @@ export default function Upload() {
       video.currentTime = start;
       await waitForSeek(video);
 
+      // Mobile browsers can return a frozen captureStream video track when
+      // captureStream() is called before the source video begins playing.
+      // Start playback first, then capture its live track for the export.
+      await video.play();
+
       let canvas: HTMLCanvasElement | null = null;
       let ctx: CanvasRenderingContext2D | null = null;
       if (needsCanvasRender) {
@@ -504,8 +509,6 @@ export default function Upload() {
       drawing = true;
       draw();
 
-      await video.play();
-
       await new Promise<void>((resolve, reject) => {
         const timeout = window.setTimeout(() => reject(new Error("Export timeout")), Math.max(15000, (end - start) * 4000));
         const check = () => {
@@ -537,6 +540,7 @@ export default function Upload() {
       toast.error("Impossible d'enregistrer le montage sur cet appareil");
       return false;
     } finally {
+      video.pause();
       stream?.getTracks().forEach((track) => track.stop());
       audio?.pause();
       audio?.removeAttribute("src");
