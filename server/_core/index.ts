@@ -33,6 +33,7 @@ import {
   ALLOWED_VIDEO_TYPES,
   ALLOWED_MEDIA_TYPES,
   hasValidMediaSignature,
+  detectVideoMimeType,
 } from "../security-upload";
 
 const avatarUpload = multer({
@@ -128,7 +129,10 @@ async function startServer() {
       const user = await getAuthenticatedUser(req, res);
       if (!user) return res.status(401).json({ error: "Utilisateur non authentifié." });
       if (!req.file) return res.status(400).json({ error: "Aucun fichier fourni." });
-      const mimeType = req.file.mimetype.toLowerCase().split(";")[0].trim();
+      const claimedMimeType = req.file.mimetype.toLowerCase().split(";")[0].trim();
+      // Mobile browsers can label MP4/WebM recordings inconsistently. Detect the
+      // actual supported video container from its signature before validating it.
+      const mimeType = detectVideoMimeType(req.file.buffer, claimedMimeType) || claimedMimeType;
       if (!ALLOWED_MEDIA_TYPES.has(mimeType) || !hasValidMediaSignature(req.file.buffer, mimeType)) {
         return res.status(400).json({ error: "Format média non autorisé ou fichier invalide." });
       }
