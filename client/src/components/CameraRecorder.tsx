@@ -373,7 +373,8 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
           drawFrameRef.current = null;
         }
 
-        const actualMime = recorder.mimeType || mime || "video/webm";
+        const iosSafari = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+        const actualMime = recorder.mimeType || mime || (iosSafari ? "video/mp4" : "video/webm");
         const blob = new Blob(chunksRef.current, { type: actualMime });
         const duration = Math.max(1, Math.min(
           LIMITS[durationMode] || 600,
