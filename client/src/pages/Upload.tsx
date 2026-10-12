@@ -318,8 +318,20 @@ export default function Upload() {
       toast.error("La plage de montage est invalide");
       return false;
     }
+    const needsCanvasRender = !(
+      start <= 0.05 &&
+      (duration <= 0 || end >= duration - 0.05) &&
+      cuts.length === 0 &&
+      overlays.length === 0 &&
+      !editFilter &&
+      !activeEffect
+    );
 
-    if (typeof HTMLCanvasElement === "undefined" || !HTMLCanvasElement.prototype.captureStream || typeof MediaRecorder === "undefined") {
+    if (
+      typeof MediaRecorder === "undefined" ||
+      (needsCanvasRender && (typeof HTMLCanvasElement === "undefined" || !HTMLCanvasElement.prototype.captureStream)) ||
+      (!needsCanvasRender && typeof (video as HTMLVideoElement & { captureStream?: () => MediaStream }).captureStream !== "function")
+    ) {
       toast.error("L'enregistrement vidéo n'est pas compatible avec ce navigateur");
       return false;
     }
@@ -349,30 +361,51 @@ export default function Upload() {
       video.currentTime = start;
       await waitForSeek(video);
 
-      const sourceWidth = video.videoWidth || 720;
-      const sourceHeight = video.videoHeight || 1280;
-      const scale = Math.min(1, 1080 / Math.max(sourceWidth, sourceHeight));
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.max(2, Math.round(sourceWidth * scale));
-      canvas.height = Math.max(2, Math.round(sourceHeight * scale));
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("Canvas indisponible");
-      ctx.imageSmoothingEnabled = true;
-
-      stream = canvas.captureStream(30);
+      let canvas: HTMLCanvasElement | null = null;
+      let ctx: CanvasRenderingContext2D | null = null;
+      if (needsCanvasRender) {
+        const sourceWidth = video.videoWidth || 720;
+        const sourceHeight = video.videoHeight || 1280;
+        const scale = Math.min(1, 1080 / Math.max(sourceWidth, sourceHeight));
+        canvas = document.createElement("canvas");
+        canvas.width = Math.max(2, Math.round(sourceWidth * scale));
+        canvas.height = Math.max(2, Math.round(sourceHeight * scale));
+        ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("Canvas indisponible");
+        ctx.imageSmoothingEnabled = true;
+        stream = canvas.captureStream(30);
+      } else {
+        // A canvas capture can keep only its first frame on some mobile browsers.
+        // Preserve the original video track when the only requested edit is music.
+        stream = (video as HTMLVideoElement & { captureStream: () => MediaStream }).captureStream();
+        stream.getAudioTracks().forEach(track => stream?.removeTrack(track));
+      }
 
       if (selectedMusic?.url) {
         try {
           audio = new Audio(selectedMusic.url);
           audio.crossOrigin = "anonymous";
           audio.preload = "auto";
-          audio.currentTime = start;
           audioContext = new AudioContext();
-          const source = audioContext.createMediaElementSource(audio);
           const destination = audioContext.createMediaStreamDestination();
-          source.connect(destination);
+          const videoSource = audioContext.createMediaElementSource(video);
+          videoSource.connect(destination);
+          const musicSource = audioContext.createMediaElementSource(audio);
+          musicSource.connect(destination);
+          await new Promise<void>((resolve, reject) => {
+            if (audio.readyState >= HTMLMediaElement.HAVE_METADATA) return resolve();
+            const onReady = () => { cleanup(); resolve(); };
+            const onError = () => { cleanup(); reject(new Error("Musique indisponible")); };
+            const cleanup = () => {
+              audio?.removeEventListener("loadedmetadata", onReady);
+              audio?.removeEventListener("error", onError);
+            };
+            audio.addEventListener("loadedmetadata", onReady, { once: true });
+            audio.addEventListener("error", onError, { once: true });
+          });
+          audio.currentTime = Math.min(start, Number.isFinite(audio.duration) ? audio.duration : start);
           const track = destination.stream.getAudioTracks()[0];
-          if (track) stream.addTrack(track);
+          if (track && stream) stream.addTrack(track);
           await audioContext.resume();
           await audio.play();
         } catch (audioError) {
@@ -411,7 +444,7 @@ export default function Upload() {
       });
 
       const activeCuts = mergeCuts(cuts.filter((range) => range.end > start && range.start < end));
-      let drawing = true;
+      let drawing = needsCanvasRender;
       const draw = () => {
         if (!drawing) return;
         if (video.currentTime >= end || video.ended) return;
@@ -423,6 +456,7 @@ export default function Upload() {
           return;
         }
 
+        if (!ctx || !canvas) return;
         ctx.filter = montageFilter(editFilter?.cssFilter, activeEffect);
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         ctx.filter = "none";
