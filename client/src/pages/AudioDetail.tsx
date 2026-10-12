@@ -14,14 +14,14 @@ export default function AudioDetail() {
   const [match, params] = useRoute("/audio/:videoId");
   const [, navigate] = useLocation();
   const videoId = params?.videoId ? parseInt(params.videoId) : null;
-  const soundUrl = video?.music?.audioUrl || video?.musicUrl || null;
-  const soundName = video?.music?.title || video?.musicName || `Son original - ${video?.user?.name || "Artiste"}`;
 
   // On récupère les détails de la vidéo pour avoir les infos du son
   const { data: video, isLoading } = trpc.video.getById.useQuery(
     { id: videoId! },
     { enabled: !!videoId }
   );
+  const soundUrl = video?.music?.audioUrl || video?.musicUrl || null;
+  const soundName = video?.music?.title || video?.musicName || `Son original - ${video?.user?.name || "Artiste"}`;
 
   // On récupère d'autres vidéos qui pourraient utiliser le même "style" ou son
   const { data: relatedVideos } = trpc.feed.getFeed.useQuery({
@@ -69,7 +69,7 @@ export default function AudioDetail() {
         </div>
 
         <div className="flex-1">
-          <h1 className="text-xl font-bold mb-1">Son original - {video?.user?.name || "Artiste"}</h1>
+          <h1 className="text-xl font-bold mb-1">{soundName}</h1>
           <p className="text-gray-400 text-sm mb-3">Son utilisé dans cette vidéo</p>
           <button
             onClick={() => {
