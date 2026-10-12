@@ -109,7 +109,7 @@ async function startServer() {
       const user = await getAuthenticatedUser(req, res);
       if (!user) return res.status(401).json({ error: "Utilisateur non authentifié." });
       if (!req.file) return res.status(400).json({ error: "Aucun fichier fourni." });
-      const mimeType = req.file.mimetype.toLowerCase();
+      const mimeType = req.file.mimetype.toLowerCase().split(";")[0].trim();
       if (!ALLOWED_AVATAR_TYPES.has(mimeType) || !hasValidMediaSignature(req.file.buffer, mimeType)) {
         return res.status(400).json({ error: "Format d'image non autorisé ou fichier invalide." });
       }
@@ -128,7 +128,7 @@ async function startServer() {
       const user = await getAuthenticatedUser(req, res);
       if (!user) return res.status(401).json({ error: "Utilisateur non authentifié." });
       if (!req.file) return res.status(400).json({ error: "Aucun fichier fourni." });
-      const mimeType = req.file.mimetype.toLowerCase();
+      const mimeType = req.file.mimetype.toLowerCase().split(";")[0].trim();
       if (!ALLOWED_MEDIA_TYPES.has(mimeType) || !hasValidMediaSignature(req.file.buffer, mimeType)) {
         return res.status(400).json({ error: "Format média non autorisé ou fichier invalide." });
       }
@@ -148,7 +148,7 @@ async function startServer() {
       if (!user) return res.status(401).json({ error: "Utilisateur non authentifié." });
       if (user.role !== "admin") return res.status(403).json({ error: "Accès refusé." });
       if (!req.file) return res.status(400).json({ error: "Aucun fichier fourni." });
-      const mimeType = req.file.mimetype.toLowerCase();
+      const mimeType = req.file.mimetype.toLowerCase().split(";")[0].trim();
       if (!(ALLOWED_AVATAR_TYPES.has(mimeType) || ALLOWED_VIDEO_TYPES.has(mimeType)) || !hasValidMediaSignature(req.file.buffer, mimeType)) {
         return res.status(400).json({ error: "Format de média non autorisé ou fichier invalide." });
       }
