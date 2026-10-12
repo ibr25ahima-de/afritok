@@ -372,8 +372,9 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
           compressor.connect(destination);
           // Monitor the same processed audio that is sent to the recording.
           compressor.connect(audioContext.destination);
-          const audioTrack = destination.stream.getAudioTracks()[0];
-          if (audioTrack) recordingStream.addTrack(audioTrack);
+          // Keep the selected music in the live monitor only. The editor mixes
+          // selectedMusic into the recorded video preview/export; embedding it here too
+          // makes the editor play the same song twice and causes distorted/crackling audio.
           musicAudioRef.current = musicAudio;
           musicContextRef.current = audioContext;
           await audioContext.resume();
