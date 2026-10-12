@@ -89,6 +89,7 @@ export const videos = pgTable("videos", {
   musicId: integer("musicId"),
   musicUrl: text("musicUrl"),
   musicName: text("musicName"),
+  mediaType: varchar("mediaType", { length: 20 }).default("video").notNull(),
   isPublic: boolean("isPublic").default(true),
   visibility: varchar("visibility", { length: 20 }).default("public").notNull(),
   language: varchar("language", { length: 20 }).default("Français").notNull(),
