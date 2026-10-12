@@ -355,7 +355,7 @@ export default function Upload() {
     setIsExporting(true);
     let stream: MediaStream | null = null;
     let audioContext: AudioContext | null = null;
-    let audio: HTMLAudioElement | null = null;
+    let musicSource: AudioBufferSourceNode | null = null;
 
     try {
       video.pause();
@@ -403,47 +403,26 @@ export default function Upload() {
       }
 
       if (selectedMusic?.url) {
-        try {
-          // The camera recorder captures video without microphone audio, so
-          // export only the chosen music track. Routing the muted preview video
-          // through AudioContext can produce silence or unstable audio on mobile.
-          audio = new Audio();
-          audio.crossOrigin = "anonymous";
-          audio.preload = "auto";
-          audio.loop = true;
-          audio.src = selectedMusic.url;
-          audioContext = new AudioContext({ sampleRate: 48000 });
-          const destination = audioContext.createMediaStreamDestination();
-          const musicSource = audioContext.createMediaElementSource(audio);
-          const musicGain = audioContext.createGain();
-          musicGain.gain.value = 1;
-          musicSource.connect(musicGain);
-          musicGain.connect(destination);
-          await new Promise<void>((resolve, reject) => {
-            if (audio.readyState >= HTMLMediaElement.HAVE_METADATA) return resolve();
-            const onReady = () => { cleanup(); resolve(); };
-            const onError = () => { cleanup(); reject(new Error("Musique indisponible")); };
-            const cleanup = () => {
-              audio?.removeEventListener("loadedmetadata", onReady);
-              audio?.removeEventListener("error", onError);
-            };
-            audio.addEventListener("loadedmetadata", onReady, { once: true });
-            audio.addEventListener("error", onError, { once: true });
-          });
-          audio.currentTime = Math.min(start, Number.isFinite(audio.duration) ? audio.duration : start);
-          const track = destination.stream.getAudioTracks()[0];
-          if (track && stream) stream.addTrack(track);
-          await audioContext.resume();
-          await audio.play();
-        } catch (audioError) {
-          console.warn("[Upload] music export unavailable", audioError);
-          audio?.pause();
-          audio = null;
-          if (audioContext) {
-            await audioContext.close().catch(() => {});
-            audioContext = null;
-          }
-        }
+        // Decode once so network buffering cannot interrupt the recorded soundtrack.
+        // Abort publication rather than silently exporting a video without its music.
+        audioContext = new AudioContext();
+        const response = await fetch(selectedMusic.url);
+        if (!response.ok) throw new Error("Musique indisponible");
+        const musicBuffer = await audioContext.decodeAudioData(await response.arrayBuffer());
+        if (!musicBuffer.duration) throw new Error("Musique vide");
+        const destination = audioContext.createMediaStreamDestination();
+        const gain = audioContext.createGain();
+        gain.gain.value = 1;
+        gain.connect(destination);
+        musicSource = audioContext.createBufferSource();
+        musicSource.buffer = musicBuffer;
+        musicSource.loop = true;
+        musicSource.connect(gain);
+        const musicTrack = destination.stream.getAudioTracks()[0];
+        if (!musicTrack || !stream) throw new Error("Piste musicale indisponible");
+        stream.addTrack(musicTrack);
+        await audioContext.resume();
+        if (audioContext.state !== "running") throw new Error("AudioContext suspendu");
       }
 
       const mimeCandidates = [
@@ -455,9 +434,9 @@ export default function Upload() {
         try { return typeof MediaRecorder.isTypeSupported !== "function" || MediaRecorder.isTypeSupported(type); }
         catch { return false; }
       });
-      const recorder = supportedMime
-        ? new MediaRecorder(stream, { mimeType: supportedMime })
-        : new MediaRecorder(stream);
+      const recorderOptions: MediaRecorderOptions = { audioBitsPerSecond: 192000 };
+      if (supportedMime) recorderOptions.mimeType = supportedMime;
+      const recorder = new MediaRecorder(stream, recorderOptions);
 
       const chunks: Blob[] = [];
       let recorderError: unknown = null;
@@ -506,6 +485,10 @@ export default function Upload() {
       };
 
       recorder.start(250);
+      if (musicSource) {
+        const musicDuration = musicSource.buffer?.duration || 1;
+        musicSource.start(0, start % musicDuration);
+      }
       drawing = true;
       draw();
 
@@ -542,9 +525,7 @@ export default function Upload() {
     } finally {
       video.pause();
       stream?.getTracks().forEach((track) => track.stop());
-      audio?.pause();
-      audio?.removeAttribute("src");
-      audio?.load();
+      try { musicSource?.stop(); } catch { /* already stopped */ }
       if (audioContext) await audioContext.close().catch(() => {});
       setIsExporting(false);
     }
