@@ -100,9 +100,16 @@ export default function Feed() {
         player.muted = muted;
         player.play()?.catch(() => console.log("Autoplay en attente d'interaction"));
       } else {
+        // Pause off-screen videos without clearing their src. Setting src to an
+        // empty string resolves to the current page URL in browsers, and React
+        // may not reapply an unchanged src prop when the video becomes visible
+        // again. Keeping the original source lets the player resume reliably.
         player.pause();
-        if (Math.abs(index - currentVideoIndex) > 2) { player.src = ""; player.load(); }
-        else if (player.src === "" && video.videoUrl) { player.src = video.videoUrl; player.load(); }
+        if (Math.abs(index - currentVideoIndex) > 2) {
+          player.preload = "metadata";
+        } else {
+          player.preload = "auto";
+        }
       }
     });
     const nextPlayer = videoRefs.current[videos[currentVideoIndex + 1]?.id];
