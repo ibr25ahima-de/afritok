@@ -39,7 +39,7 @@ export function hasValidMediaSignature(buffer: Buffer, mimeType: string): boolea
  * Detect supported video containers from their file signature instead of
  * trusting the MIME type supplied by a mobile browser.
  */
-export function detectVideoMimeType(buffer: Buffer, claimedMimeType: string): string | null {
+export function detectVideoMimeType(buffer: Buffer): string | null {
   if (!Buffer.isBuffer(buffer) || buffer.length < 12) return null;
 
   // WebM/Matroska EBML header.
