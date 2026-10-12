@@ -301,9 +301,39 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
 
       recordingCanvasRef.current = canvas;
 
-      if (arSource && arSource.width === canvas.width && arSource.height === canvas.height) {
-        context.drawImage(arSource, 0, 0);
-      }
+      // Keep the recording canvas updated for the entire recording.
+      // A single draw here only captures one still frame and can produce a
+      // frozen/black video after publication.
+      const drawRecordingFrame = () => {
+        const targetCanvas = recordingCanvasRef.current;
+        const targetVideo = videoRef.current;
+        if (!targetCanvas || !targetVideo) {
+          drawFrameRef.current = null;
+          return;
+        }
+
+        const targetContext = targetCanvas.getContext("2d");
+        const liveArCanvas = arCanvasRef.current;
+        try {
+          if (
+            targetContext &&
+            liveArCanvas &&
+            liveArCanvas.width > 0 &&
+            liveArCanvas.height > 0 &&
+            liveArCanvas.width === targetCanvas.width &&
+            liveArCanvas.height === targetCanvas.height
+          ) {
+            targetContext.drawImage(liveArCanvas, 0, 0, targetCanvas.width, targetCanvas.height);
+          } else if (targetContext && targetVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+            targetContext.drawImage(targetVideo, 0, 0, targetCanvas.width, targetCanvas.height);
+          }
+        } catch (drawError) {
+          console.warn("[CameraRecorder] frame copy failed", drawError);
+        }
+
+        drawFrameRef.current = requestAnimationFrame(drawRecordingFrame);
+      };
+      drawRecordingFrame();
 
       const canvasStream = canvas.captureStream(30);
       recordingStreamRef.current = canvasStream;
