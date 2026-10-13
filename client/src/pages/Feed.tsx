@@ -100,12 +100,17 @@ export default function Feed() {
       if (!player) return;
       const soundtrack = audioRefs.current[video.id];
       if (index === currentVideoIndex) {
-        player.muted = muted;
+        // If the video has a separate musicUrl track, use that as the single
+        // audible source. Muting the video prevents embedded audio + soundtrack
+        // from playing together and sounding doubled or distorted.
+        player.muted = soundtrack ? true : muted;
         player.play()?.catch(() => console.log("Autoplay en attente d'interaction"));
         if (soundtrack) {
           soundtrack.muted = muted;
           soundtrack.volume = 1;
-          soundtrack.currentTime = player.currentTime || 0;
+          if (Math.abs(soundtrack.currentTime - (player.currentTime || 0)) > 0.75) {
+            try { soundtrack.currentTime = player.currentTime || 0; } catch { /* wait for audio metadata */ }
+          }
           if (!muted) soundtrack.play().catch(() => console.log("Lecture de la musique en attente d'interaction"));
           else soundtrack.pause();
         }
@@ -187,11 +192,15 @@ export default function Feed() {
                 muted={muted}
                 autoPlay={i === currentVideoIndex}
                 onPlaying={() => setLoadedVideos(prev => new Set(prev).add(video.id))}
-                onLoadedMetadata={e => { if (i === currentVideoIndex) { e.currentTarget.muted = muted; e.currentTarget.play().catch(() => {}); } }}
-                onLoadedData={e => { if (i === currentVideoIndex) { e.currentTarget.muted = muted; e.currentTarget.play().catch(() => {}); } }}
+                onLoadedMetadata={e => { if (i === currentVideoIndex) { e.currentTarget.muted = !!video.musicUrl || muted; e.currentTarget.play().catch(() => {}); } }}
+                onLoadedData={e => { if (i === currentVideoIndex) { e.currentTarget.muted = !!video.musicUrl || muted; e.currentTarget.play().catch(() => {}); } }}
                 onTimeUpdate={e => {
                   const soundtrack = audioRefs.current[video.id];
-                  if (soundtrack && Math.abs(soundtrack.currentTime - e.currentTarget.currentTime) > 0.25) soundtrack.currentTime = e.currentTarget.currentTime;
+                  // Avoid seeking the music repeatedly on tiny timing differences:
+                  // frequent currentTime writes can create clicks, skips and crackling.
+                  if (soundtrack && Math.abs(soundtrack.currentTime - e.currentTarget.currentTime) > 0.75) {
+                    try { soundtrack.currentTime = e.currentTarget.currentTime; } catch { /* wait for audio metadata */ }
+                  }
                 }}
                 onPlay={() => { const soundtrack = audioRefs.current[video.id]; if (soundtrack && !muted) soundtrack.play().catch(() => {}); }}
                 onPause={() => audioRefs.current[video.id]?.pause()}
@@ -199,7 +208,18 @@ export default function Feed() {
               {video.musicUrl && <audio ref={el => { audioRefs.current[video.id] = el; }} src={video.musicUrl} preload="auto" loop={false} />}
             </>)}
             <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60 pointer-events-none" />
-            <button onClick={() => setMuted(!muted)} className="absolute top-24 right-4 z-40 p-2 bg-black/30 rounded-full backdrop-blur-md">{muted ? <MuteIcon size={20} /> : <UnmuteIcon size={20} />}</button>
+            <button onClick={() => {
+              const nextMuted = !muted;
+              setMuted(nextMuted);
+              const soundtrack = audioRefs.current[video.id];
+              const player = videoRefs.current[video.id];
+              if (soundtrack) {
+                soundtrack.muted = nextMuted;
+                if (nextMuted) soundtrack.pause();
+                else soundtrack.play().catch(() => {});
+              }
+              if (player) player.muted = !!video.musicUrl || nextMuted;
+            }} className="absolute top-24 right-4 z-40 p-2 bg-black/30 rounded-full backdrop-blur-md">{muted ? <MuteIcon size={20} /> : <UnmuteIcon size={20} />}</button>
             <div className="absolute right-3 top-32 flex flex-col gap-5 z-40 items-center">
               <div className="relative mb-2"><div onClick={() => navigate(`/profile/${video.userId}`)} className="w-12 h-12 rounded-full border-2 border-amber-400 overflow-hidden bg-amber-900/20 cursor-pointer">{video.user?.avatarUrl ? <img src={video.user.avatarUrl} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><LionAvatar size={24} /></div>}</div><div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-amber-500 rounded-full p-0.5 text-black"><FollowPlusIcon size={12} /></div></div>
               <button onClick={() => handleLike(video)} className="flex flex-col items-center"><FlowerIcon active={likedVideos.has(video.id)} size={35} /><span className="text-xs font-bold mt-1">{counter.likes}</span></button>
