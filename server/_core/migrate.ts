@@ -296,6 +296,49 @@ async function createTables(pool: Pool) {
     await pool.query(`CREATE INDEX IF NOT EXISTS "directMessages_conversation_idx" ON "directMessages" ("conversationId");`);
     await pool.query(`CREATE INDEX IF NOT EXISTS "directMessages_sender_idx" ON "directMessages" ("senderId");`);
 
+    // Publicité : ces tables sont utilisées par advertising.getNextAdvertisement.
+    // IF NOT EXISTS préserve les campagnes et événements déjà enregistrés.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS advertising_campaigns (
+        id SERIAL PRIMARY KEY,
+        "advertiserId" INTEGER NOT NULL,
+        "advertiserName" VARCHAR(150) NOT NULL,
+        name VARCHAR(150) NOT NULL,
+        "adType" VARCHAR(20) NOT NULL,
+        "textContent" TEXT,
+        "imageUrl" TEXT,
+        "videoUrl" TEXT,
+        "destinationUrl" TEXT,
+        budget NUMERIC(18, 2) NOT NULL,
+        "spentAmount" NUMERIC(18, 2) NOT NULL DEFAULT 0,
+        currency VARCHAR(3) NOT NULL DEFAULT 'XOF',
+        "startDate" TIMESTAMP NOT NULL,
+        "endDate" TIMESTAMP NOT NULL,
+        status VARCHAR(30) NOT NULL DEFAULT 'draft',
+        "paymentReference" VARCHAR(150),
+        impressions INTEGER NOT NULL DEFAULT 0,
+        clicks INTEGER NOT NULL DEFAULT 0,
+        "targetCountry" VARCHAR(10),
+        "targetGender" VARCHAR(20),
+        "targetAgeMin" INTEGER,
+        "targetAgeMax" INTEGER,
+        "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+        "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS advertising_events (
+        id SERIAL PRIMARY KEY,
+        "campaignId" INTEGER NOT NULL,
+        "userId" INTEGER,
+        "eventType" VARCHAR(20) NOT NULL,
+        "chargedAmount" NUMERIC(18, 4) NOT NULL DEFAULT 0,
+        "eventReference" VARCHAR(150) UNIQUE,
+        "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+    `);
+    console.log("[Migrations] Advertising tables ready");
+
     console.log("✅ Database tables created successfully");
   } catch (error) {
     console.error("❌ Migration error details:", {
