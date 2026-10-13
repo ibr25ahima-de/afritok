@@ -35,7 +35,7 @@ class Logger {
       message: entry.message,
       timestamp: entry.timestamp.toISOString(),
       context: entry.context,
-    });
+    }, (_key, value) => value instanceof Error ? { name: value.name, message: value.message, stack: value.stack, cause: value.cause } : value);
   }
 
   debug(message: string, context?: Record<string, any>): void {
