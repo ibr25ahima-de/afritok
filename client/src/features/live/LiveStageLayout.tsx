@@ -2,10 +2,10 @@ import type { ReactNode } from "react";
 import type { LiveLayoutId } from "./live-layouts";
 
 type Participant = { userId: number; username: string; role: string; isMuted: boolean; isVideoOff: boolean; stageSlot?: number };
-type Props = { layout: LiveLayoutId; participants: Participant[]; maxParticipants: number; renderVideo: (participant: Participant) => ReactNode; centerParticipantId?: number | null };
+type Props = { layout: LiveLayoutId; participants: Participant[]; maxParticipants: number; renderVideo: (participant: Participant) => ReactNode; centerParticipantId?: number | null; onRequestStage?: () => void; canRequestStage?: boolean; requestPending?: boolean };
 const MAX_RENDERED_SLOTS = 100;
 
-export function LiveStageLayout({ layout, participants, maxParticipants, renderVideo, centerParticipantId }: Props) {
+export function LiveStageLayout({ layout, participants, maxParticipants, renderVideo, centerParticipantId, onRequestStage, canRequestStage = false, requestPending = false }: Props) {
   const guestCapacity = Math.max(1, Math.min(MAX_RENDERED_SLOTS - 1, Number(maxParticipants) || 1));
   const capacity = guestCapacity + 1;
   const stage = participants.filter((p) => p.role === "host" || p.role === "guest" || p.role === "admin");
@@ -16,7 +16,7 @@ export function LiveStageLayout({ layout, participants, maxParticipants, renderV
     if (slotIndex >= 0) slots[slotIndex] = participant;
   }
 
-  const emptySlot = (index: number, compact = false) => <div key={`empty-${index}`} className={`relative overflow-hidden rounded-xl border border-white/10 bg-gray-900/65 flex items-center justify-center text-center text-white/45 ${compact ? "min-h-12" : "min-h-16"}`}><div><div className="text-2xl font-light leading-none">+</div><div className="mt-0.5 text-[10px] font-semibold">Inviter</div></div></div>;
+  const emptySlot = (index: number, compact = false) => <button type="button" key={`empty-${index}`} disabled={!canRequestStage || requestPending} onClick={onRequestStage} aria-label={`Place ${index + 1} libre sur la scène${canRequestStage ? " : demander à monter" : ""}`} className={`relative overflow-hidden rounded-xl border border-white/20 bg-gray-900/75 flex flex-col items-center justify-center text-center text-white/70 ${compact ? "min-h-12" : "min-h-16"} ${canRequestStage && !requestPending ? "cursor-pointer hover:bg-gray-800/90" : "cursor-default"}`}><span className="text-xl font-light leading-none">+</span><span className="mt-0.5 text-[10px] font-semibold">Place {index + 1}</span><span className="text-[9px]">{requestPending && canRequestStage ? "Demande envoyée" : canRequestStage ? "Rejoindre" : "Libre"}</span></button>;
   const slot = (p: Participant | null, index: number, compact = false) => p ? <div key={`participant-${p.userId}`} className={`relative overflow-hidden rounded-xl border border-white/10 bg-gray-900/90 ${compact ? "min-h-12" : "min-h-16"}`}>{renderVideo(p)}<div className="absolute bottom-1 left-1 right-1 rounded-md bg-black/55 px-1.5 py-0.5 text-[9px] font-semibold truncate">{p.username}{p.role === "host" ? " · Hôte" : p.role === "admin" ? " · Admin" : ""}{p.isMuted ? " · Muet" : ""}</div></div> : emptySlot(index, compact);
 
   // Legacy LiveRoom sessions can still report the old spotlight state. For 20+ guest
