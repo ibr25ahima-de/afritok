@@ -31,10 +31,10 @@ export function LiveStageLayout({ layout, participants, maxParticipants, renderV
     const rightCount = splitLarge ? guestCapacity - leftCount : 0;
     const left = Array.from({ length: leftCount }, (_, i) => side[i] || null);
     const right = splitLarge ? Array.from({ length: rightCount }, (_, i) => side[leftCount + i] || null) : [];
-    return <div className={`absolute inset-0 p-1.5 grid ${splitLarge ? "grid-cols-[22%_56%_22%]" : "grid-cols-[0_78%_22%]"} gap-1.5 overflow-hidden bg-black/10`}>
+    return <div className={`absolute inset-0 p-1.5 grid ${splitLarge ? "grid-cols-[22%_56%_22%]" : "grid-cols-[0_70%_30%]"} gap-1.5 overflow-hidden bg-black/10`}>
       <div className={`grid gap-1.5 min-h-0 overflow-hidden ${splitLarge ? "grid-rows-[repeat(10,minmax(0,1fr))]" : "hidden"}`}>{left.map((p, i) => slot(p, i, true))}</div>
       <div className="relative min-h-0 overflow-hidden rounded-2xl border border-white/10 bg-gray-950/30">{center ? <div className="w-full h-full">{renderVideo(center)}</div> : emptySlot(-1)}</div>
-      <div className="grid gap-1.5 min-h-0 overflow-hidden grid-rows-[repeat(10,minmax(0,1fr))]">{(splitLarge ? right : left).map((p, i) => slot(p, i, true))}</div>
+      <div className="grid gap-1.5 min-h-0 overflow-hidden overflow-y-auto" style={{ gridTemplateRows: `repeat(${splitLarge ? rightCount : leftCount}, minmax(3.5rem, 1fr))` }}>{(splitLarge ? right : left).map((p, i) => slot(p, i, true))}</div>
     </div>;
   }
   if (layout === "grid") return <div className="absolute inset-0 p-2 grid grid-cols-2 md:grid-cols-3 gap-2 auto-rows-fr overflow-y-auto">{slots.map((p, i) => slot(p, i))}</div>;
