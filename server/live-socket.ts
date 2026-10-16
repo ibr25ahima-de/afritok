@@ -119,24 +119,25 @@ export function registerLiveSocket(io: Server) {
         io.to(`live:${payload.sessionId}`).emit("live:viewer-joined", { socketId: socket.id, userId, username: currentParticipant.username });
       }
       io.to(`live:${payload.sessionId}`).emit("live:participants", { participants: participantPayload(payload.sessionId) });
-      socket.emit("live:layout", { layout: session.layout, centerParticipantId: session.centerParticipantId || session.hostId });
+      socket.emit("live:layout", { layout: session.layout, centerParticipantId: session.centerParticipantId || session.hostId, leftGuestSlots: session.leftGuestSlots });
       if (session.hostId === userId || currentParticipant.role === "admin") socket.emit("live:stage-requests", { requests: stageRequests.listPending(payload.sessionId) });
       const ownRequest = stageRequests.listPending(payload.sessionId).find((r) => r.userId === userId);
       if (ownRequest) socket.emit("live:stage-request-state", { requestId: ownRequest.requestId, state: ownRequest.state, userId: ownRequest.userId });
     });
 
-    socket.on("live:layout", ({ sessionId, layout, centerParticipantId }) => {
+    socket.on("live:layout", ({ sessionId, layout, centerParticipantId, leftGuestSlots }) => {
       if (!allowEvent(socket.id, "live:layout")) return;
       const sender = socketUsers.get(socket.id);
       if (!sender || typeof sessionId !== "string" || sessionId.length > 128 || sender.sessionId !== sessionId || !LIVE_LAYOUTS.has(layout)) return;
       const session = manager.getSession(sessionId);
       if (!session || session.hostId !== sender.userId) return;
       session.layout = layout;
+      if (Number.isInteger(leftGuestSlots) && leftGuestSlots >= 0 && leftGuestSlots <= session.maxParticipants) session.leftGuestSlots = leftGuestSlots;
       if (centerParticipantId !== undefined) {
         const centerId = Number(centerParticipantId);
         if (Number.isSafeInteger(centerId) && centerId > 0) manager.setCenterParticipant(sessionId, centerId);
       }
-      io.to(`live:${sessionId}`).emit("live:layout", { layout: session.layout, centerParticipantId: session.centerParticipantId || session.hostId });
+      io.to(`live:${sessionId}`).emit("live:layout", { layout: session.layout, centerParticipantId: session.centerParticipantId || session.hostId, leftGuestSlots: session.leftGuestSlots });
     });
 
     socket.on("live:stage-request", ({ sessionId }) => {
