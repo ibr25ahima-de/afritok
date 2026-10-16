@@ -7,7 +7,7 @@ export type LiveState = 'pending' | 'starting' | 'live' | 'ending' | 'ended';
 export type LiveRole = 'host' | 'admin' | 'guest' | 'viewer';
 export type LiveLayout = 'spotlight' | 'split' | 'grid' | 'focus' | 'host-center';
 export interface LiveParticipant { userId: number; username: string; joinedAt: Date; role: LiveRole; isMuted: boolean; isVideoOff: boolean; peerId?: string; stageSlot?: number; }
-export interface LiveSession { sessionId: string; hostId: number; hostUsername: string; title: string; description: string; type: LiveType; layout: LiveLayout; centerParticipantId?: number; state: LiveState; participants: Map<number, LiveParticipant>; maxParticipants: number; viewerCount: number; startedAt: Date; endedAt?: Date; isPublic: boolean; thumbnail?: string; recordingUrl?: string; rewardId?: string; giftRevenue: number; }
+export interface LiveSession { sessionId: string; hostId: number; hostUsername: string; title: string; description: string; type: LiveType; layout: LiveLayout; centerParticipantId?: number; leftGuestSlots?: number; state: LiveState; participants: Map<number, LiveParticipant>; maxParticipants: number; viewerCount: number; startedAt: Date; endedAt?: Date; isPublic: boolean; thumbnail?: string; recordingUrl?: string; rewardId?: string; giftRevenue: number; }
 export class LiveSessionsManager {
   private sessions: Map<string, LiveSession> = new Map();
   private userSessions: Map<number, string> = new Map();
