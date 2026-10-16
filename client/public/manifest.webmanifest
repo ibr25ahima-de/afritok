@@ -1,0 +1,32 @@
+{
+  "id": "/",
+  "name": "BiYaloxi",
+  "short_name": "BiYaloxi",
+  "description": "BiYaloxi — Crée, partage, inspire et gagne. Plateforme africaine de vidéos courtes.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#090b0d",
+  "theme_color": "#090b0d",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/biyaloxi-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/biyaloxi-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/biyaloxi-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
