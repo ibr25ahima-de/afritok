@@ -30,6 +30,7 @@ export function LiveFloatingControls({ isHostOrGuest, isVideoOff, isMuted, onTog
   const startDrag = (event: PointerEvent<HTMLButtonElement>) => {
     dragging.current = true;
     pointerOffset.current = { x: event.clientX - position.x / 100 * window.innerWidth, y: event.clientY - position.y / 100 * window.innerHeight };
+    event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
   };
   const moveDrag = (event: PointerEvent<HTMLButtonElement>) => {
@@ -44,7 +45,7 @@ export function LiveFloatingControls({ isHostOrGuest, isVideoOff, isMuted, onTog
   };
 
   return (
-    <div className="absolute z-40 flex flex-col gap-2" style={{ left: `${position.x}%`, top: `${position.y}%` }}>
+    <div className="fixed z-[100] flex flex-col gap-2 pointer-events-auto" style={{ left: `${position.x}%`, top: `${position.y}%` }}>
       <button type="button" onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} aria-label="Déplacer les commandes du Live" className="mx-auto w-9 h-7 rounded-full bg-black/70 border border-white/15 flex items-center justify-center touch-none cursor-move">
         <Grip size={16} />
       </button>
