@@ -1,0 +1,33 @@
+name: Generate BiYaloxi PWA icons
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'client/public/biyaloxi-icon.svg'
+      - '.github/workflows/biyaloxi-icons.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  icons:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Generate Android install icons
+        run: |
+          python -m pip install cairosvg
+          python - <<'PY'
+          import cairosvg
+          for size in (192, 512):
+              cairosvg.svg2png(url='client/public/biyaloxi-icon.svg',write_to=f'client/public/biyaloxi-icon-{size}.png',output_width=size,output_height=size)
+          PY
+      - name: Commit icons
+        run: |
+          git add client/public/biyaloxi-icon-192.png client/public/biyaloxi-icon-512.png
+          if ! git diff --cached --quiet; then
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'Generate BiYaloxi install icons'
+            git push
+          fi
