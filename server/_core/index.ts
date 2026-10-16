@@ -77,7 +77,9 @@ async function startServer() {
 
   app.use(helmetConfig);
   app.use(checkSecurityHeaders);
-  app.use(createRateLimiter(15 * 60 * 1000, 300));
+  // Limit API traffic without blocking page loads or static assets. Live sessions
+  // legitimately poll several endpoints, so allow a larger shared API budget.
+  app.use("/api", createRateLimiter(15 * 60 * 1000, 1200));
   app.use(csrfProtection);
   app.use(securityLogger);
 
