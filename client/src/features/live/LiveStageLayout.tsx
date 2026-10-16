@@ -2,10 +2,10 @@ import type { ReactNode } from "react";
 import type { LiveLayoutId } from "./live-layouts";
 
 type Participant = { userId: number; username: string; role: string; isMuted: boolean; isVideoOff: boolean; stageSlot?: number };
-type Props = { layout: LiveLayoutId; participants: Participant[]; maxParticipants: number; renderVideo: (participant: Participant) => ReactNode; centerParticipantId?: number | null; onRequestStage?: () => void; canRequestStage?: boolean; requestPending?: boolean };
+type Props = { layout: LiveLayoutId; participants: Participant[]; maxParticipants: number; renderVideo: (participant: Participant) => ReactNode; centerParticipantId?: number | null; onRequestStage?: () => void; canRequestStage?: boolean; requestPending?: boolean; leftGuestSlots?: number };
 const MAX_RENDERED_SLOTS = 100;
 
-export function LiveStageLayout({ layout, participants, maxParticipants, renderVideo, centerParticipantId, onRequestStage, canRequestStage = false, requestPending = false }: Props) {
+export function LiveStageLayout({ layout, participants, maxParticipants, renderVideo, centerParticipantId, onRequestStage, canRequestStage = false, requestPending = false, leftGuestSlots }: Props) {
   const guestCapacity = Math.max(1, Math.min(MAX_RENDERED_SLOTS - 1, Number(maxParticipants) || 1));
   const capacity = guestCapacity + 1;
   const stage = participants.filter((p) => p.role === "host" || p.role === "guest" || p.role === "admin");
@@ -19,22 +19,20 @@ export function LiveStageLayout({ layout, participants, maxParticipants, renderV
   const emptySlot = (index: number, compact = false) => <button type="button" key={`empty-${index}`} disabled={!canRequestStage || requestPending} onClick={onRequestStage} aria-label={`Place ${index + 1} libre sur la scène${canRequestStage ? " : demander à monter" : ""}`} className={`relative overflow-hidden rounded-xl border border-white/20 bg-gray-900/75 flex flex-col items-center justify-center text-center text-white/70 ${compact ? "min-h-12" : "min-h-16"} ${canRequestStage && !requestPending ? "cursor-pointer hover:bg-gray-800/90" : "cursor-default"}`}><span className="text-xl font-light leading-none">+</span><span className="mt-0.5 text-[10px] font-semibold">Place {index + 1}</span><span className="text-[9px]">{requestPending && canRequestStage ? "Demande envoyée" : canRequestStage ? "Rejoindre" : "Libre"}</span></button>;
   const slot = (p: Participant | null, index: number, compact = false) => p ? <div key={`participant-${p.userId}`} className={`relative overflow-hidden rounded-xl border border-white/10 bg-gray-900/90 ${compact ? "min-h-12" : "min-h-16"}`}>{renderVideo(p)}<div className="absolute bottom-1 left-1 right-1 rounded-md bg-black/55 px-1.5 py-0.5 text-[9px] font-semibold truncate">{p.username}{p.role === "host" ? " · Hôte" : p.role === "admin" ? " · Admin" : ""}{p.isMuted ? " · Muet" : ""}</div></div> : emptySlot(index, compact);
 
-  // Legacy LiveRoom sessions can still report the old spotlight state. For 20+ guest
-  // capacity, the required production stage is the centered-host layout: half left,
-  // host/selected-center, half right. Other explicit layouts remain unchanged.
-  if (layout === "host-center" || (layout === "spotlight" && guestCapacity >= 20)) {
+  // In host-centered mode every empty guest slot stays visible on the LIVE stage.
+  if (layout === "host-center" || (layout === "spotlight" && guestCapacity >= 10)) {
     const center = centerParticipantId ? stage.find((p) => p.userId === centerParticipantId) || stage.find((p) => p.role === "host") : stage.find((p) => p.role === "host");
-    const centerId = center?.userId;
-    const side = slots.filter((p): p is Participant => !!p && p.userId !== centerId);
-    const splitLarge = guestCapacity >= 20;
-    const leftCount = splitLarge ? Math.ceil(guestCapacity / 2) : guestCapacity;
-    const rightCount = splitLarge ? guestCapacity - leftCount : 0;
-    const left = Array.from({ length: leftCount }, (_, i) => side[i] || null);
-    const right = splitLarge ? Array.from({ length: rightCount }, (_, i) => side[leftCount + i] || null) : [];
-    return <div className={`absolute inset-0 p-1.5 grid ${splitLarge ? "grid-cols-[22%_56%_22%]" : "grid-cols-[0_70%_30%]"} gap-1.5 overflow-hidden bg-black/10`}>
-      <div className={`grid gap-1.5 min-h-0 overflow-hidden ${splitLarge ? "grid-rows-[repeat(10,minmax(0,1fr))]" : "hidden"}`}>{left.map((p, i) => slot(p, i, true))}</div>
-      <div className="relative min-h-0 overflow-hidden rounded-2xl border border-white/10 bg-gray-950/30">{center ? <div className="w-full h-full">{renderVideo(center)}</div> : emptySlot(-1)}</div>
-      <div className="grid gap-1.5 min-h-0 overflow-hidden overflow-y-auto" style={{ gridTemplateRows: `repeat(${splitLarge ? rightCount : leftCount}, minmax(3.5rem, 1fr))` }}>{(splitLarge ? right : left).map((p, i) => slot(p, i, true))}</div>
+    const side = slots.filter((p) => !p || p.userId !== center?.userId);
+    const defaultLeft = guestCapacity >= 10 ? Math.floor(guestCapacity / 2) : 0;
+    const leftCount = Math.max(0, Math.min(guestCapacity, leftGuestSlots ?? defaultLeft));
+    const rightCount = guestCapacity - leftCount;
+    const left = side.slice(0, leftCount);
+    const right = side.slice(leftCount, leftCount + rightCount);
+    const column = (items: Array<Participant | null>, offset: number) => <div className="h-full min-h-0 overflow-y-auto flex flex-col gap-1.5 pb-24">{items.map((p, i) => <div key={i} className="shrink-0 h-[min(13vh,90px)] min-h-[48px]">{slot(p, offset + i + 1, true)}</div>)}</div>;
+    return <div className="absolute inset-0 p-1.5 flex gap-1.5 bg-black/10">
+      {leftCount > 0 && <div className="w-[23%] shrink-0 min-w-0">{column(left, 0)}</div>}
+      <div className="relative flex-1 min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-gray-950/30">{center ? renderVideo(center) : emptySlot(0)}</div>
+      {rightCount > 0 && <div className="w-[23%] shrink-0 min-w-0">{column(right, leftCount)}</div>}
     </div>;
   }
   if (layout === "grid") return <div className="absolute inset-0 p-2 grid grid-cols-2 md:grid-cols-3 gap-2 auto-rows-fr overflow-y-auto">{slots.map((p, i) => slot(p, i))}</div>;
