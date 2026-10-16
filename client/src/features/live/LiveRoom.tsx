@@ -70,35 +70,49 @@ export function LiveRoom() {
     const current = streamRef.current;
     if (!navigator.mediaDevices?.getUserMedia || !current) return;
     const nextFacing = cameraFacing === "user" ? "environment" : "user";
-    let nextVideo: MediaStreamTrack | undefined;
+    const previousVideo = current.getVideoTracks()[0];
+    let newVideo: MediaStreamTrack | undefined;
     try {
-      // Keep the existing microphone: requesting audio again can fail on mobile
-      // and unnecessarily interrupts the LIVE audio for the host.
+      // Android WebView/Chrome often permits only one active camera at a time.
+      // Release the old video track BEFORE opening the other camera.
+      previousVideo?.stop();
       const nextStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: nextFacing } },
         audio: false,
       });
-      nextVideo = nextStream.getVideoTracks()[0];
-      if (!nextVideo) throw new Error("Aucune caméra disponible");
-      const previousVideo = current.getVideoTracks()[0];
-      await Promise.all(Array.from(peersRef.current.values()).map(async (pc) => {
+      newVideo = nextStream.getVideoTracks()[0];
+      if (!newVideo) throw new Error("Aucune caméra disponible");
+      for (const pc of peersRef.current.values()) {
         const sender = pc.getSenders().find((s) => s.track?.kind === "video");
-        if (sender) await sender.replaceTrack(nextVideo!);
-        else pc.addTrack(nextVideo!, current);
-      }));
-      if (previousVideo) {
-        current.removeTrack(previousVideo);
-        previousVideo.stop();
+        if (sender) await sender.replaceTrack(newVideo);
       }
-      current.addTrack(nextVideo);
+      if (previousVideo) current.removeTrack(previousVideo);
+      current.addTrack(newVideo);
       setCameraFacing(nextFacing);
       setIsVideoOff(false);
       setMediaRevision((v) => v + 1);
       socketRef.current?.emit("live:status", { sessionId, isMuted, isVideoOff: false });
     } catch (error) {
-      nextVideo?.stop();
       console.error("[Live] switch camera", error);
-      alert("Impossible de retourner la caméra. Vérifie les autorisations de caméra.");
+      // Recover the original camera if the requested one is unavailable.
+      try {
+        const restored = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: cameraFacing } }, audio: false,
+        });
+        const restoredVideo = restored.getVideoTracks()[0];
+        if (restoredVideo) {
+          for (const pc of peersRef.current.values()) {
+            const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+            if (sender) await sender.replaceTrack(restoredVideo);
+          }
+          if (previousVideo) current.removeTrack(previousVideo);
+          current.addTrack(restoredVideo);
+          setMediaRevision((v) => v + 1);
+        }
+      } catch (restoreError) {
+        console.error("[Live] camera recovery", restoreError);
+      }
+      alert("Changement de caméra impossible sur ce navigateur. Essaie d'ouvrir Afritok directement dans Chrome.");
     }
   };
 
