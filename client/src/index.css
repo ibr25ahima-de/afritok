@@ -191,3 +191,12 @@ body {
   .border-afritok-primary { @apply border-[#ff6b35]; }
   .border-afritok-accent { @apply border-[#ffa500]; }
 }
+
+/* Global mobile input sizing and tap behavior: avoid focus-triggered browser zoom. */
+input, textarea, select, [contenteditable] {
+  font-size: 16px !important;
+}
+
+html, body, button, a, input, textarea {
+  touch-action: manipulation;
+}
