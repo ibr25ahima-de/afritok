@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 import { X, Send, User } from "lucide-react";
@@ -75,10 +76,10 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
     }
   };
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-x-0 z-[300] flex items-end overflow-hidden bg-black/80"
-      style={{ top: visibleViewport?.top ?? 0, height: visibleViewport?.height ?? "100dvh" }}
+      style={{ top: visibleViewport?.top ?? 0, height: visibleViewport?.height ?? "100dvh", width: "100vw", maxWidth: "100vw" }}
       role="dialog"
       aria-modal="true"
       aria-label="Commentaires"
@@ -163,6 +164,7 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
