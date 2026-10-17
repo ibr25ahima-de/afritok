@@ -95,7 +95,7 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
   return createPortal(
     <div
       className="fixed inset-x-0 z-[300] flex items-end overflow-hidden bg-black/80"
-      style={{ top: visibleViewport?.top ?? 0, height: visibleViewport?.height ?? "100dvh", width: "100vw", maxWidth: "100vw" }}
+      style={{ top: visibleViewport?.top ?? 0, height: visibleViewport?.height ?? "100dvh", width: "100%", maxWidth: "100%", minWidth: 0 }}
       role="dialog"
       aria-modal="true"
       aria-label="Commentaires"
@@ -149,7 +149,7 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
           className="w-full shrink-0 border-t border-purple-800/30 bg-slate-900 p-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))]"
         >
           {submitError && <p role="alert" className="mb-2 text-xs text-red-300">{submitError}</p>}
-          <div className="mx-auto flex w-full max-w-2xl flex-col items-start gap-3 pl-2">
+          <div className="mx-auto flex w-full min-w-0 max-w-2xl flex-col items-start gap-3">
             <div className="w-full min-w-0 rounded-2xl border border-purple-800/50 bg-slate-800 px-4 py-2">
               <input
                 ref={inputRef}
