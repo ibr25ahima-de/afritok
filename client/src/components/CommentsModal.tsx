@@ -100,8 +100,8 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
       aria-modal="true"
       aria-label="Commentaires"
     >
-      <div style={{ position: "absolute", top: 0, left: 0, zIndex: 9999, background: "red", color: "white", fontSize: 14, padding: 4, maxWidth: "100%", overflowWrap: "anywhere" }}>
-        {document.querySelector('meta[name="viewport"]')?.getAttribute("content") ?? "AUCUNE BALISE"}
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 9999, background: "red", color: "white", fontSize: 12, lineHeight: 1.4, padding: 4, overflowWrap: "anywhere" }}>
+        innerWidth={window.innerWidth} | clientWidth={document.documentElement.clientWidth} | scale={window.visualViewport?.scale} | viewport={document.querySelector('meta[name="viewport"]')?.getAttribute("content") ?? "AUCUNE BALISE"}
       </div>
       <div
         className="flex h-[min(70dvh,32rem)] max-h-full w-full min-h-0 flex-col overflow-hidden rounded-t-lg bg-slate-900 shadow-2xl"
