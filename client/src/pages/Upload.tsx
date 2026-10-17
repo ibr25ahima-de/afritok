@@ -488,10 +488,16 @@ export default function Upload() {
           if (video.currentTime < item.start || video.currentTime > item.end) continue;
           if (item.kind === "media" && item.mediaUrl) {
             const mediaElement = document.querySelector(`[data-media-overlay-id="${item.id}"]`) as HTMLImageElement | HTMLVideoElement | null;
-            if (mediaElement && mediaElement.readyState >= 2) {
+            const mediaReady = mediaElement && (
+              item.mediaType === "image"
+                ? (mediaElement as HTMLImageElement).complete && (mediaElement as HTMLImageElement).naturalWidth > 0
+                : (mediaElement as HTMLVideoElement).readyState >= 2 &&
+                  (mediaElement as HTMLVideoElement).videoWidth > 0
+            );
+            if (mediaElement && mediaReady) {
               const width = canvas.width * Math.min(0.85, Math.max(0.12, item.size / 100));
-              const ratio = (mediaElement as HTMLVideoElement).videoWidth && (mediaElement as HTMLVideoElement).videoHeight
-                ? (mediaElement as HTMLVideoElement).videoWidth / (mediaElement as HTMLVideoElement).videoHeight
+              const ratio = item.mediaType === "video"
+                ? (mediaElement as HTMLVideoElement).videoWidth / Math.max(1, (mediaElement as HTMLVideoElement).videoHeight)
                 : (mediaElement as HTMLImageElement).naturalWidth / Math.max(1, (mediaElement as HTMLImageElement).naturalHeight);
               const height = width / (ratio > 0 ? ratio : 1);
               try { ctx.drawImage(mediaElement, canvas.width * item.x / 100 - width / 2, canvas.height * item.y / 100 - height / 2, width, height); } catch { /* wait for media frame */ }
@@ -594,7 +600,7 @@ export default function Upload() {
         }} onClick={togglePlayback} />}
         {visibleOverlays.map((item) => (
           <div key={item.id} onPointerDown={(event) => startDrag(event, item)} onClick={(event) => { event.stopPropagation(); setSelectedOverlayId(item.id); }} className={`absolute select-none font-bold text-center cursor-move ${selectedOverlayId === item.id ? "ring-2 ring-white/80 rounded-lg px-2 py-1" : ""}`} style={{ left: `${item.x}%`, top: `${item.y}%`, transform: "translate(-50%, -50%)", fontSize: item.size, color: item.color, textShadow: item.kind === "media" ? "none" : "0 2px 6px #000, 0 0 2px #000", whiteSpace: "pre-wrap", width: item.kind === "media" ? `${Math.min(85, Math.max(12, item.size))}%` : undefined, maxWidth: "85%", zIndex: 10, touchAction: "none" }}>
-            {item.kind === "media" && item.mediaUrl ? (item.mediaType === "video" ? <video data-media-overlay-id={item.id} src={item.mediaUrl} muted loop autoPlay playsInline draggable={false} className="block rounded-lg object-contain pointer-events-none" style={{ width: "100%", maxHeight: "55dvh" }} /> : <img data-media-overlay-id={item.id} src={item.mediaUrl} alt="Média ajouté" draggable={false} className="block rounded-lg object-contain pointer-events-none" style={{ width: `${Math.min(85, Math.max(12, item.size))}%`, maxHeight: "55dvh" }} />) : item.text}
+            {item.kind === "media" && item.mediaUrl ? (item.mediaType === "video" ? <video data-media-overlay-id={item.id} src={item.mediaUrl} muted loop autoPlay playsInline draggable={false} className="block rounded-lg object-contain pointer-events-none" style={{ width: "100%", maxHeight: "55dvh" }} /> : <img data-media-overlay-id={item.id} src={item.mediaUrl} alt="Photo ajoutée" draggable={false} className="block rounded-lg object-contain pointer-events-none" style={{ width: "100%", height: "auto", maxHeight: "55dvh" }} />) : item.text}
             {selectedOverlayId === item.id && (
               <div
                 onPointerDown={(event) => startResize(event, item)}
@@ -623,7 +629,7 @@ export default function Upload() {
             }}
           />
         )}
-        {selectedOverlay && <div className="absolute left-1/2 top-16 -translate-x-1/2 z-30 flex items-center gap-2 rounded-full bg-black/70 px-2 py-1.5"><span className="text-[11px] px-2">{selectedOverlay.kind === "sticker" ? "Sticker" : selectedOverlay.kind === "subtitle" ? "Sous-titre" : "Texte"}</span><button onClick={() => deleteOverlay(selectedOverlay.id)} className="h-8 w-8 rounded-full bg-red-500 flex items-center justify-center" aria-label="Supprimer"><Trash2 size={15} /></button><button onClick={() => setSelectedOverlayId(null)} className="h-8 w-8 rounded-full bg-white/15 flex items-center justify-center" aria-label="Fermer"><Check size={15} /></button></div>}
+        {selectedOverlay && <div className="absolute left-1/2 top-16 -translate-x-1/2 z-30 flex items-center gap-2 rounded-full bg-black/70 px-2 py-1.5"><span className="text-[11px] px-2">{selectedOverlay.kind === "media" ? (selectedOverlay.mediaType === "video" ? "Vidéo" : "Photo") : selectedOverlay.kind === "sticker" ? "Sticker" : selectedOverlay.kind === "subtitle" ? "Sous-titre" : "Texte"}</span><button onClick={() => deleteOverlay(selectedOverlay.id)} className="h-8 w-8 rounded-full bg-red-500 flex items-center justify-center" aria-label="Supprimer"><Trash2 size={15} /></button><button onClick={() => setSelectedOverlayId(null)} className="h-8 w-8 rounded-full bg-white/15 flex items-center justify-center" aria-label="Fermer"><Check size={15} /></button></div>}
         <div className="absolute top-0 left-0 right-0 p-4 flex items-center justify-between bg-gradient-to-b from-black/65 to-transparent z-20"><button onClick={() => setStep("capture")} className="p-2 rounded-full bg-black/35" aria-label="Retour"><ArrowLeft size={25} /></button><button onClick={() => setShowAudio(true)} className="rounded-full bg-black/50 px-5 py-2.5 text-sm font-bold flex items-center gap-2 max-w-[55%] truncate"><Music size={17} /><span className="truncate">{selectedMusic?.name || "Ajouter un son"}</span></button><button onClick={resetMontagePlayback} className="p-2 rounded-full bg-black/35" aria-label="Recommencer"><RotateCcw size={22} /></button></div>
         {!isImage && !isPlaying && !tool && <button onClick={togglePlayback} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-16 w-16 rounded-full bg-black/55 flex items-center justify-center z-20" aria-label="Lire"><Play size={30} fill="white" /></button>}
         <div className="absolute right-2 top-20 z-20 grid grid-cols-2 gap-2 w-[112px] max-h-none"><ToolButton icon={<Scissors size={21} />} label="Modifier" onClick={() => setShowModifierEditor(true)} /><ToolButton icon={<Type size={21} />} label="Texte" onClick={() => setTool("text")} /><ToolButton icon={<ImagePlus size={21} />} label="Photo/Vidéo" onClick={() => mediaInputRef.current?.click()} /><ToolButton icon={<Smile size={21} />} label="Stickers" onClick={() => setTool("stickers")} /><ToolButton icon={<Captions size={21} />} label="Sous-titres" onClick={() => setTool("subtitles")} /><ToolButton icon={<Wand2 size={21} />} label="Modèles" onClick={() => setTool("models")} /><ToolButton icon={<Sparkles size={21} />} label="Effets" onClick={() => setShowEffects(true)} /><ToolButton icon={<Sparkles size={21} />} label="Filtres" onClick={() => setShowFilters(true)} /><ToolButton icon={<Volume2 size={21} />} label="Audio" onClick={() => setShowAudio(true)} /></div>
