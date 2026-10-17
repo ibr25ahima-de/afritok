@@ -34,9 +34,25 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
     window.visualViewport?.addEventListener("resize", updateViewport);
     window.visualViewport?.addEventListener("scroll", updateViewport);
 
+    // Keep the comments composer at a fixed scale on mobile. Some Android
+    // browsers can apply an extra zoom when the keyboard opens or when an
+    // input receives focus, even when the viewport already disables pinch zoom.
+    const preventGestureZoom = (event: Event) => event.preventDefault();
+    const preventCtrlWheelZoom = (event: WheelEvent) => {
+      if (event.ctrlKey) event.preventDefault();
+    };
+    document.addEventListener("gesturestart", preventGestureZoom, { passive: false });
+    document.addEventListener("gesturechange", preventGestureZoom, { passive: false });
+    document.addEventListener("gestureend", preventGestureZoom, { passive: false });
+    document.addEventListener("wheel", preventCtrlWheelZoom, { passive: false });
+
     return () => {
       window.visualViewport?.removeEventListener("resize", updateViewport);
       window.visualViewport?.removeEventListener("scroll", updateViewport);
+      document.removeEventListener("gesturestart", preventGestureZoom);
+      document.removeEventListener("gesturechange", preventGestureZoom);
+      document.removeEventListener("gestureend", preventGestureZoom);
+      document.removeEventListener("wheel", preventCtrlWheelZoom);
       document.body.style.overflow = previousOverflow;
     };
   }, []);
@@ -147,7 +163,7 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
                   if (e.key === "Enter") void handleSubmitComment();
                 }}
                 className="w-full min-w-0 border-none bg-transparent py-2 text-base text-white outline-none placeholder:text-gray-500"
-                style={{ fontSize: "16px" }}
+                style={{ fontSize: "16px", lineHeight: "1.4", touchAction: "manipulation", WebkitTextSizeAdjust: "100%", WebkitAppearance: "none" }}
                 aria-label="Écrire un commentaire"
               />
             </div>
