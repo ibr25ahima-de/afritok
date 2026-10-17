@@ -14,27 +14,28 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
   const [newComment, setNewComment] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [keyboardInset, setKeyboardInset] = useState(0);
+  const [visibleViewport, setVisibleViewport] = useState<{ top: number; height: number } | null>(null);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
-    const updateKeyboardInset = () => {
+    const updateViewport = () => {
       const viewport = window.visualViewport;
       if (!viewport) return;
-      const layoutHeight = document.documentElement.clientHeight || window.innerHeight;
-      const inset = Math.max(0, layoutHeight - viewport.height - viewport.offsetTop);
-      setKeyboardInset(Math.round(inset));
+      setVisibleViewport({
+        top: Math.round(viewport.offsetTop),
+        height: Math.round(viewport.height),
+      });
     };
 
-    updateKeyboardInset();
-    window.visualViewport?.addEventListener("resize", updateKeyboardInset);
-    window.visualViewport?.addEventListener("scroll", updateKeyboardInset);
+    updateViewport();
+    window.visualViewport?.addEventListener("resize", updateViewport);
+    window.visualViewport?.addEventListener("scroll", updateViewport);
 
     return () => {
-      window.visualViewport?.removeEventListener("resize", updateKeyboardInset);
-      window.visualViewport?.removeEventListener("scroll", updateKeyboardInset);
+      window.visualViewport?.removeEventListener("resize", updateViewport);
+      window.visualViewport?.removeEventListener("scroll", updateViewport);
       document.body.style.overflow = previousOverflow;
     };
   }, []);
@@ -76,14 +77,14 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
 
   return (
     <div
-      className="fixed inset-x-0 top-0 z-[300] flex items-end bg-black/80"
-      style={{ bottom: keyboardInset }}
+      className="fixed inset-x-0 z-[300] flex items-end overflow-hidden bg-black/80"
+      style={{ top: visibleViewport?.top ?? 0, height: visibleViewport?.height ?? "100dvh" }}
       role="dialog"
       aria-modal="true"
       aria-label="Commentaires"
     >
       <div
-        className="flex h-[min(70dvh,32rem)] max-h-[calc(100dvh-env(safe-area-inset-top,0px))] w-full min-h-0 flex-col overflow-hidden rounded-t-lg bg-slate-900 shadow-2xl"
+        className="flex h-[min(70dvh,32rem)] max-h-full w-full min-h-0 flex-col overflow-hidden rounded-t-lg bg-slate-900 shadow-2xl"
         style={{ WebkitTextSizeAdjust: "100%" }}
       >
         <div className="flex items-center justify-between border-b border-purple-800/30 p-4">
@@ -93,7 +94,7 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 pb-40">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
           {commentsQuery.isLoading ? (
             <p className="py-8 text-center text-purple-300">Chargement...</p>
           ) : commentsQuery.isError ? (
@@ -128,8 +129,7 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
         </div>
 
         <div
-          className="fixed inset-x-0 z-[310] border-t border-purple-800/30 bg-slate-900 p-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))]"
-          style={{ bottom: keyboardInset }}
+          className="w-full shrink-0 border-t border-purple-800/30 bg-slate-900 p-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))]"
         >
           {submitError && <p role="alert" className="mb-2 text-xs text-red-300">{submitError}</p>}
           <div className="mx-auto flex w-full max-w-2xl flex-col items-start gap-3 pl-2">
