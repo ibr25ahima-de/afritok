@@ -100,6 +100,9 @@ export default function CommentsModal({ videoId, onClose, onCommentAdded }: Comm
       aria-modal="true"
       aria-label="Commentaires"
     >
+      <div style={{ position: "absolute", top: 0, left: 0, zIndex: 9999, background: "red", color: "white", fontSize: 20, padding: 4 }}>
+        {window.innerWidth} / {window.devicePixelRatio} / {window.visualViewport?.scale}
+      </div>
       <div
         className="flex h-[min(70dvh,32rem)] max-h-full w-full min-h-0 flex-col overflow-hidden rounded-t-lg bg-slate-900 shadow-2xl"
         style={{ WebkitTextSizeAdjust: "100%" }}
