@@ -1,5 +1,6 @@
-import { db } from "./db/index";
+export * from "./db/index";
 export { db } from "./db/index";
+import { db } from "./db/index";
 
 // Compatibility helper for legacy server modules.
 // The project now uses a shared PostgreSQL Drizzle instance.
