@@ -1,4 +1,4 @@
-export * from "./db/index";
+import { db } from "./db/index";
 export { db } from "./db/index";
 
 // Compatibility helper for legacy server modules.
