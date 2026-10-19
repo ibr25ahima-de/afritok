@@ -32,6 +32,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
   const [sourceUrl, setSourceUrl] = useState("");
   const [sourceName, setSourceName] = useState("");
   const [ready, setReady] = useState(false);
+  const [cameraAvailable, setCameraAvailable] = useState(false);
   const [recording, setRecording] = useState(false);
   const [explaining, setExplaining] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -49,6 +50,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
     }).then((stream) => {
       if (!alive) { stream.getTracks().forEach((track) => track.stop()); return; }
       cameraStreamRef.current = stream;
+      setCameraAvailable(true);
       if (cameraRef.current) {
         cameraRef.current.srcObject = stream;
         cameraRef.current.muted = true;
@@ -132,7 +134,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
   useEffect(() => {
     const source = sourceRef.current;
     const camera = cameraRef.current;
-    if (!source || !camera || !sourceUrl || !ready || audioContextRef.current) return;
+    if (!source || !camera || !sourceUrl || !ready || !cameraAvailable || !cameraStreamRef.current || audioContextRef.current) return;
     const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AudioContextClass) return;
     try {
@@ -146,6 +148,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
       sourceGain.gain.value = 1;
       mic.connect(micGain).connect(destination);
       sourceNode.connect(sourceGain).connect(destination);
+      sourceGain.connect(audio.destination);
       audioContextRef.current = audio;
       micGainRef.current = micGain;
       sourceGainRef.current = sourceGain;
@@ -154,7 +157,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
       console.error("[ReactionCameraRecorder] audio setup", error);
       toast.error("Impossible de préparer le son de la vidéo.");
     }
-  }, [sourceUrl, ready]);
+  }, [sourceUrl, ready, cameraAvailable]);
 
   useEffect(() => {
     if (!recording) return;
