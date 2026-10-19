@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Check, ImagePlus, Pause, Play, RotateCcw, Video, Volume2 } from "lucide-react";
+import { ArrowLeft, Check, ImagePlus, Pause, Play, Video, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 
 type Layout = "pip-tr" | "pip-bl" | "split" | "video-background";
@@ -254,6 +254,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
 
   return (
     <div className="relative flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-black text-white">
+      <video ref={cameraRef} autoPlay muted playsInline className="pointer-events-none absolute h-px w-px opacity-0" />
       {!layoutChosen ? (
         <div className="flex-1 overflow-y-auto p-4 pt-8">
           <button onClick={onClose} className="mb-5 flex items-center gap-2 text-sm text-white/80"><ArrowLeft size={18} /> Retour à la caméra</button>
@@ -286,7 +287,6 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
           </div>
           <div className="relative min-h-0 flex-1 bg-black p-3">
             <canvas ref={canvasRef} className="mx-auto h-full max-h-full w-auto max-w-full rounded-xl object-contain" style={{ aspectRatio: "9 / 16" }} />
-            <video ref={cameraRef} autoPlay muted playsInline className="pointer-events-none absolute h-px w-px opacity-0" />
             <video ref={sourceRef} src={sourceUrl || undefined} playsInline preload="auto" className="pointer-events-none absolute h-px w-px opacity-0" onLoadedMetadata={() => { setReady(true); }} onCanPlay={() => setReady(true)} onError={() => { setReady(false); toast.error("Cette vidéo ne peut pas être lue sur cet appareil."); }} />
             {!sourceUrl && <div className="absolute inset-0 flex items-center justify-center text-center text-white/60"><div><Video size={42} className="mx-auto mb-3" /><p>Sélectionne une vidéo de ta galerie</p></div></div>}
             {sourceUrl && !ready && <div className="absolute inset-0 flex items-center justify-center text-sm text-white/70">Préparation de la vidéo…</div>}
