@@ -290,7 +290,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
           </div>
           <div className="relative min-h-0 flex-1 bg-black p-3">
             <canvas ref={canvasRef} className="mx-auto h-full max-h-full w-auto max-w-full rounded-xl object-contain" style={{ aspectRatio: "9 / 16" }} />
-            <video ref={sourceRef} src={sourceUrl || undefined} playsInline preload="auto" className="pointer-events-none absolute h-px w-px opacity-0" onLoadedMetadata={() => { setReady(true); }} onCanPlay={() => setReady(true)} onError={() => { setReady(false); toast.error("Cette vidéo ne peut pas être lue sur cet appareil."); }} />
+            <video ref={sourceRef} src={sourceUrl || undefined} playsInline webkit-playsinline="true" preload="auto" className="pointer-events-none absolute inset-0 h-full w-full object-contain opacity-0" onLoadedMetadata={() => { setReady(true); }} onCanPlay={() => setReady(true)} onError={() => { setReady(false); toast.error("Cette vidéo ne peut pas être lue sur cet appareil."); }} />
             {!sourceUrl && <div className="absolute inset-0 flex items-center justify-center text-center text-white/60"><div><Video size={42} className="mx-auto mb-3" /><p>Sélectionne une vidéo de ta galerie</p></div></div>}
             {sourceUrl && !ready && <div className="absolute inset-0 flex items-center justify-center text-sm text-white/70">Préparation de la vidéo…</div>}
           </div>
