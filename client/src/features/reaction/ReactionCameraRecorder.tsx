@@ -37,6 +37,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
   const [explaining, setExplaining] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [finishing, setFinishing] = useState(false);
+  const [startMode, setStartMode] = useState<"me" | "original">("original");
 
   const stopTracks = useCallback((stream: MediaStream | null) => {
     stream?.getTracks().forEach((track) => track.stop());
@@ -214,13 +215,15 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
       };
       recorderRef.current = recorder;
       startAtRef.current = performance.now();
-      micGainRef.current!.gain.setTargetAtTime(0, audioContextRef.current!.currentTime, 0.02);
-      sourceGainRef.current!.gain.setTargetAtTime(1, audioContextRef.current!.currentTime, 0.02);
       source.currentTime = 0;
-      await source.play();
+      const beginWithMe = startMode === "me";
+      micGainRef.current!.gain.setTargetAtTime(beginWithMe ? 1 : 0, audioContextRef.current!.currentTime, 0.02);
+      sourceGainRef.current!.gain.setTargetAtTime(beginWithMe ? 0 : 1, audioContextRef.current!.currentTime, 0.02);
+      if (beginWithMe) source.pause();
+      else await source.play();
       recorder.start(250);
       setRecording(true);
-      setExplaining(false);
+      setExplaining(beginWithMe);
     } catch (error) {
       console.error("[ReactionCameraRecorder] start", error);
       toast.error("Impossible de démarrer l’enregistrement. Réessaie.");
@@ -293,6 +296,13 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
           </div>
           <div className="z-20 space-y-3 bg-neutral-950 px-4 pb-5 pt-3">
             {recording && <div className="text-center text-sm font-semibold tabular-nums">{Math.floor(elapsed / 60).toString().padStart(2, "0")}:{Math.floor(elapsed % 60).toString().padStart(2, "0")} · {explaining ? "Ton explication" : "Vidéo originale"}</div>}
+            {!recording && ready && <div className="space-y-2">
+              <p className="text-center text-xs font-semibold text-white/75">Qui commence ?</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => setStartMode("me")} className={startMode === "me" ? "rounded-xl border border-red-400 bg-red-500/20 px-3 py-3 text-sm font-semibold" : "rounded-xl border border-white/15 bg-white/5 px-3 py-3 text-sm font-semibold"}>Moi d’abord</button>
+                <button onClick={() => setStartMode("original")} className={startMode === "original" ? "rounded-xl border border-red-400 bg-red-500/20 px-3 py-3 text-sm font-semibold" : "rounded-xl border border-white/15 bg-white/5 px-3 py-3 text-sm font-semibold"}>Vidéo originale</button>
+              </div>
+            </div>}
             <div className="grid grid-cols-2 gap-2">
               {!recording ? <button onClick={start} disabled={!ready} className="col-span-2 flex items-center justify-center gap-2 rounded-full bg-red-500 py-3 font-bold disabled:opacity-40"><Video size={18} /> Enregistrer la réaction</button> : <>
                 <button onClick={toggleExplain} className="flex items-center justify-center gap-2 rounded-full bg-white py-3 font-bold text-black">{explaining ? <Play size={18} /> : <Pause size={18} />}{explaining ? "Reprendre la vidéo" : "Expliquer ce passage"}</button>
