@@ -138,7 +138,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
     };
     draw();
     return () => { if (frameRef.current !== null) cancelAnimationFrame(frameRef.current); };
-  }, [layout, sourceUrl, ready]);
+  }, [layout, sourceUrl, ready, sourceBox, recording]);
 
   useEffect(() => {
     const source = sourceRef.current;
@@ -273,7 +273,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
           <p className="mt-2 text-sm text-white/65">Choisis la disposition de ta vidéo et de ta caméra avant de commencer.</p>
           <div className="mt-5 grid grid-cols-2 gap-3">
             {LAYOUTS.map((item) => (
-              <button key={item.id} onClick={() => { setLayout(item.id); setLayoutChosen(true); }} className={`rounded-2xl border p-3 text-left transition ${layout === item.id ? "border-red-400 bg-red-500/15" : "border-white/15 bg-white/5"}`}>
+              <button key={item.id} onClick={() => { setLayout(item.id); setSourceBox(item.id === "pip-bl" ? { x: 24, y: 860, w: 271, h: 355 } : { x: 420, y: 50, w: 271, h: 355 }); setLayoutChosen(true); }} className={`rounded-2xl border p-3 text-left transition ${layout === item.id ? "border-red-400 bg-red-500/15" : "border-white/15 bg-white/5"}`}>
                 <div className="mb-3 aspect-[3/4] overflow-hidden rounded-lg bg-neutral-900 p-2">
                   <div className="relative h-full w-full overflow-hidden rounded bg-gradient-to-br from-neutral-700 to-neutral-950">
                     {item.id === "split" ? <div className="absolute inset-y-0 left-0 w-1/2 bg-neutral-500" /> : item.id === "video-background" ? <div className="absolute inset-0 bg-neutral-600" /> : <div className="absolute inset-0 bg-neutral-700" />}
