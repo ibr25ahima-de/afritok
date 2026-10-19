@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Music, Pause, Play, RefreshCw, Sparkles, X, Sun, Timer as TimerIcon, LayoutGrid, ChevronUp } from "lucide-react";
+import { Check, Music, Pause, Play, RefreshCw, Sparkles, X, Sun, Timer as TimerIcon, LayoutGrid, ChevronUp, Video } from "lucide-react";
 import { toast } from "sonner";
 import AREngineMobile from "./AREngineMobile";
 import EffectsPanel, { AR_EFFECTS, type AREffect } from "./EffectsPanel";
@@ -14,6 +14,7 @@ interface CameraRecorderProps {
   onOpenMusic?: () => void;
   onOpenEffects?: () => void;
   onPublish?: () => void;
+  onOpenReaction?: () => void;
   selectedMusic?: { name: string; url: string } | null;
 }
 
@@ -28,6 +29,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
   onOpenMusic,
   onOpenEffects,
   onPublish,
+  onOpenReaction,
   selectedMusic,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -589,6 +591,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
         <button onClick={onOpenMusic} className="rounded-full bg-black/55 px-4 py-2 text-xs max-w-[55%] truncate" disabled={recording && switchingCamera}>
           <Music size={15} className="inline mr-2" />{selectedMusic?.name || "Ajouter un son"}
         </button>
+        <button onClick={onOpenReaction} disabled={recording} className="rounded-full bg-red-500/90 px-3 py-2 text-xs font-bold disabled:opacity-40"><Video size={14} className="mr-1 inline" /> Réagir</button>
 
       </div>
 
