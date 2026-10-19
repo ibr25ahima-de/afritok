@@ -98,7 +98,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
           width: { ideal: 1280 },
           height: { ideal: 720 },
         },
-        audio: false,
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
 
       if (!mountedRef.current) {
