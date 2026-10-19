@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent
 import { useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { CameraRecorder } from "@/components/CameraRecorder";
+import ReactionCameraRecorder from "@/features/reaction/ReactionCameraRecorder";
 import Publish from "./Publish";
 import AudioSelector from "@/components/AudioSelector.tsx";
 import { FilterLibrary, Filter } from "@/components/FilterLibrary";
@@ -56,6 +57,7 @@ export default function Upload() {
     }
   }, [setSelectedMusic]);
   const [step, setStep] = useState<Step>("capture");
+  const [reactionMode, setReactionMode] = useState(false);
   const [showAudio, setShowAudio] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [showEffects, setShowEffects] = useState(false);
@@ -577,7 +579,7 @@ export default function Upload() {
   };
 
   if (!isAuthenticated) return <div className="h-screen bg-black flex items-center justify-center text-white">Connexion requise</div>;
-  if (step === "capture") return <><CameraRecorder onVideoRecorded={(blob, recordedDuration) => { if (blob.size < 1024) return toast.error("La vidéo enregistrée est vide. Réessaie."); const mimeType = blob.type || "video/mp4"; const recordedFile = new File([blob], `video${recordedVideoExtension(mimeType)}`, { type: mimeType }); setFile(recordedFile); setStep("edit"); toast.success(`Vidéo prête pour le montage · ${recordedDuration}s`); }} onPhotoTaken={(blob) => { setFile(new File([blob], "photo.jpg", { type: "image/jpeg" })); setStep("edit"); }} onClose={() => navigate("/feed")} onOpenMusic={() => setShowAudio(true)} selectedMusic={selectedMusic} />{showAudio && <AudioSelector onClose={() => setShowAudio(false)} onSelectAudio={(url, name, id) => { setSelectedMusic({ url, name, id }); setShowAudio(false); }} />}</>;
+  if (step === "capture") return reactionMode ? <ReactionCameraRecorder onClose={() => setReactionMode(false)} onVideoRecorded={(blob, recordedDuration) => { if (blob.size < 1024) return toast.error("La vidéo enregistrée est vide. Réessaie."); const mimeType = blob.type || "video/webm"; const recordedFile = new File([blob], `reaction${recordedVideoExtension(mimeType)}`, { type: mimeType }); setFile(recordedFile); setReactionMode(false); setStep("edit"); toast.success(`Réaction prête pour le montage · ${recordedDuration}s`); }} /> : <><CameraRecorder onOpenReaction={() => setReactionMode(true)} onVideoRecorded={(blob, recordedDuration) => { if (blob.size < 1024) return toast.error("La vidéo enregistrée est vide. Réessaie."); const mimeType = blob.type || "video/mp4"; const recordedFile = new File([blob], `video${recordedVideoExtension(mimeType)}`, { type: mimeType }); setFile(recordedFile); setStep("edit"); toast.success(`Vidéo prête pour le montage · ${recordedDuration}s`); }} onPhotoTaken={(blob) => { setFile(new File([blob], "photo.jpg", { type: "image/jpeg" })); setStep("edit"); }} onClose={() => navigate("/feed")} onOpenMusic={() => setShowAudio(true)} selectedMusic={selectedMusic} />{showAudio && <AudioSelector onClose={() => setShowAudio(false)} onSelectAudio={(url, name, id) => { setSelectedMusic({ url, name, id }); setShowAudio(false); }} />}</>;
   if (step === "edit") {
     const isImage = isImageFile(file);
     const selectedOverlay = overlays.find((item) => item.id === selectedOverlayId) || null;
