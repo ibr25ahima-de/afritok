@@ -68,7 +68,12 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
       if (audioContextRef.current) void audioContextRef.current.close().catch(() => {});
       if (sourceUrl) URL.revokeObjectURL(sourceUrl);
     };
-  }, [sourceUrl, stopTracks]);
+  }, [stopTracks]);
+
+  useEffect(() => {
+    if (!sourceUrl) return;
+    return () => URL.revokeObjectURL(sourceUrl);
+  }, [sourceUrl]);
 
   useEffect(() => {
     const camera = cameraRef.current;
@@ -150,6 +155,12 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
       toast.error("Impossible de préparer le son de la vidéo.");
     }
   }, [sourceUrl, ready]);
+
+  useEffect(() => {
+    if (!recording) return;
+    const interval = window.setInterval(() => setElapsed(Math.floor((performance.now() - startAtRef.current) / 1000)), 250);
+    return () => window.clearInterval(interval);
+  }, [recording]);
 
   const chooseVideo = (file?: File) => {
     if (!file) return;
@@ -273,7 +284,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
           <div className="relative min-h-0 flex-1 bg-black p-3">
             <canvas ref={canvasRef} className="mx-auto h-full max-h-full w-auto max-w-full rounded-xl object-contain" style={{ aspectRatio: "9 / 16" }} />
             <video ref={cameraRef} autoPlay muted playsInline className="pointer-events-none absolute h-px w-px opacity-0" />
-            <video ref={sourceRef} src={sourceUrl || undefined} playsInline preload="auto" muted className="pointer-events-none absolute h-px w-px opacity-0" onLoadedMetadata={() => { setReady(true); }} onCanPlay={() => setReady(true)} onError={() => { setReady(false); toast.error("Cette vidéo ne peut pas être lue sur cet appareil."); }} />
+            <video ref={sourceRef} src={sourceUrl || undefined} playsInline preload="auto" className="pointer-events-none absolute h-px w-px opacity-0" onLoadedMetadata={() => { setReady(true); }} onCanPlay={() => setReady(true)} onError={() => { setReady(false); toast.error("Cette vidéo ne peut pas être lue sur cet appareil."); }} />
             {!sourceUrl && <div className="absolute inset-0 flex items-center justify-center text-center text-white/60"><div><Video size={42} className="mx-auto mb-3" /><p>Sélectionne une vidéo de ta galerie</p></div></div>}
             {sourceUrl && !ready && <div className="absolute inset-0 flex items-center justify-center text-sm text-white/70">Préparation de la vidéo…</div>}
           </div>
