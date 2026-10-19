@@ -38,6 +38,8 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
   const [elapsed, setElapsed] = useState(0);
   const [finishing, setFinishing] = useState(false);
   const [startMode, setStartMode] = useState<"me" | "original">("original");
+  const [sourceBox, setSourceBox] = useState({ x: 420, y: 50, w: 271, h: 355 });
+  const dragRef = useRef<{ mode: "move" | "resize"; startX: number; startY: number; boxX: number; boxY: number; boxW: number; boxH: number } | null>(null);
 
   const stopTracks = useCallback((stream: MediaStream | null) => {
     stream?.getTracks().forEach((track) => track.stop());
@@ -117,12 +119,18 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
       } else {
         if (cameraReady) drawCover(camera, 0, 0, 720, 1280);
         if (sourceReady) {
-          const x = layout === "pip-tr" ? 420 : 24;
-          const y = layout === "pip-tr" ? 50 : 860;
+          const { x, y, w, h } = sourceBox;
           ctx.save();
           ctx.fillStyle = "#000";
-          ctx.fillRect(x - 5, y - 5, 281, 365);
-          drawCover(source, x, y, 271, 355);
+          ctx.fillRect(x - 5, y - 5, w + 10, h + 10);
+          drawCover(source, x, y, w, h);
+          if (!recording || layout === "pip-tr" || layout === "pip-bl") {
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 4;
+            ctx.strokeRect(x, y, w, h);
+            ctx.fillStyle = "#ef4444";
+            ctx.fillRect(x + w - 24, y + h - 24, 24, 24);
+          }
           ctx.restore();
         }
       }
@@ -289,7 +297,39 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
             </label>
           </div>
           <div className="relative min-h-0 flex-1 bg-black p-3">
-            <canvas ref={canvasRef} className="mx-auto h-full max-h-full w-auto max-w-full rounded-xl object-contain" style={{ aspectRatio: "9 / 16" }} />
+            <canvas
+            ref={canvasRef}
+            className="mx-auto h-full max-h-full w-auto max-w-full touch-none rounded-xl object-contain"
+            style={{ aspectRatio: "9 / 16" }}
+            onPointerDown={(event) => {
+              if (layout !== "pip-tr" && layout !== "pip-bl") return;
+              const rect = event.currentTarget.getBoundingClientRect();
+              const px = (event.clientX - rect.left) * (720 / rect.width);
+              const py = (event.clientY - rect.top) * (1280 / rect.height);
+              const b = sourceBox;
+              if (px < b.x || px > b.x + b.w || py < b.y || py > b.y + b.h) return;
+              dragRef.current = { mode: px > b.x + b.w - 32 && py > b.y + b.h - 32 ? "resize" : "move", startX: px, startY: py, boxX: b.x, boxY: b.y, boxW: b.w, boxH: b.h };
+              event.currentTarget.setPointerCapture(event.pointerId);
+            }}
+            onPointerMove={(event) => {
+              const drag = dragRef.current;
+              if (!drag) return;
+              const rect = event.currentTarget.getBoundingClientRect();
+              const px = (event.clientX - rect.left) * (720 / rect.width);
+              const py = (event.clientY - rect.top) * (1280 / rect.height);
+              const dx = px - drag.startX;
+              const dy = py - drag.startY;
+              if (drag.mode === "move") {
+                setSourceBox((b) => ({ ...b, x: Math.max(0, Math.min(720 - b.w, drag.boxX + dx)), y: Math.max(0, Math.min(1280 - b.h, drag.boxY + dy)) }));
+              } else {
+                const w = Math.max(120, Math.min(696, drag.boxW + dx));
+                const h = Math.max(150, Math.min(1270, drag.boxH + dy));
+                setSourceBox((b) => ({ ...b, w: Math.min(w, 720 - b.x), h: Math.min(h, 1280 - b.y) }));
+              }
+            }}
+            onPointerUp={() => { dragRef.current = null; }}
+            onPointerCancel={() => { dragRef.current = null; }}
+          />
             <video ref={sourceRef} src={sourceUrl || undefined} playsInline webkit-playsinline="true" preload="auto" className="pointer-events-none absolute inset-0 h-full w-full object-contain opacity-0" onLoadedMetadata={() => { setReady(true); }} onCanPlay={() => setReady(true)} onError={() => { setReady(false); toast.error("Cette vidéo ne peut pas être lue sur cet appareil."); }} />
             {!sourceUrl && <div className="absolute inset-0 flex items-center justify-center text-center text-white/60"><div><Video size={42} className="mx-auto mb-3" /><p>Sélectionne une vidéo de ta galerie</p></div></div>}
             {sourceUrl && !ready && <div className="absolute inset-0 flex items-center justify-center text-sm text-white/70">Préparation de la vidéo…</div>}
@@ -310,6 +350,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
               </>}
             </div>
             <p className="text-center text-xs text-white/55">{recording ? (explaining ? "La vidéo originale est arrêtée : seule ta voix est enregistrée." : "La vidéo avance et sa voix est entendue. Appuie sur Expliquer pour l’arrêter.") : "Pendant l’explication, la vidéo s’arrête et ta voix prend le relais."}</p>
+            {(layout === "pip-tr" || layout === "pip-bl") && <p className="text-center text-[11px] text-white/45">Déplace la vidéo avec le doigt. Tire le coin rouge pour l’agrandir ou la réduire.</p>}
             <div className="flex items-center justify-center gap-2 text-[11px] text-white/40"><Volume2 size={13} /> Le son alterne entre la vidéo originale et ton microphone.</div>
           </div>
         </>
