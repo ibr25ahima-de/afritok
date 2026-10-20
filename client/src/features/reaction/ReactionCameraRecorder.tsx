@@ -290,7 +290,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
     // Recognize HEIF brands from the file signature, not only its metadata.
     const heifBrand = /ftyp(?:heic|heix|hevc|hevx|heif|heis|heim|hevm|hevs|mif1|msf1)/i.test(header);
     const signatureImage = /^\xFF\xD8\xFF/.test(header)
-      || header.startsWith("\\x89PNG\\r\\n\\x1A\\n")
+      || header.startsWith("\x89PNG\r\n\x1A\n")
       || header.startsWith("GIF87a") || header.startsWith("GIF89a")
       || (header.startsWith("RIFF") && header.slice(8, 12) === "WEBP")
       || header.startsWith("BM")
