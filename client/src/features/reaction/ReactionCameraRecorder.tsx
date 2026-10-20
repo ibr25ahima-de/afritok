@@ -44,6 +44,8 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
   const [startMode, setStartMode] = useState<"me" | "original">("original");
   const [sourceBox, setSourceBox] = useState({ x: 420, y: 50, w: 271, h: 355 });
   const dragRef = useRef<{ mode: "move" | "resize"; startX: number; startY: number; boxX: number; boxY: number; boxW: number; boxH: number } | null>(null);
+  const activePointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const pinchRef = useRef<{ startDistance: number; boxX: number; boxY: number; boxW: number; boxH: number } | null>(null);
 
   const stopTracks = useCallback((stream: MediaStream | null) => {
     stream?.getTracks().forEach((track) => track.stop());
@@ -353,15 +355,66 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
               const py = (event.clientY - rect.top) * (1280 / rect.height);
               const b = sourceBox;
               if (px < b.x || px > b.x + b.w || py < b.y || py > b.y + b.h) return;
-              dragRef.current = { mode: px > b.x + b.w - 32 && py > b.y + b.h - 32 ? "resize" : "move", startX: px, startY: py, boxX: b.x, boxY: b.y, boxW: b.w, boxH: b.h };
+
               event.currentTarget.setPointerCapture(event.pointerId);
+              activePointersRef.current.set(event.pointerId, { x: px, y: py });
+
+              // Deux doigts sur la vidéo : pincer pour réduire, écarter pour agrandir.
+              if (activePointersRef.current.size >= 2) {
+                const points = Array.from(activePointersRef.current.values());
+                const dx = points[1].x - points[0].x;
+                const dy = points[1].y - points[0].y;
+                pinchRef.current = {
+                  startDistance: Math.max(1, Math.hypot(dx, dy)),
+                  boxX: b.x,
+                  boxY: b.y,
+                  boxW: b.w,
+                  boxH: b.h,
+                };
+                dragRef.current = null;
+                return;
+              }
+
+              dragRef.current = {
+                mode: px > b.x + b.w - 44 && py > b.y + b.h - 44 ? "resize" : "move",
+                startX: px,
+                startY: py,
+                boxX: b.x,
+                boxY: b.y,
+                boxW: b.w,
+                boxH: b.h,
+              };
             }}
             onPointerMove={(event) => {
-              const drag = dragRef.current;
-              if (!drag) return;
               const rect = event.currentTarget.getBoundingClientRect();
               const px = (event.clientX - rect.left) * (720 / rect.width);
               const py = (event.clientY - rect.top) * (1280 / rect.height);
+              if (activePointersRef.current.has(event.pointerId)) {
+                activePointersRef.current.set(event.pointerId, { x: px, y: py });
+              }
+
+              const pinch = pinchRef.current;
+              if (pinch && activePointersRef.current.size >= 2) {
+                const points = Array.from(activePointersRef.current.values());
+                const dx = points[1].x - points[0].x;
+                const dy = points[1].y - points[0].y;
+                const distance = Math.max(1, Math.hypot(dx, dy));
+                const scale = distance / pinch.startDistance;
+                const w = Math.max(120, Math.min(696, pinch.boxW * scale));
+                const h = Math.max(150, Math.min(1270, pinch.boxH * scale));
+                const centerX = pinch.boxX + pinch.boxW / 2;
+                const centerY = pinch.boxY + pinch.boxH / 2;
+                setSourceBox({
+                  x: Math.max(0, Math.min(720 - w, centerX - w / 2)),
+                  y: Math.max(0, Math.min(1280 - h, centerY - h / 2)),
+                  w,
+                  h,
+                });
+                return;
+              }
+
+              const drag = dragRef.current;
+              if (!drag) return;
               const dx = px - drag.startX;
               const dy = py - drag.startY;
               if (drag.mode === "move") {
@@ -372,8 +425,16 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
                 setSourceBox((b) => ({ ...b, w: Math.min(w, 720 - b.x), h: Math.min(h, 1280 - b.y) }));
               }
             }}
-            onPointerUp={() => { dragRef.current = null; }}
-            onPointerCancel={() => { dragRef.current = null; }}
+            onPointerUp={(event) => {
+              activePointersRef.current.delete(event.pointerId);
+              if (activePointersRef.current.size < 2) pinchRef.current = null;
+              dragRef.current = null;
+            }}
+            onPointerCancel={(event) => {
+              activePointersRef.current.delete(event.pointerId);
+              if (activePointersRef.current.size < 2) pinchRef.current = null;
+              dragRef.current = null;
+            }}
           />
             <video ref={sourceRef} src={sourceUrl || undefined} playsInline webkit-playsinline="true" preload="auto" className="pointer-events-none absolute inset-0 h-full w-full object-contain opacity-0" onLoadedMetadata={() => { setReady(true); }} onCanPlay={() => setReady(true)} onError={() => { setReady(false); toast.error("Cette vidéo ne peut pas être lue sur cet appareil."); }} />
             {!sourceUrl && <div className="absolute inset-0 flex items-center justify-center text-center text-white/60"><div><Video size={42} className="mx-auto mb-3" /><p>Sélectionne une vidéo de ta galerie</p></div></div>}
@@ -395,7 +456,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
               </>}
             </div>
             <p className="text-center text-xs text-white/55">{recording ? (explaining ? "La vidéo originale est arrêtée : seule ta voix est enregistrée." : "La vidéo avance et sa voix est entendue. Appuie sur Expliquer pour l’arrêter.") : "Pendant l’explication, la vidéo s’arrête et ta voix prend le relais."}</p>
-            {(layout === "pip-tr" || layout === "pip-bl") && <p className="text-center text-[11px] text-white/45">Déplace la vidéo avec le doigt. Tire le coin rouge pour l’agrandir ou la réduire.</p>}
+            {(layout === "pip-tr" || layout === "pip-bl") && <p className="text-center text-[11px] text-white/45">Déplace la vidéo avec un doigt. Pince avec deux doigts pour la réduire ou écarte-les pour l’agrandir. Tu peux aussi tirer le coin rouge.</p>}
             <div className="flex items-center justify-center gap-2 text-[11px] text-white/40"><Volume2 size={13} /> Le son alterne entre la vidéo originale et ton microphone.</div>
           </div>
         </>
