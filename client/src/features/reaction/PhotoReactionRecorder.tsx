@@ -113,15 +113,44 @@ export default function PhotoReactionRecorder({ onClose, onVideoRecorded }: Prop
     }
     const nextUrl = URL.createObjectURL(file);
     const image = new Image();
-    image.onload = () => {
-      if (imageUrlRef.current) URL.revokeObjectURL(imageUrlRef.current);
-      imageUrlRef.current = nextUrl;
+    let triedDataUrlFallback = false;
+    const acceptImage = (sourceUrl: string) => {
+      if (imageUrlRef.current && imageUrlRef.current.startsWith("blob:")) {
+        URL.revokeObjectURL(imageUrlRef.current);
+      }
+      imageUrlRef.current = sourceUrl.startsWith("blob:") ? sourceUrl : "";
       imageRef.current = image;
       setPhotoReady(true);
     };
+    image.onload = () => acceptImage(image.src);
     image.onerror = () => {
+      // Some Android gallery providers expose a temporary file URI that the
+      // browser cannot decode directly. Retry from the actual file bytes.
+      if (!triedDataUrlFallback) {
+        triedDataUrlFallback = true;
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result === "string") {
+            image.onload = () => acceptImage(image.src);
+            image.onerror = () => {
+              URL.revokeObjectURL(nextUrl);
+              toast.error("Cette image n’est pas dans un format lisible. Essaie une photo JPG ou PNG enregistrée sur le téléphone.");
+            };
+            image.src = reader.result;
+          } else {
+            URL.revokeObjectURL(nextUrl);
+            toast.error("Impossible de lire cette photo. Essaie une photo JPG ou PNG.");
+          }
+        };
+        reader.onerror = () => {
+          URL.revokeObjectURL(nextUrl);
+          toast.error("Impossible de lire cette photo depuis la galerie. Réessaie avec une autre photo.");
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
       URL.revokeObjectURL(nextUrl);
-      toast.error("Cette photo ne peut pas être ouverte. Essaie une photo JPG ou PNG.");
+      toast.error("Cette image n’est pas dans un format lisible. Essaie une photo JPG ou PNG enregistrée sur le téléphone.");
     };
     image.src = nextUrl;
   };
