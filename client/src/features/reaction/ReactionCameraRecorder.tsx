@@ -360,7 +360,10 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
             };
             fallbackImage.onerror = () => {
               URL.revokeObjectURL(fallbackUrl);
-              throw new Error("L’image convertie ne peut pas être affichée.");
+              URL.revokeObjectURL(url);
+              photoRef.current = null;
+              setReady(false);
+              toast.error("Impossible de lire cette photo. Essaie de la partager en JPG ou PNG depuis ta galerie.");
             };
             fallbackImage.src = fallbackUrl;
             return;
