@@ -328,15 +328,50 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
 
     if (isSelectedImage) {
       const img = new Image();
+      let fallbackAttempted = false;
       img.onload = () => {
         photoRef.current = img;
         setReady(true);
       };
-      img.onerror = () => {
+      img.onerror = async () => {
+        // Some Android WebViews fail to load a gallery image through <img>
+        // even when the browser's image decoder can decode it as a bitmap.
+        if (!fallbackAttempted && typeof createImageBitmap === "function") {
+          fallbackAttempted = true;
+          try {
+            const bitmap = await createImageBitmap(mediaBlob);
+            const canvas = document.createElement("canvas");
+            canvas.width = bitmap.width;
+            canvas.height = bitmap.height;
+            const context = canvas.getContext("2d");
+            if (!context) throw new Error("Impossible de créer le contexte de conversion.");
+            context.drawImage(bitmap, 0, 0);
+            bitmap.close();
+            const jpegBlob = await new Promise<Blob>((resolve, reject) => {
+              canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Conversion JPEG impossible.")), "image/jpeg", 0.92);
+            });
+            const fallbackUrl = URL.createObjectURL(jpegBlob);
+            const fallbackImage = new Image();
+            fallbackImage.onload = () => {
+              photoRef.current = fallbackImage;
+              setSourceUrl(fallbackUrl);
+              setReady(true);
+              URL.revokeObjectURL(url);
+            };
+            fallbackImage.onerror = () => {
+              URL.revokeObjectURL(fallbackUrl);
+              throw new Error("L’image convertie ne peut pas être affichée.");
+            };
+            fallbackImage.src = fallbackUrl;
+            return;
+          } catch (error) {
+            console.error("[ReactionCameraRecorder] image decode fallback", error);
+          }
+        }
         photoRef.current = null;
         setReady(false);
         URL.revokeObjectURL(url);
-        toast.error("Impossible de lire cette photo. Essaie un fichier JPG, PNG ou WebP.");
+        toast.error("Impossible de lire cette photo. Essaie de la partager en JPG ou PNG depuis ta galerie.");
       };
       img.src = url;
     }
