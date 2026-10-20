@@ -14,7 +14,7 @@ import { useUpload } from "@/contexts/UploadContext";
 import { montageFilter } from "@/lib/montage-effects";
 import {
   ArrowLeft, Music, Pause, Play, RotateCcw, Sparkles, Volume2, X,
-  Scissors, Type, Smile, Captions, Wand2, Loader2, Trash2, Check, ImagePlus,
+  Scissors, Type, Smile, Captions, Wand2, Loader2, Trash2, Check, ImagePlus, Video,
 } from "lucide-react";
 import { toast } from "sonner";
 
