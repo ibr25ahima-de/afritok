@@ -218,7 +218,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
   useEffect(() => {
     const source = sourceRef.current;
     const camera = cameraRef.current;
-    if (!source || !camera || !sourceUrl || !ready || !cameraAvailable || !cameraStreamRef.current || audioContextRef.current) return;
+    if (!source || !camera || !sourceUrl || !ready || !cameraAvailable || !cameraStreamRef.current || sourceKind === "image" || audioContextRef.current) return;
     const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AudioContextClass) return;
     try {
@@ -241,7 +241,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
       console.error("[ReactionCameraRecorder] audio setup", error);
       toast.error("Impossible de préparer le son de la vidéo.");
     }
-  }, [sourceUrl, ready, cameraAvailable]);
+  }, [sourceUrl, ready, cameraAvailable, sourceKind]);
 
   useEffect(() => {
     const source = sourceRef.current;
@@ -310,12 +310,17 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
       const audio = audioContextRef.current;
       if (audio?.state === "suspended") await audio.resume();
       const canvasStream = canvas.captureStream(30);
-      const audioStream = (source as HTMLVideoElement & { __reactionAudioStream?: MediaStream }).__reactionAudioStream;
-      if (!audioStream) {
-        toast.error("Le son n’est pas prêt. Choisis à nouveau la vidéo.");
-        return;
+      if (sourceKind === "image") {
+        // A still photo has no source audio: record the microphone directly.
+        cameraStreamRef.current?.getAudioTracks().forEach((track) => canvasStream.addTrack(track));
+      } else {
+        const audioStream = (source as HTMLVideoElement & { __reactionAudioStream?: MediaStream }).__reactionAudioStream;
+        if (!audioStream) {
+          toast.error("Le son n’est pas prêt. Choisis à nouveau la vidéo.");
+          return;
+        }
+        audioStream.getAudioTracks().forEach((track) => canvasStream.addTrack(track));
       }
-      audioStream.getAudioTracks().forEach((track) => canvasStream.addTrack(track));
       const mime = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"].find((type) => MediaRecorder.isTypeSupported(type));
       const recorder = new MediaRecorder(canvasStream, { ...(mime ? { mimeType: mime } : {}), videoBitsPerSecond: 3_000_000, audioBitsPerSecond: 128_000 });
       chunksRef.current = [];
@@ -339,8 +344,10 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
       if (sourceKind === "video") source.currentTime = 0;
       const beginWithMe = startMode === "me";
       sourcePlaybackRequestedRef.current = sourceKind === "video" && !beginWithMe && sourceVisible;
-      micGainRef.current!.gain.setTargetAtTime(beginWithMe || !sourceVisible || sourceKind === "image" ? 1 : 0, audioContextRef.current!.currentTime, 0.02);
-      sourceGainRef.current!.gain.setTargetAtTime(beginWithMe || !sourceVisible || sourceKind === "image" ? 0 : 1, audioContextRef.current!.currentTime, 0.02);
+      if (audioContextRef.current && micGainRef.current && sourceGainRef.current) {
+        micGainRef.current.gain.setTargetAtTime(beginWithMe || !sourceVisible || sourceKind === "image" ? 1 : 0, audioContextRef.current.currentTime, 0.02);
+        sourceGainRef.current.gain.setTargetAtTime(beginWithMe || !sourceVisible || sourceKind === "image" ? 0 : 1, audioContextRef.current.currentTime, 0.02);
+      }
       if (sourceKind === "image" || !sourceVisible) {
         explainingRef.current = true;
         source.pause();
