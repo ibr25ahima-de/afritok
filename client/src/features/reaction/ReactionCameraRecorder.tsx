@@ -288,7 +288,9 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
     if (isHeic) {
       try {
         const converted = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 });
-        mediaBlob = Array.isArray(converted) ? converted[0] : converted;
+        const decodedBlob = Array.isArray(converted) ? converted[0] : converted;
+        if (!decodedBlob) throw new Error("La conversion n’a produit aucune image.");
+        mediaBlob = decodedBlob;
       } catch (error) {
         console.error("[ReactionCameraRecorder] conversion HEIC", error);
         toast.error("Cette photo HEIC/HEIF n’a pas pu être convertie. Essaie de la partager en JPG depuis ta galerie.");
