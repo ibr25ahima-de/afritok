@@ -287,7 +287,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
     const headerBytes = new Uint8Array(await file.slice(0, 32).arrayBuffer());
     const header = String.fromCharCode(...headerBytes);
     const heifBrand = /ftyp(?:heic|heix|hevc|hevx|mif1|msf1)/i.test(header);
-    const isHeic = /image\\/hei[cf]/i.test(file.type) || /\\.(heic|heif)$/i.test(file.name) || heifBrand;
+    const isHeic = /image\/hei[cf]/i.test(file.type) || /\.(heic|heif)$/i.test(file.name) || heifBrand;
     const isImage = file.type.startsWith("image/") || /\.(jpe?g|png|webp|gif|bmp|avif|heic|heif)$/i.test(file.name);
     const isVideo = file.type.startsWith("video/") || /\.(mp4|webm|mov|m4v|3gp|mkv)$/i.test(file.name);
     if (!isImage && !isVideo) {
