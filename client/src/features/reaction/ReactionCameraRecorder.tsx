@@ -677,7 +677,6 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
                 <button onClick={() => setStartMode("original")} className={startMode === "original" ? "rounded-xl border border-red-400 bg-red-500/20 px-3 py-3 text-sm font-semibold" : "rounded-xl border border-white/15 bg-white/5 px-3 py-3 text-sm font-semibold"}>Vidéo originale</button>
               </div>
             </div>}
-            {sourceUrl && <button type="button" onClick={toggleSourceVisibility} className="mx-auto flex items-center justify-center gap-2 rounded-full border border-white/30 bg-white/10 px-5 py-2 text-sm font-semibold">{sourceVisible ? <EyeOff size={19} /> : <Eye size={19} />}{sourceVisible ? "Masquer le média" : "Afficher le média"}</button>}
             <div className="grid grid-cols-2 gap-2">
               {!recording ? <button onClick={start} disabled={!ready || (sourceKind === "video" && !audioReady)} className="col-span-2 flex items-center justify-center gap-2 rounded-full bg-red-500 py-3 font-bold disabled:opacity-40"><Video size={18} /> Enregistrer la réaction</button> : <>
                 <button onClick={toggleExplain} disabled={sourceKind === "image" || !sourceVisible} className="flex items-center justify-center gap-2 rounded-full bg-white py-3 font-bold text-black disabled:opacity-40">{explaining ? <Play size={18} /> : <Pause size={18} />}{explaining ? "Reprendre la vidéo" : "Expliquer ce passage"}</button>
@@ -687,6 +686,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
             <p className="text-center text-xs text-white/55">{sourceKind === "image" ? "La photo reste affichée pendant que tu filmes. Utilise Afficher/Masquer pour la faire apparaître ou disparaître quand tu veux." : recording ? (explaining ? "La vidéo originale est arrêtée : seule ta voix est enregistrée." : "La vidéo avance et sa voix est entendue. Appuie sur Expliquer pour l’arrêter.") : "Pendant l’explication, la vidéo s’arrête et ta voix prend le relais."}</p>
             {(layout === "pip-tr" || layout === "pip-bl") && <p className="text-center text-[11px] text-white/45">Déplace la vidéo avec un doigt. Pince avec deux doigts pour la réduire ou écarte-les pour l’agrandir. Tu peux aussi tirer le coin rouge.</p>}
             <div className="flex items-center justify-center gap-2 text-[11px] text-white/40"><Volume2 size={13} /> Le son alterne entre la vidéo originale et ton microphone.</div>
+            {sourceUrl && <button type="button" onClick={toggleSourceVisibility} className="mx-auto flex items-center justify-center gap-2 rounded-full border border-white/30 bg-white/10 px-5 py-2 text-sm font-semibold">{sourceVisible ? <EyeOff size={19} /> : <Eye size={19} />}{sourceVisible ? "Masquer le média" : "Afficher le média"}</button>}
           </div>
         </>
       )}
