@@ -36,6 +36,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
   const [sourceKind, setSourceKind] = useState<"video" | "image">("video");
   const [sourceVisible, setSourceVisible] = useState(true);
   const [ready, setReady] = useState(false);
+  const [audioReady, setAudioReady] = useState(false);
   const [cameraAvailable, setCameraAvailable] = useState(false);
   const [cameraFacingMode, setCameraFacingMode] = useState<"user" | "environment">("user");
   const [switchingCamera, setSwitchingCamera] = useState(false);
@@ -219,7 +220,12 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
   useEffect(() => {
     const source = sourceRef.current;
     const camera = cameraRef.current;
-    if (!source || !camera || !sourceUrl || !ready || !cameraAvailable || !cameraStreamRef.current || sourceKind === "image" || audioContextRef.current) return;
+    if (sourceKind === "image") { setAudioReady(false); return; }
+    if (!source || !camera || !sourceUrl || !ready || !cameraAvailable || !cameraStreamRef.current) { setAudioReady(false); return; }
+    const existingStream = (source as HTMLVideoElement & { __reactionAudioStream?: MediaStream }).__reactionAudioStream;
+    if (existingStream?.getAudioTracks().some((track) => track.readyState === "live")) { setAudioReady(true); return; }
+    if (audioContextRef.current) { setAudioReady(false); return; }
+    setAudioReady(false);
     const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AudioContextClass) return;
     try {
@@ -238,8 +244,10 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
       micGainRef.current = micGain;
       sourceGainRef.current = sourceGain;
       (source as HTMLVideoElement & { __reactionAudioStream?: MediaStream }).__reactionAudioStream = destination.stream;
+      setAudioReady(destination.stream.getAudioTracks().some((track) => track.readyState === "live"));
     } catch (error) {
       console.error("[ReactionCameraRecorder] audio setup", error);
+      setAudioReady(false);
       toast.error("Impossible de préparer le son de la vidéo.");
     }
   }, [sourceUrl, ready, cameraAvailable, sourceKind]);
@@ -276,7 +284,10 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
 
     // Certains téléphones fournissent les photos au format HEIC/HEIF,
     // que le lecteur d'image du navigateur ne sait pas toujours décoder.
-    const isHeic = /image\/hei[cf]/i.test(file.type) || /\.(heic|heif)$/i.test(file.name);
+    const headerBytes = new Uint8Array(await file.slice(0, 32).arrayBuffer());
+    const header = String.fromCharCode(...headerBytes);
+    const heifBrand = /ftyp(?:heic|heix|hevc|hevx|mif1|msf1)/i.test(header);
+    const isHeic = /image\\/hei[cf]/i.test(file.type) || /\\.(heic|heif)$/i.test(file.name) || heifBrand;
     const isImage = file.type.startsWith("image/") || /\.(jpe?g|png|webp|gif|bmp|avif|heic|heif)$/i.test(file.name);
     const isVideo = file.type.startsWith("video/") || /\.(mp4|webm|mov|m4v|3gp|mkv)$/i.test(file.name);
     if (!isImage && !isVideo) {
@@ -302,6 +313,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
     const isSelectedImage = isImage;
     photoRef.current = null;
     setReady(false);
+    setAudioReady(false);
     setSourceKind(isSelectedImage ? "image" : "video");
     setSourceVisible(true);
     const url = URL.createObjectURL(mediaBlob);
@@ -340,6 +352,10 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
     }
     try {
       const audio = audioContextRef.current;
+      if (sourceKind === "video" && !audioReady) {
+        toast.error("Le son de la vidéo se prépare encore. Attends un instant avant d’enregistrer.");
+        return;
+      }
       if (audio?.state === "suspended") await audio.resume();
       const canvasStream = canvas.captureStream(30);
       if (sourceKind === "image") {
@@ -591,7 +607,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
               dragRef.current = null;
             }}
           />
-            <video ref={sourceRef} src={sourceUrl || undefined} playsInline webkit-playsinline="true" preload="auto" className="pointer-events-none absolute inset-0 h-full w-full object-contain opacity-0" onLoadedMetadata={() => { if (sourceKind === "video") setReady(true); }} onCanPlay={() => { if (sourceKind === "video") setReady(true); }} onError={() => { if (sourceKind === "video") { setReady(false); toast.error("Cette vidéo ne peut pas être lue sur cet appareil."); } }} />
+            <video ref={sourceRef} src={sourceKind === "video" ? (sourceUrl || undefined) : undefined} playsInline webkit-playsinline="true" preload="auto" className="pointer-events-none absolute inset-0 h-full w-full object-contain opacity-0" onLoadedMetadata={() => { if (sourceKind === "video") setReady(true); }} onCanPlay={() => { if (sourceKind === "video") setReady(true); }} onError={() => { if (sourceKind === "video") { setReady(false); toast.error("Cette vidéo ne peut pas être lue sur cet appareil."); } }} />
             {!sourceUrl && <div className="absolute inset-0 flex items-center justify-center text-center text-white/60"><div><Video size={42} className="mx-auto mb-3" /><p>Sélectionne une vidéo ou une photo de ta galerie</p></div></div>}
             {sourceUrl && !ready && <div className="absolute inset-0 flex items-center justify-center text-sm text-white/70">Préparation du média…</div>}
           </div>
@@ -606,7 +622,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
             </div>}
             {sourceUrl && <button type="button" onClick={toggleSourceVisibility} className="mx-auto flex items-center justify-center gap-2 rounded-full border border-white/30 bg-white/10 px-5 py-2 text-sm font-semibold">{sourceVisible ? <EyeOff size={19} /> : <Eye size={19} />}{sourceVisible ? "Masquer le média" : "Afficher le média"}</button>}
             <div className="grid grid-cols-2 gap-2">
-              {!recording ? <button onClick={start} disabled={!ready} className="col-span-2 flex items-center justify-center gap-2 rounded-full bg-red-500 py-3 font-bold disabled:opacity-40"><Video size={18} /> Enregistrer la réaction</button> : <>
+              {!recording ? <button onClick={start} disabled={!ready || (sourceKind === "video" && !audioReady)} className="col-span-2 flex items-center justify-center gap-2 rounded-full bg-red-500 py-3 font-bold disabled:opacity-40"><Video size={18} /> Enregistrer la réaction</button> : <>
                 <button onClick={toggleExplain} disabled={sourceKind === "image" || !sourceVisible} className="flex items-center justify-center gap-2 rounded-full bg-white py-3 font-bold text-black disabled:opacity-40">{explaining ? <Play size={18} /> : <Pause size={18} />}{explaining ? "Reprendre la vidéo" : "Expliquer ce passage"}</button>
                 <button onClick={finish} className="flex items-center justify-center gap-2 rounded-full bg-red-500 py-3 font-bold"><Check size={18} /> Terminer</button>
               </>}
