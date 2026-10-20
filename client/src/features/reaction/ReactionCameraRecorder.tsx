@@ -286,9 +286,17 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
     // que le lecteur d'image du navigateur ne sait pas toujours décoder.
     const headerBytes = new Uint8Array(await file.slice(0, 32).arrayBuffer());
     const header = String.fromCharCode(...headerBytes);
-    const heifBrand = /ftyp(?:heic|heix|hevc|hevx|mif1|msf1)/i.test(header);
+    // Android gallery providers sometimes return a generic MIME type and filename.
+    // Recognize HEIF brands from the file signature, not only its metadata.
+    const heifBrand = /ftyp(?:heic|heix|hevc|hevx|heif|heis|heim|hevm|hevs|mif1|msf1)/i.test(header);
+    const signatureImage = /^\xFF\xD8\xFF/.test(header)
+      || header.startsWith("\x89PNG\r\n\x1A\n")
+      || header.startsWith("GIF87a") || header.startsWith("GIF89a")
+      || (header.startsWith("RIFF") && header.slice(8, 12) === "WEBP")
+      || header.startsWith("BM")
+      || /ftyp(?:avif|avis)/i.test(header);
     const isHeic = /image\/hei[cf]/i.test(file.type) || /\.(heic|heif)$/i.test(file.name) || heifBrand;
-    const isImage = file.type.startsWith("image/") || /\.(jpe?g|png|webp|gif|bmp|avif|heic|heif)$/i.test(file.name);
+    const isImage = file.type.startsWith("image/") || signatureImage || /\.(jpe?g|png|webp|gif|bmp|avif|heic|heif)$/i.test(file.name);
     const isVideo = file.type.startsWith("video/") || /\.(mp4|webm|mov|m4v|3gp|mkv)$/i.test(file.name);
     if (!isImage && !isVideo) {
       toast.error("Choisis une photo JPG, PNG, WebP ou HEIC, ou une vidéo compatible.");
@@ -320,15 +328,53 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
 
     if (isSelectedImage) {
       const img = new Image();
+      let fallbackAttempted = false;
       img.onload = () => {
         photoRef.current = img;
         setReady(true);
       };
-      img.onerror = () => {
+      img.onerror = async () => {
+        // Some Android WebViews fail to load a gallery image through <img>
+        // even when the browser's image decoder can decode it as a bitmap.
+        if (!fallbackAttempted && typeof createImageBitmap === "function") {
+          fallbackAttempted = true;
+          try {
+            const bitmap = await createImageBitmap(mediaBlob);
+            const canvas = document.createElement("canvas");
+            canvas.width = bitmap.width;
+            canvas.height = bitmap.height;
+            const context = canvas.getContext("2d");
+            if (!context) throw new Error("Impossible de créer le contexte de conversion.");
+            context.drawImage(bitmap, 0, 0);
+            bitmap.close();
+            const jpegBlob = await new Promise<Blob>((resolve, reject) => {
+              canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Conversion JPEG impossible.")), "image/jpeg", 0.92);
+            });
+            const fallbackUrl = URL.createObjectURL(jpegBlob);
+            const fallbackImage = new Image();
+            fallbackImage.onload = () => {
+              photoRef.current = fallbackImage;
+              setSourceUrl(fallbackUrl);
+              setReady(true);
+              URL.revokeObjectURL(url);
+            };
+            fallbackImage.onerror = () => {
+              URL.revokeObjectURL(fallbackUrl);
+              URL.revokeObjectURL(url);
+              photoRef.current = null;
+              setReady(false);
+              toast.error("Impossible de lire cette photo. Essaie de la partager en JPG ou PNG depuis ta galerie.");
+            };
+            fallbackImage.src = fallbackUrl;
+            return;
+          } catch (error) {
+            console.error("[ReactionCameraRecorder] image decode fallback", error);
+          }
+        }
         photoRef.current = null;
         setReady(false);
         URL.revokeObjectURL(url);
-        toast.error("Impossible de lire cette photo. Essaie un fichier JPG, PNG ou WebP.");
+        toast.error("Impossible de lire cette photo. Essaie de la partager en JPG ou PNG depuis ta galerie.");
       };
       img.src = url;
     }
@@ -470,7 +516,8 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
     recordingRef.current = false;
     explainingRef.current = true;
     sourcePlaybackRequestedRef.current = false;
-    sourceRef.current?.pause();
+    // Let MediaRecorder flush its final canvas frames before pausing the source.
+    // The source is paused in recorder.onstop, after the final dataavailable event.
     try { if (recorderRef.current?.state !== "inactive") recorderRef.current?.stop(); }
     catch { setFinishing(false); toast.error("Impossible de terminer l’enregistrement."); }
   };
