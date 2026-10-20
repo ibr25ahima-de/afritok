@@ -37,6 +37,8 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
   const [explaining, setExplaining] = useState(false);
   const explainingRef = useRef(false);
   const recordingRef = useRef(false);
+  // True only while the user expects the original video to be playing.
+  const sourcePlaybackRequestedRef = useRef(false);
   const [elapsed, setElapsed] = useState(0);
   const [finishing, setFinishing] = useState(false);
   const [startMode, setStartMode] = useState<"me" | "original">("original");
@@ -173,11 +175,12 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
   useEffect(() => {
     const source = sourceRef.current;
     if (!source) return;
-    // En mode « Moi d’abord », la lecture ne doit reprendre que lorsque
-    // l’utilisateur le demande. Si le navigateur met la vidéo en pause
-    // tout seul pendant sa lecture, on tente de la relancer.
+    // En mode « Moi d’abord », ne pas confondre une pause volontaire
+    // (explication) avec une pause imprévue du lecteur pendant la lecture.
+    // La référence exprime l’intention de lecture et évite les courses entre
+    // les événements pause/play et les mises à jour React.
     const recoverUnexpectedPause = () => {
-      if (!recordingRef.current || explainingRef.current || source.ended || !source.paused) return;
+      if (startMode !== "me" || !recordingRef.current || !sourcePlaybackRequestedRef.current || source.ended || !source.paused) return;
       void source.play().catch((error) => {
         console.warn("[ReactionCameraRecorder] reprise automatique impossible", error);
       });
@@ -188,7 +191,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
       source.removeEventListener("pause", recoverUnexpectedPause);
       source.removeEventListener("canplay", recoverUnexpectedPause);
     };
-  }, [sourceUrl, ready]);
+  }, [sourceUrl, ready, startMode]);
 
   useEffect(() => {
     if (!recording) return;
@@ -208,6 +211,9 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
     setReady(false);
     setRecording(false);
     setExplaining(false);
+    recordingRef.current = false;
+    explainingRef.current = false;
+    sourcePlaybackRequestedRef.current = false;
   };
 
   const start = async () => {
@@ -239,6 +245,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
         const duration = Math.max(1, Math.round((performance.now() - startAtRef.current) / 1000));
         recordingRef.current = false;
         explainingRef.current = false;
+        sourcePlaybackRequestedRef.current = false;
         setRecording(false);
         setExplaining(false);
         source.pause();
@@ -249,6 +256,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
       startAtRef.current = performance.now();
       source.currentTime = 0;
       const beginWithMe = startMode === "me";
+      sourcePlaybackRequestedRef.current = !beginWithMe;
       micGainRef.current!.gain.setTargetAtTime(beginWithMe ? 1 : 0, audioContextRef.current!.currentTime, 0.02);
       sourceGainRef.current!.gain.setTargetAtTime(beginWithMe ? 0 : 1, audioContextRef.current!.currentTime, 0.02);
       if (beginWithMe) {
@@ -274,12 +282,14 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
     if (!recording || !source || !audio) return;
     if (!explaining) {
       explainingRef.current = true;
+      sourcePlaybackRequestedRef.current = false;
       source.pause();
       sourceGainRef.current?.gain.setTargetAtTime(0, audio.currentTime, 0.02);
       micGainRef.current?.gain.setTargetAtTime(1, audio.currentTime, 0.02);
       setExplaining(true);
     } else {
       explainingRef.current = false;
+      sourcePlaybackRequestedRef.current = true;
       micGainRef.current?.gain.setTargetAtTime(0, audio.currentTime, 0.02);
       sourceGainRef.current?.gain.setTargetAtTime(1, audio.currentTime, 0.02);
       source.play().catch(() => toast.error("Impossible de reprendre la vidéo originale."));
@@ -292,6 +302,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
     setFinishing(true);
     recordingRef.current = false;
     explainingRef.current = true;
+    sourcePlaybackRequestedRef.current = false;
     sourceRef.current?.pause();
     try { if (recorderRef.current?.state !== "inactive") recorderRef.current?.stop(); }
     catch { setFinishing(false); toast.error("Impossible de terminer l’enregistrement."); }
