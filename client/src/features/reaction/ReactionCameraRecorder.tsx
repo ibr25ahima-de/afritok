@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Check, Eye, EyeOff, ImagePlus, Pause, Play, Video, Volume2 } from "lucide-react";
+import { ArrowLeft, Check, Eye, EyeOff, ImagePlus, Pause, Play, RefreshCw, Video, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 
 type Layout = "pip-tr" | "pip-bl" | "split" | "video-background";
@@ -36,6 +36,8 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
   const [sourceVisible, setSourceVisible] = useState(true);
   const [ready, setReady] = useState(false);
   const [cameraAvailable, setCameraAvailable] = useState(false);
+  const [cameraFacingMode, setCameraFacingMode] = useState<"user" | "environment">("user");
+  const [switchingCamera, setSwitchingCamera] = useState(false);
   const [recording, setRecording] = useState(false);
   const [explaining, setExplaining] = useState(false);
   const explainingRef = useRef(false);
@@ -53,6 +55,59 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
   const stopTracks = useCallback((stream: MediaStream | null) => {
     stream?.getTracks().forEach((track) => track.stop());
   }, []);
+
+  // Replace only the video track: the microphone track and the active
+  // canvas/MediaRecorder stay alive while the user switches cameras.
+  const switchCamera = async () => {
+    if (switchingCamera) return;
+    const stream = cameraStreamRef.current;
+    const oldTrack = stream?.getVideoTracks()[0];
+    if (!stream || !oldTrack) {
+      toast.error("La caméra n'est pas disponible.");
+      return;
+    }
+
+    const previousMode = cameraFacingMode;
+    const nextMode = previousMode === "user" ? "environment" : "user";
+    setSwitchingCamera(true);
+    oldTrack.stop();
+    stream.removeTrack(oldTrack);
+
+    const attachVideoTrack = async (mode: "user" | "environment") => {
+      const replacement = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: mode }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      const track = replacement.getVideoTracks()[0];
+      if (!track) {
+        replacement.getTracks().forEach((item) => item.stop());
+        throw new Error("Aucune piste vidéo reçue.");
+      }
+      stream.addTrack(track);
+      replacement.getTracks().filter((item) => item !== track).forEach((item) => item.stop());
+      if (cameraRef.current) {
+        cameraRef.current.srcObject = stream;
+        await cameraRef.current.play();
+      }
+    };
+
+    try {
+      await attachVideoTrack(nextMode);
+      setCameraFacingMode(nextMode);
+    } catch (error) {
+      console.error("[ReactionCameraRecorder] switch camera", error);
+      try {
+        await attachVideoTrack(previousMode);
+        toast.error("Impossible de changer de caméra. L'ancienne caméra a été rétablie.");
+      } catch (restoreError) {
+        console.error("[ReactionCameraRecorder] restore camera", restoreError);
+        setCameraAvailable(false);
+        toast.error("Impossible de réouvrir la caméra. Arrête puis relance Réagir.");
+      }
+    } finally {
+      setSwitchingCamera(false);
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -224,6 +279,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
     if (sourceUrl) URL.revokeObjectURL(sourceUrl);
     const isImage = file.type.startsWith("image/");
     photoRef.current = null;
+    setReady(false);
     setSourceKind(isImage ? "image" : "video");
     setSourceVisible(true);
     const url = URL.createObjectURL(file);
@@ -235,7 +291,6 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
     }
     setSourceUrl(url);
     setSourceName(file.name);
-    setReady(false);
     setRecording(false);
     setExplaining(false);
     recordingRef.current = false;
@@ -371,8 +426,8 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
       {!layoutChosen ? (
         <div className="flex-1 overflow-y-auto p-4 pt-8">
           <button onClick={onClose} className="mb-5 flex items-center gap-2 text-sm text-white/80"><ArrowLeft size={18} /> Retour à la caméra</button>
-          <h1 className="text-2xl font-bold">Réagir à une vidéo</h1>
-          <p className="mt-2 text-sm text-white/65">Choisis la disposition de ta vidéo et de ta caméra avant de commencer.</p>
+          <h1 className="text-2xl font-bold">Réagir à une vidéo ou une photo</h1>
+          <p className="mt-2 text-sm text-white/65">Choisis une vidéo ou une photo de ta galerie, puis filme ta réaction. Tu peux afficher ou masquer le média pendant l’enregistrement.</p>
           <div className="mt-5 grid grid-cols-2 gap-3">
             {LAYOUTS.map((item) => (
               <button key={item.id} onClick={() => { setLayout(item.id); setSourceBox(item.id === "pip-bl" ? { x: 24, y: 860, w: 271, h: 355 } : { x: 420, y: 50, w: 271, h: 355 }); setLayoutChosen(true); }} className={`rounded-2xl border p-3 text-left transition ${layout === item.id ? "border-red-400 bg-red-500/15" : "border-white/15 bg-white/5"}`}>
@@ -393,10 +448,16 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
           <div className="relative z-20 flex items-center justify-between px-4 py-3">
             <button onClick={() => { if (!recording) { setLayoutChosen(false); setSourceUrl(""); setReady(false); } }} disabled={recording} className="flex items-center gap-2 text-sm disabled:opacity-40"><ArrowLeft size={20} /> Modèles</button>
             <span className="max-w-[55%] truncate text-xs text-white/70">{sourceName || "Choisir un média"}</span>
-            <label className="flex cursor-pointer items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-bold text-black">
-              <ImagePlus size={16} /> Galerie
-              <input type="file" accept="video/*,image/*" className="hidden" onChange={(event) => chooseVideo(event.target.files?.[0])} />
-            </label>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={switchCamera} disabled={switchingCamera || !cameraAvailable} className="flex items-center gap-1 rounded-full border border-white/25 bg-white/10 px-3 py-2 text-xs font-semibold disabled:opacity-50" aria-label="Retourner la caméra" title={cameraFacingMode === "user" ? "Passer à la caméra arrière" : "Passer à la caméra avant"}>
+                <RefreshCw size={15} className={switchingCamera ? "animate-spin" : ""} />
+                {switchingCamera ? "Changement…" : cameraFacingMode === "user" ? "Arrière" : "Avant"}
+              </button>
+              <label className="flex cursor-pointer items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-bold text-black">
+                <ImagePlus size={16} /> Galerie
+                <input type="file" accept="video/*,image/*" className="hidden" onChange={(event) => { chooseVideo(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+              </label>
+            </div>
           </div>
           <div className="relative min-h-0 flex-1 bg-black p-3">
             <canvas
@@ -497,7 +558,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
           </div>
           <div className="z-20 space-y-3 bg-neutral-950 px-4 pb-5 pt-3">
             {recording && <div className="text-center text-sm font-semibold tabular-nums">{Math.floor(elapsed / 60).toString().padStart(2, "0")}:{Math.floor(elapsed % 60).toString().padStart(2, "0")} · {explaining ? "Ton explication" : "Vidéo originale"}</div>}
-            {!recording && ready && <div className="space-y-2">
+            {!recording && ready && sourceKind === "video" && <div className="space-y-2">
               <p className="text-center text-xs font-semibold text-white/75">Qui commence ?</p>
               <div className="grid grid-cols-2 gap-2">
                 <button onClick={() => setStartMode("me")} className={startMode === "me" ? "rounded-xl border border-red-400 bg-red-500/20 px-3 py-3 text-sm font-semibold" : "rounded-xl border border-white/15 bg-white/5 px-3 py-3 text-sm font-semibold"}>Moi d’abord</button>
@@ -511,7 +572,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
                 <button onClick={finish} className="flex items-center justify-center gap-2 rounded-full bg-red-500 py-3 font-bold"><Check size={18} /> Terminer</button>
               </>}
             </div>
-            <p className="text-center text-xs text-white/55">{recording ? (explaining ? "La vidéo originale est arrêtée : seule ta voix est enregistrée." : "La vidéo avance et sa voix est entendue. Appuie sur Expliquer pour l’arrêter.") : "Pendant l’explication, la vidéo s’arrête et ta voix prend le relais."}</p>
+            <p className="text-center text-xs text-white/55">{sourceKind === "image" ? "La photo reste affichée pendant que tu filmes. Utilise Afficher/Masquer pour la faire apparaître ou disparaître quand tu veux." : recording ? (explaining ? "La vidéo originale est arrêtée : seule ta voix est enregistrée." : "La vidéo avance et sa voix est entendue. Appuie sur Expliquer pour l’arrêter.") : "Pendant l’explication, la vidéo s’arrête et ta voix prend le relais."}</p>
             {(layout === "pip-tr" || layout === "pip-bl") && <p className="text-center text-[11px] text-white/45">Déplace la vidéo avec un doigt. Pince avec deux doigts pour la réduire ou écarte-les pour l’agrandir. Tu peux aussi tirer le coin rouge.</p>}
             <div className="flex items-center justify-center gap-2 text-[11px] text-white/40"><Volume2 size={13} /> Le son alterne entre la vidéo originale et ton microphone.</div>
           </div>
