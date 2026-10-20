@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Check, Eye, EyeOff, ImagePlus, Pause, Play, RefreshCw, Video, Volume2 } from "lucide-react";
 import { toast } from "sonner";
+import heic2any from "heic2any";
 
 type Layout = "pip-tr" | "pip-bl" | "split" | "video-background";
 type Props = {
@@ -270,25 +271,54 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
     return () => window.clearInterval(interval);
   }, [recording]);
 
-  const chooseVideo = (file?: File) => {
+  const chooseVideo = async (file?: File) => {
     if (!file) return;
-    if (!file.type.startsWith("video/") && !file.type.startsWith("image/")) {
-      toast.error("Choisis une vidéo ou une photo.");
+
+    // Certains téléphones fournissent les photos au format HEIC/HEIF,
+    // que le lecteur d'image du navigateur ne sait pas toujours décoder.
+    const isHeic = /image\/hei[cf]/i.test(file.type) || /\.(heic|heif)$/i.test(file.name);
+    const isImage = file.type.startsWith("image/") || /\.(jpe?g|png|webp|gif|bmp|avif|heic|heif)$/i.test(file.name);
+    const isVideo = file.type.startsWith("video/") || /\.(mp4|webm|mov|m4v|3gp|mkv)$/i.test(file.name);
+    if (!isImage && !isVideo) {
+      toast.error("Choisis une photo JPG, PNG, WebP ou HEIC, ou une vidéo compatible.");
       return;
     }
+
+    let mediaBlob: Blob = file;
+    if (isHeic) {
+      try {
+        const converted = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 });
+        mediaBlob = Array.isArray(converted) ? converted[0] : converted;
+      } catch (error) {
+        console.error("[ReactionCameraRecorder] conversion HEIC", error);
+        toast.error("Cette photo HEIC/HEIF n’a pas pu être convertie. Essaie de la partager en JPG depuis ta galerie.");
+        return;
+      }
+    }
+
     if (sourceUrl) URL.revokeObjectURL(sourceUrl);
-    const isImage = file.type.startsWith("image/");
+    const isSelectedImage = isImage;
     photoRef.current = null;
     setReady(false);
-    setSourceKind(isImage ? "image" : "video");
+    setSourceKind(isSelectedImage ? "image" : "video");
     setSourceVisible(true);
-    const url = URL.createObjectURL(file);
-    if (isImage) {
+    const url = URL.createObjectURL(mediaBlob);
+
+    if (isSelectedImage) {
       const img = new Image();
-      img.onload = () => { photoRef.current = img; setReady(true); };
-      img.onerror = () => { setReady(false); toast.error("Cette photo ne peut pas être ouverte."); };
+      img.onload = () => {
+        photoRef.current = img;
+        setReady(true);
+      };
+      img.onerror = () => {
+        photoRef.current = null;
+        setReady(false);
+        URL.revokeObjectURL(url);
+        toast.error("Impossible de lire cette photo. Essaie un fichier JPG, PNG ou WebP.");
+      };
       img.src = url;
     }
+
     setSourceUrl(url);
     setSourceName(file.name);
     setRecording(false);
