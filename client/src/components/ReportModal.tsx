@@ -83,7 +83,7 @@ export default function ReportModal({ videoId, userId, isOpen, onClose }: Report
 
           <div className="bg-slate-800/50 border border-purple-800/30 rounded-lg p-3">
             <p className="text-sm text-purple-300">
-              Your report is confidential and will be reviewed by our moderation team. Thank you for helping keep Afritok safe.
+              Your report is confidential and will be reviewed by our moderation team. Thank you for helping keep biYaloxi safe.
             </p>
           </div>
 
