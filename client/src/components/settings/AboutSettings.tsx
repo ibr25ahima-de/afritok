@@ -25,7 +25,7 @@ export default function AboutSettings() {
         toast.info(
           t(
             "licenseInfo",
-            "Les informations de licence sont intégrées à AfriTok. Aucun accès au dépôt de développement n'est nécessaire."
+            "Les informations de licence sont intégrées à biYaloxi. Aucun accès au dépôt de développement n'est nécessaire."
           )
         ),
     },
@@ -36,7 +36,7 @@ export default function AboutSettings() {
         toast.info(
           t(
             "creditsInfo",
-            "AfriTok — application développée pour offrir une expérience vidéo sociale aux utilisateurs africains."
+            "biYaloxi — application développée pour offrir une expérience vidéo sociale aux utilisateurs africains."
           )
         ),
     },
@@ -44,7 +44,7 @@ export default function AboutSettings() {
 
   return (
     <Card className="bg-gray-900 border-gray-800 p-6">
-      <h2 className="text-xl font-bold mb-4">{t("aboutTitle", "À propos d'AfriTok")}</h2>
+      <h2 className="text-xl font-bold mb-4">{t("aboutTitle", "À propos d'biYaloxi")}</h2>
       <div className="space-y-1">
         <div className="flex items-center justify-between p-4 border-b border-gray-800">
           <div className="flex items-center gap-3">
@@ -72,7 +72,7 @@ export default function AboutSettings() {
 
         <div className="pt-6 pb-2 text-center">
           <p className="text-xs text-gray-500">
-            Copyright © 2026 AfriTok. {t("rights", "Tous droits réservés.")}
+            Copyright © 2026 biYaloxi. {t("rights", "Tous droits réservés.")}
           </p>
         </div>
       </div>
