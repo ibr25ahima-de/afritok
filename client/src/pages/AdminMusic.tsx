@@ -42,7 +42,7 @@ export default function AdminMusic() {
                   Gestion de la Bibliothèque
                 </CardTitle>
                 <CardDescription className="text-slate-400">
-                  Synchronisez les fichiers audio de Supabase Storage avec la base de données Afritok.
+                  Synchronisez les fichiers audio de Supabase Storage avec la base de données biYaloxi.
                 </CardDescription>
               </div>
             </div>
@@ -54,7 +54,7 @@ export default function AdminMusic() {
                 Synchronisation automatique
               </h3>
               <p className="text-sm text-slate-300 mb-4">
-                Cette action va scanner le bucket <code className="bg-slate-700 px-1 rounded text-purple-300">musique</code> sur Supabase et ajouter automatiquement tous les nouveaux fichiers dans votre bibliothèque Afritok.
+                Cette action va scanner le bucket <code className="bg-slate-700 px-1 rounded text-purple-300">musique</code> sur Supabase et ajouter automatiquement tous les nouveaux fichiers dans votre bibliothèque biYaloxi.
               </p>
               
               <Button 
@@ -103,7 +103,7 @@ export default function AdminMusic() {
         </Card>
 
         <div className="text-center text-xs text-slate-500">
-          Afritok Admin v1.0 • Music Library Sync
+          biYaloxi Admin v1.0 • Music Library Sync
         </div>
       </div>
     </div>
