@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { ArrowLeft, Check, ImagePlus, Video } from "lucide-react";
 import { toast } from "sonner";
 
@@ -117,7 +117,7 @@ export default function PhotoReactionRecorder({ onClose, onVideoRecorded }: Prop
     return () => window.clearInterval(interval);
   }, [recording]);
 
-  const canvasPoint = (event: React.PointerEvent<HTMLCanvasElement>) => {
+  const canvasPoint = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const bounds = canvas.getBoundingClientRect();
