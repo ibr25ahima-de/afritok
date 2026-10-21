@@ -135,7 +135,7 @@ export default function AdvertisingCreateFormSecure() {
       await activateCampaign.mutateAsync({ campaignId: campaign.id });
 
       setMessage(
-        "Publicité envoyée et activée. La diffusion commence selon la durée choisie et les règles AfriTok."
+        "Publicité envoyée et activée. La diffusion commence selon la durée choisie et les règles BiYaloxi."
       );
       setPaymentConfirmed(false);
       setPaymentReference("");
@@ -153,7 +153,7 @@ export default function AdvertisingCreateFormSecure() {
   return (
     <section className="mx-auto w-full max-w-lg rounded-3xl bg-white p-5 text-black shadow-xl">
       <h1 className="text-3xl font-black">Faire de la publicité</h1>
-      <p className="mt-1 text-lg font-bold">Présentez votre entreprise sur AfriTok</p>
+      <p className="mt-1 text-lg font-bold">Présentez votre entreprise sur BiYaloxi</p>
 
       <p className="mt-4 rounded-2xl bg-amber-50 p-4 text-sm font-bold">
         Toutes les personnes qui utilisent cette application verront votre publicité.
@@ -337,10 +337,10 @@ export default function AdvertisingCreateFormSecure() {
       </div>
 
       <div className="mt-6 rounded-2xl bg-gray-50 p-4 text-sm">
-        <p className="font-black">Conditions de publicité AfriTok</p>
+        <p className="font-black">Conditions de publicité BiYaloxi</p>
         <ul className="mt-2 list-disc space-y-1 pl-5">
           <li>Le tarif dépend du format et de la durée.</li>
-          <li>Les campagnes sont contrôlées selon les règles publicitaires AfriTok.</li>
+          <li>Les campagnes sont contrôlées selon les règles publicitaires BiYaloxi.</li>
           <li>Une campagne non payée ou non confirmée reste inactive.</li>
           <li>Aucun contenu publicitaire n'est diffusé avant confirmation réelle du paiement.</li>
           <li>La diffusion commence selon la période choisie et les règles de la plateforme.</li>

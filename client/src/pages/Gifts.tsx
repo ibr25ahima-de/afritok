@@ -5,7 +5,7 @@ export default function Gifts() {
     data: gifts,
     isLoading,
     error,
-  } = trpc.gifts.getAvailable.useQuery();
+  } = trpc.coins.getActiveGifts.useQuery();
 
   if (isLoading) {
     return (
@@ -72,7 +72,7 @@ export default function Gifts() {
 
                 <p className="text-yellow-400 font-semibold mt-1">
                   🪙{" "}
-                  {gift.coinPrice.toLocaleString(
+                  {gift.coins.toLocaleString(
                     "fr-FR"
                   )}
                 </p>
