@@ -21,7 +21,7 @@ export default function ShareModal({ videoId, videoTitle, videoUrl, onClose }: S
 
     const link = document.createElement("a");
     link.href = videoUrl;
-    link.download = "afritok-video.mp4";
+    link.download = "biyaloxi-video.mp4";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
