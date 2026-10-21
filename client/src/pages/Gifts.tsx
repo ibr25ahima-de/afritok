@@ -4,23 +4,6 @@ export default function Gifts() {
   const gifts = GIFTS;
 
   return (
-      <div className="min-h-[100dvh] flex items-center justify-center">
-        <p>Chargement des cadeaux...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-[100dvh] flex items-center justify-center px-4">
-        <p className="text-red-400 text-center">
-          Impossible de charger les cadeaux.
-        </p>
-      </div>
-    );
-  }
-
-  return (
     <div className="min-h-[100dvh] bg-background px-4 py-6">
       <div className="max-w-lg mx-auto space-y-6">
 
