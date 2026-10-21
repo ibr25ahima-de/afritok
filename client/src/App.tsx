@@ -62,7 +62,15 @@ function GlobalAdvertisingButton() {
       const saved = window.localStorage.getItem("afritok-advertising-button-position");
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Number.isFinite(parsed?.x) && Number.isFinite(parsed?.y)) setPosition({ x: parsed.x, y: parsed.y });
+        if (Number.isFinite(parsed?.x) && Number.isFinite(parsed?.y)) {
+          const margin = 8;
+          const maxX = Math.max(margin, window.innerWidth - 220 - margin);
+          const maxY = Math.max(margin, window.innerHeight - 48 - margin - 8);
+          setPosition({
+            x: Math.max(margin, Math.min(maxX, parsed.x)),
+            y: Math.max(margin, Math.min(maxY, parsed.y)),
+          });
+        }
       }
     } catch {}
   }, []);
