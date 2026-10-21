@@ -26,7 +26,7 @@ const SAMPLE_SONGS: Song[] = [
   {
     id: 'song-1',
     title: 'Upbeat Energy',
-    artist: 'Afritok Music',
+    artist: 'biYaloxi Music',
     duration: 180,
     bpm: 128,
     genre: 'Pop',
@@ -36,7 +36,7 @@ const SAMPLE_SONGS: Song[] = [
   {
     id: 'song-2',
     title: 'Chill Vibes',
-    artist: 'Afritok Music',
+    artist: 'biYaloxi Music',
     duration: 240,
     bpm: 90,
     genre: 'Chill',
@@ -45,7 +45,7 @@ const SAMPLE_SONGS: Song[] = [
   {
     id: 'song-3',
     title: 'Dance Party',
-    artist: 'Afritok Music',
+    artist: 'biYaloxi Music',
     duration: 200,
     bpm: 130,
     genre: 'Dance',
@@ -55,7 +55,7 @@ const SAMPLE_SONGS: Song[] = [
   {
     id: 'song-4',
     title: 'Hip Hop Beat',
-    artist: 'Afritok Music',
+    artist: 'biYaloxi Music',
     duration: 220,
     bpm: 95,
     genre: 'Hip Hop',
@@ -64,7 +64,7 @@ const SAMPLE_SONGS: Song[] = [
   {
     id: 'song-5',
     title: 'Reggae Groove',
-    artist: 'Afritok Music',
+    artist: 'biYaloxi Music',
     duration: 200,
     bpm: 80,
     genre: 'Reggae',
@@ -73,7 +73,7 @@ const SAMPLE_SONGS: Song[] = [
   {
     id: 'song-6',
     title: 'Afrobeats',
-    artist: 'Afritok Music',
+    artist: 'biYaloxi Music',
     duration: 210,
     bpm: 110,
     genre: 'Afrobeats',
