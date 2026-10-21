@@ -169,7 +169,7 @@ export default function Feed() {
   return (
     <div className="bg-black text-white h-[100dvh] min-h-[100dvh] overflow-hidden flex flex-col relative">
       <header className="absolute top-0 left-0 right-0 z-50 bg-gradient-to-b from-black/80 to-transparent px-4 py-4 flex items-center justify-between pointer-events-none">
-        <h1 className="text-2xl font-black text-amber-400 tracking-tighter pointer-events-auto">AFRITOK</h1>
+        <h1 className="text-2xl font-black text-amber-400 tracking-tighter pointer-events-auto">biYaloxi</h1>
         <div className="flex items-center gap-4 pointer-events-auto"><button className="p-2 bg-black/20 rounded-full backdrop-blur-sm"><SearchIcon size={22} /></button><button className="p-2 bg-black/20 rounded-full backdrop-blur-sm"><BellIcon size={22} /></button></div>
       </header>
       <div ref={containerRef} onScroll={handleScroll} className="flex-1 min-h-0 overflow-y-auto snap-y snap-mandatory scrollbar-hide" style={{ scrollbarWidth: "none", msOverflowStyle: "none", touchAction: "pan-y", WebkitOverflowScrolling: "touch" }}>
@@ -229,7 +229,7 @@ export default function Feed() {
               <button onClick={() => { setSelectedVideoId(video.id); setShowShare(true); }} className="flex flex-col items-center"><ButterflyIcon size={32} /><span className="text-xs font-bold mt-1">{counter.shares}</span></button>
               <button onClick={() => navigate(`/audio/${video.id}`)} className="mt-2 hover:scale-110 transition-transform"><div className="w-10 h-10 rounded-full bg-gradient-to-tr from-gray-900 to-gray-600 border-4 border-gray-800 flex items-center justify-center animate-[spin_3s_linear_infinite]"><div className="w-4 h-4 rounded-full bg-amber-400 border-2 border-black" /></div></button>
             </div>
-            <div className="absolute bottom-24 left-4 right-16 z-40"><h3 className="font-black text-lg text-amber-400 drop-shadow-md">@{video.user?.name || "Afritokeur"}</h3><p className="text-sm font-medium text-white line-clamp-2 mt-1 drop-shadow-sm">{video.description}</p><div className="mt-3 flex items-center gap-2"><div className="bg-amber-500/20 backdrop-blur-md border border-amber-500/30 px-3 py-1 rounded-full flex items-center gap-2"><div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" /><span className="text-[10px] font-black uppercase tracking-widest text-amber-200">Musique Originale</span></div></div></div>
+            <div className="absolute bottom-24 left-4 right-16 z-40"><h3 className="font-black text-lg text-amber-400 drop-shadow-md">@{video.user?.name || "Utilisateur"}</h3><p className="text-sm font-medium text-white line-clamp-2 mt-1 drop-shadow-sm">{video.description}</p><div className="mt-3 flex items-center gap-2"><div className="bg-amber-500/20 backdrop-blur-md border border-amber-500/30 px-3 py-1 rounded-full flex items-center gap-2"><div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" /><span className="text-[10px] font-black uppercase tracking-widest text-amber-200">Musique Originale</span></div></div></div>
           </div>;
         })}
       </div>
