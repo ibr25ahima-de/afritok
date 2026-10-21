@@ -1,14 +1,9 @@
-import { trpc } from "@/lib/trpc";
+import { GIFTS } from "../../../server/coins/gifts";
 
 export default function Gifts() {
-  const {
-    data: gifts,
-    isLoading,
-    error,
-  } = trpc.coins.getActiveGifts.useQuery();
+  const gifts = GIFTS;
 
-  if (isLoading) {
-    return (
+  return (
       <div className="min-h-[100dvh] flex items-center justify-center">
         <p>Chargement des cadeaux...</p>
       </div>
