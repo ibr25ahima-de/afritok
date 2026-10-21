@@ -62,7 +62,7 @@ export default function Finance() {
   if (isLoading) {
     return (
       <div className="text-white text-center py-20">
-        Chargement des finances AfriTok...
+        Chargement des finances biYaloxi...
       </div>
     );
   }
@@ -81,7 +81,7 @@ export default function Finance() {
     <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-bold text-white">
-          💰 Finance AfriTok
+          💰 Finance biYaloxi
         </h1>
 
         <p className="text-purple-300 mt-2">
@@ -93,7 +93,7 @@ export default function Finance() {
       <div className="grid md:grid-cols-3 gap-6">
         <div className="bg-purple-900/30 border border-purple-800/50 rounded-xl p-6">
           <p className="text-purple-300 mb-2">
-            Revenus AfriTok
+            Revenus biYaloxi
           </p>
 
           <p className="text-3xl font-bold text-green-400">
@@ -125,7 +125,7 @@ export default function Finance() {
       {/* RETRAIT */}
       <div className="bg-purple-900/30 border border-purple-800/50 rounded-xl p-6">
         <h2 className="text-xl font-bold text-white mb-6">
-          🏦 Retirer l'argent AfriTok
+          🏦 Retirer l'argent biYaloxi
         </h2>
 
         <div className="space-y-5">
@@ -209,7 +209,7 @@ export default function Finance() {
       {/* HISTORIQUE */}
       <div className="bg-purple-900/30 border border-purple-800/50 rounded-xl p-6">
         <h2 className="text-xl font-bold text-white mb-6">
-          📋 Historique des retraits AfriTok
+          📋 Historique des retraits biYaloxi
         </h2>
 
         {withdrawalsLoading ? (
@@ -218,7 +218,7 @@ export default function Finance() {
           </p>
         ) : !withdrawals || withdrawals.length === 0 ? (
           <p className="text-purple-300">
-            Aucun retrait AfriTok pour le moment.
+            Aucun retrait biYaloxi pour le moment.
           </p>
         ) : (
           <div className="space-y-3">
