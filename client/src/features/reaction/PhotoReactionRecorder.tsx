@@ -132,8 +132,9 @@ export default function PhotoReactionRecorder({ onClose, onVideoRecorded }: Prop
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     const point = canvasPoint(event);
-    pointersRef.current.set(event.pointerId, point);
     const rect = photoRectRef.current;
+    if (point.x < rect.x || point.x > rect.x + rect.w || point.y < rect.y || point.y > rect.y + rect.h) return;
+    pointersRef.current.set(event.pointerId, point);
     const points = Array.from(pointersRef.current.values());
     if (points.length >= 2) {
       const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
