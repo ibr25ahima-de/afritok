@@ -18,7 +18,7 @@ export default function QRCodePage() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `afritok-profile-${user?.id}.png`;
+      a.download = `biyaloxi-profile-${user?.id}.png`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -30,8 +30,8 @@ export default function QRCodePage() {
 
   const handleShare = async () => {
     const shareData = {
-      title: 'Mon profil Afritok',
-      text: `Scannez mon code QR pour me suivre sur Afritok!`,
+      title: 'Mon profil biYaloxi',
+      text: `Scannez mon code QR pour me suivre sur biYaloxi!`,
       url: `https://afritok.com/profile/${user?.id}`
     };
 
@@ -104,7 +104,7 @@ export default function QRCodePage() {
         {/* INFO */}
         <div className="bg-gray-900/50 rounded-lg p-4 w-full text-center">
           <p className="text-gray-400 text-sm">
-            💡 Partagez ce code QR pour que les autres puissent vous suivre facilement sur Afritok!
+            💡 Partagez ce code QR pour que les autres puissent vous suivre facilement sur biYaloxi!
           </p>
         </div>
       </div>
