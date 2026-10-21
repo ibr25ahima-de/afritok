@@ -132,7 +132,7 @@ export default function Login() {
               <p className="text-xs text-muted-foreground mt-1">
                 {mode === "register"
                   ? "Renseignez votre identité et votre pays avant de vérifier votre numéro."
-                  : "Utilisez le numéro de téléphone associé à votre compte AfriTok."}
+                  : "Utilisez le numéro de téléphone associé à votre compte biYaloxi."}
               </p>
             </div>
 
