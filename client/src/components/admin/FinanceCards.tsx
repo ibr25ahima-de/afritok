@@ -46,14 +46,14 @@ export const FinanceCards: React.FC<FinanceCardsProps> = ({ stats }) => {
         </p>
       </div>
 
-      {/* PART AFRITOK — CLIQUABLE */}
+      {/* PART biYaloxi — CLIQUABLE */}
       <button
         type="button"
         onClick={() => navigate("/admin/finance")}
         className="text-left bg-purple-900/30 border border-purple-800/50 rounded-lg p-6 hover:bg-purple-800/40 hover:border-yellow-500/70 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-yellow-500"
       >
         <h3 className="text-purple-300 font-semibold mb-2">
-          🏦 Part AfriTok
+          🏦 Part biYaloxi
         </h3>
 
         <p className="text-3xl font-bold text-yellow-400">
