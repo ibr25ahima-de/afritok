@@ -80,7 +80,7 @@ export default function PlatformFinance() {
         {/* HEADER */}
         <div>
           <h1 className="text-3xl font-bold">
-            💰 Finance AfriTok
+            💰 Finance biYaloxi
           </h1>
 
           <p className="text-gray-400 mt-1">
@@ -93,7 +93,7 @@ export default function PlatformFinance() {
 
           <div className="bg-purple-900/40 border border-purple-700 rounded-xl p-5">
             <p className="text-gray-400">
-              Revenus AfriTok
+              Revenus biYaloxi
             </p>
 
             <p className="text-3xl font-bold text-purple-300 mt-2">
@@ -139,7 +139,7 @@ export default function PlatformFinance() {
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
 
           <h2 className="text-xl font-bold mb-5">
-            🏦 Retirer l'argent AfriTok
+            🏦 Retirer l'argent biYaloxi
           </h2>
 
           <div className="space-y-4">
@@ -219,7 +219,7 @@ export default function PlatformFinance() {
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
 
           <h2 className="text-xl font-bold mb-5">
-            📋 Historique des retraits AfriTok
+            📋 Historique des retraits biYaloxi
           </h2>
 
           {withdrawalsLoading ? (
@@ -275,7 +275,7 @@ export default function PlatformFinance() {
             </div>
           ) : (
             <p className="text-gray-500">
-              Aucun retrait AfriTok pour le moment.
+              Aucun retrait biYaloxi pour le moment.
             </p>
           )}
 
