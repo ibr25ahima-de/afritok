@@ -13,7 +13,7 @@ interface Earning {
   createdAt: string;
 }
 
-export default function AfritokStudio() {
+export default function biYaloxiStudio() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
 
@@ -61,7 +61,7 @@ export default function AfritokStudio() {
         >
           <ArrowLeft size={24} />
         </button>
-        <h1 className="text-lg font-bold flex-1">Afritok Studio</h1>
+        <h1 className="text-lg font-bold flex-1">biYaloxi Studio</h1>
       </header>
 
       {/* CONTENT */}
