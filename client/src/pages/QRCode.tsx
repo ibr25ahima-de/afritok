@@ -9,7 +9,7 @@ export default function QRCodePage() {
   const qrRef = useRef<HTMLDivElement>(null);
 
   // Generate simple QR code URL using a public API
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=https://afritok.com/profile/${user?.id}`;
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=https://afritok-x76n.onrender.com/profile/${user?.id}`;
 
   const handleDownload = async () => {
     try {
@@ -32,7 +32,7 @@ export default function QRCodePage() {
     const shareData = {
       title: 'Mon profil biYaloxi',
       text: `Scannez mon code QR pour me suivre sur biYaloxi!`,
-      url: `https://afritok.com/profile/${user?.id}`
+      url: `https://afritok-x76n.onrender.com/profile/${user?.id}`
     };
 
     if (navigator.share) {
@@ -43,7 +43,7 @@ export default function QRCodePage() {
       }
     } else {
       // Fallback: copy to clipboard
-      navigator.clipboard.writeText(`https://afritok.com/profile/${user?.id}`);
+      navigator.clipboard.writeText(`https://afritok-x76n.onrender.com/profile/${user?.id}`);
       alert('Lien copié dans le presse-papiers!');
     }
   };
