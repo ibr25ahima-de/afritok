@@ -22,12 +22,12 @@ export default function Dashboard() {
       {/* Finance existante */}
       <FinanceCards stats={stats} />
 
-      {/* 💰 NOUVEAU : ARGENT RÉEL AFRITOK */}
+      {/* 💰 NOUVEAU : ARGENT RÉEL biYaloxi */}
       <div className="rounded-2xl border border-green-500/20 bg-slate-900/70 p-6">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm text-slate-400">
-              Solde réel AfriTok
+              Solde réel biYaloxi
             </p>
 
             <p className="mt-2 text-3xl font-bold text-green-400">
