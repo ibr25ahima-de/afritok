@@ -16,12 +16,12 @@ export default function PremiumButton() {
       type="button"
       onClick={() => navigate("/premium")}
       className="w-full max-w-[calc(100vw-2rem)] bg-amber-400/10 border border-amber-400/40 rounded-xl p-4 flex items-center justify-between hover:bg-amber-400/20 transition shadow-lg"
-      aria-label="Découvrir AfriTok Premium"
+      aria-label="Découvrir biYaloxi Premium"
     >
       <div className="flex items-center gap-3 text-left">
         <Crown size={26} className="text-amber-400" />
         <div>
-          <p className="text-white font-bold">⭐ AfriTok Premium</p>
+          <p className="text-white font-bold">⭐ biYaloxi Premium</p>
           <p className="text-gray-400 text-sm">Des fonctionnalités exclusives pour les abonnés</p>
         </div>
       </div>
