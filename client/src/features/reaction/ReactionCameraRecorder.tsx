@@ -51,6 +51,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
   const [startMode, setStartMode] = useState<"me" | "original">("original");
   const [sourceBox, setSourceBox] = useState({ x: 420, y: 50, w: 271, h: 355 });
   const [cameraBox, setCameraBox] = useState({ x: 30, y: 906, w: 238, h: 338 });
+  const [photoLayer, setPhotoLayer] = useState<"front" | "background">("front");
   const dragRef = useRef<{ mode: "move" | "resize"; target: "source" | "camera"; startX: number; startY: number; boxX: number; boxY: number; boxW: number; boxH: number } | null>(null);
   const activePointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   const pinchRef = useRef<{ startDistance: number; boxX: number; boxY: number; boxW: number; boxH: number } | null>(null);
@@ -184,7 +185,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
       if (layout === "split") {
         if (sourceReady) drawSource(0, 0, 360, 1280);
         if (cameraReady) drawCover(camera, 360, 0, 360, 1280);
-      } else if (layout === "video-background") {
+      } else if (layout === "video-background" || (sourceKind === "image" && photoLayer === "background")) {
         if (sourceReady) drawSource(0, 0, 720, 1280);
         else { ctx.fillStyle = "#161616"; ctx.fillRect(0, 0, 720, 1280); }
         if (cameraReady) {
@@ -204,7 +205,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
         }
       } else {
         if (cameraReady) drawCover(camera, 0, 0, 720, 1280);
-        if (sourceReady) {
+        if (sourceReady && !(sourceKind === "image" && photoLayer === "background")) {
           const { x, y, w, h } = sourceBox;
           ctx.save();
           ctx.fillStyle = "#000";
@@ -224,7 +225,7 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
     };
     draw();
     return () => { if (frameRef.current !== null) cancelAnimationFrame(frameRef.current); };
-  }, [layout, sourceUrl, ready, sourceBox, cameraBox, recording, sourceVisible, sourceKind]);
+  }, [layout, sourceUrl, ready, sourceBox, cameraBox, recording, sourceVisible, sourceKind, photoLayer]);
 
   useEffect(() => {
     const source = sourceRef.current;
@@ -586,8 +587,9 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
             className="mx-auto h-full max-h-full w-auto max-w-full touch-none rounded-xl object-contain"
             style={{ aspectRatio: "9 / 16" }}
             onPointerDown={(event) => {
-              const sourceMovable = layout === "pip-tr" || layout === "pip-bl";
-              const cameraMovable = layout === "video-background";
+              const photoBackground = sourceKind === "image" && photoLayer === "background";
+              const sourceMovable = sourceKind === "image" ? !photoBackground : layout === "pip-tr" || layout === "pip-bl";
+              const cameraMovable = layout === "video-background" || photoBackground;
               if (!sourceMovable && !cameraMovable) return;
               const rect = event.currentTarget.getBoundingClientRect();
               const px = (event.clientX - rect.left) * (720 / rect.width);
@@ -645,7 +647,9 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
                 const h = Math.max(150, Math.min(1270, pinch.boxH * scale));
                 const centerX = pinch.boxX + pinch.boxW / 2;
                 const centerY = pinch.boxY + pinch.boxH / 2;
-                setSourceBox({
+                const activeTarget = dragRef.current?.target ?? (sourceKind === "image" && photoLayer === "background" ? "camera" : "source");
+                const updateBox = activeTarget === "camera" ? setCameraBox : setSourceBox;
+                updateBox({
                   x: Math.max(0, Math.min(720 - w, centerX - w / 2)),
                   y: Math.max(0, Math.min(1280 - h, centerY - h / 2)),
                   w,
@@ -698,10 +702,11 @@ export default function ReactionCameraRecorder({ onClose, onVideoRecorded }: Pro
               </>}
             </div>
             <p className="text-center text-xs text-white/55">{sourceKind === "image" ? "La photo reste affichée pendant que tu filmes. Utilise Afficher/Masquer pour la faire apparaître ou disparaître quand tu veux." : recording ? (explaining ? "La vidéo originale est arrêtée : seule ta voix est enregistrée." : "La vidéo avance et sa voix est entendue. Appuie sur Expliquer pour l’arrêter.") : "Pendant l’explication, la vidéo s’arrête et ta voix prend le relais."}</p>
-            {(layout === "pip-tr" || layout === "pip-bl") && <p className="text-center text-[11px] text-white/45">Déplace la photo ou la vidéo avec un doigt. Pince avec deux doigts pour la réduire ou écarte-les pour l’agrandir. Tu peux aussi tirer le coin rouge.</p>}
-            {layout === "video-background" && <p className="text-center text-[11px] text-white/45">Déplace ta caméra avec un doigt et tire le coin rouge pour modifier sa taille.</p>}
+            {(sourceKind === "image" || layout === "pip-tr" || layout === "pip-bl") && <p className="text-center text-[11px] text-white/45">{sourceKind === "image" && photoLayer === "background" ? "Déplace ta caméra avec un doigt et tire le coin rouge pour modifier sa taille." : "Déplace la photo avec un doigt. Tire le coin rouge pour la redimensionner ; tu peux aussi pincer avec deux doigts."}</p>}
+            {layout === "video-background" && sourceKind === "video" && <p className="text-center text-[11px] text-white/45">Déplace ta caméra avec un doigt et tire le coin rouge pour modifier sa taille.</p>}
             <div className="flex items-center justify-center gap-2 text-[11px] text-white/40"><Volume2 size={13} /> Le son alterne entre la vidéo originale et ton microphone.</div>
-            {sourceUrl && <button type="button" onClick={toggleSourceVisibility} className="mx-auto flex items-center justify-center gap-2 rounded-full border border-white/30 bg-white/10 px-5 py-2 text-sm font-semibold">{sourceVisible ? <EyeOff size={19} /> : <Eye size={19} />}{sourceVisible ? "Masquer le média" : "Afficher le média"}</button>}
+            {sourceUrl && sourceKind === "image" && !recording && <button type="button" onClick={() => setPhotoLayer((layer) => layer === "front" ? "background" : "front")} className="mx-auto flex items-center justify-center gap-2 rounded-full border border-white/30 bg-white/10 px-5 py-2 text-sm font-semibold">{photoLayer === "front" ? "Placer la photo en arrière-plan" : "Placer la photo devant"}</button>}
+            {sourceUrl && <button type="button" onClick={toggleSourceVisibility} className="mx-auto flex items-center justify-center gap-2 rounded-full border border-white/30 bg-white/10 px-5 py-2 text-sm font-semibold">{sourceVisible ? <EyeOff size={19} /> : <Eye size={19} />}{sourceVisible ? "Masquer la photo" : "Afficher la photo"}</button>}
           </div>
         </>
       )}
