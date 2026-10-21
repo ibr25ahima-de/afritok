@@ -21,6 +21,11 @@ export default function PhotoReactionRecorder({ onClose, onVideoRecorded }: Prop
   const [cameraReady, setCameraReady] = useState(false);
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const [photoVisible, setPhotoVisible] = useState(true);
+  const photoVisibleRef = useRef(true);
+  const photoRectRef = useRef({ x: 390, y: 760, w: 270, h: 360 });
+  const pointersRef = useRef(new Map<number, { x: number; y: number }>());
+  const gestureRef = useRef<{ mode: "drag" | "pinch"; startX: number; startY: number; x: number; y: number; w: number; h: number; distance: number } | null>(null);
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -72,24 +77,31 @@ export default function PhotoReactionRecorder({ onClose, onVideoRecorded }: Prop
     const draw = () => {
       ctx.fillStyle = "#080808";
       ctx.fillRect(0, 0, 720, 1280);
-      const image = imageRef.current;
-      if (image?.naturalWidth && image.naturalHeight) {
-        const scale = Math.max(720 / image.naturalWidth, 1280 / image.naturalHeight);
+      if (cameraReady && camera.videoWidth && camera.videoHeight) {
+        const scale = Math.max(720 / camera.videoWidth, 1280 / camera.videoHeight);
         const sw = 720 / scale;
         const sh = 1280 / scale;
-        ctx.drawImage(image, (image.naturalWidth - sw) / 2, (image.naturalHeight - sh) / 2, sw, sh, 0, 0, 720, 1280);
+        ctx.save();
+        ctx.translate(720, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(camera, (camera.videoWidth - sw) / 2, (camera.videoHeight - sh) / 2, sw, sh, 0, 0, 720, 1280);
+        ctx.restore();
       }
-      if (cameraReady && camera.videoWidth && camera.videoHeight) {
-        const x = 34, y = 860, w = 250, h = 360;
-        const scale = Math.max(w / camera.videoWidth, h / camera.videoHeight);
-        const sw = w / scale;
-        const sh = h / scale;
-        ctx.fillStyle = "#000";
-        ctx.fillRect(x - 5, y - 5, w + 10, h + 10);
-        ctx.drawImage(camera, (camera.videoWidth - sw) / 2, (camera.videoHeight - sh) / 2, sw, sh, x, y, w, h);
+      const image = imageRef.current;
+      const rect = photoRectRef.current;
+      if (photoVisibleRef.current && image?.naturalWidth && image.naturalHeight) {
+        const scale = Math.max(rect.w / image.naturalWidth, rect.h / image.naturalHeight);
+        const sw = rect.w / scale;
+        const sh = rect.h / scale;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(rect.x, rect.y, rect.w, rect.h);
+        ctx.clip();
+        ctx.drawImage(image, (image.naturalWidth - sw) / 2, (image.naturalHeight - sh) / 2, sw, sh, rect.x, rect.y, rect.w, rect.h);
+        ctx.restore();
         ctx.strokeStyle = "#fff";
         ctx.lineWidth = 4;
-        ctx.strokeRect(x, y, w, h);
+        ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
       }
       frameRef.current = requestAnimationFrame(draw);
     };
@@ -104,6 +116,77 @@ export default function PhotoReactionRecorder({ onClose, onVideoRecorded }: Prop
     const interval = window.setInterval(() => setElapsed(Math.floor((performance.now() - startedAtRef.current) / 1000)), 250);
     return () => window.clearInterval(interval);
   }, [recording]);
+
+  const canvasPoint = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const bounds = canvas.getBoundingClientRect();
+    return {
+      x: ((event.clientX - bounds.left) / bounds.width) * 720,
+      y: ((event.clientY - bounds.top) / bounds.height) * 1280,
+    };
+  };
+
+  const handleCanvasPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!photoReady || !photoVisible) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const point = canvasPoint(event);
+    pointersRef.current.set(event.pointerId, point);
+    const rect = photoRectRef.current;
+    const points = Array.from(pointersRef.current.values());
+    if (points.length >= 2) {
+      const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+      gestureRef.current = { mode: "pinch", startX: point.x, startY: point.y, x: rect.x, y: rect.y, w: rect.w, h: rect.h, distance: Math.max(1, distance) };
+    } else {
+      gestureRef.current = { mode: "drag", startX: point.x, startY: point.y, x: rect.x, y: rect.y, w: rect.w, h: rect.h, distance: 0 };
+    }
+  };
+
+  const handleCanvasPointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!pointersRef.current.has(event.pointerId) || !gestureRef.current || !photoVisibleRef.current) return;
+    event.preventDefault();
+    const point = canvasPoint(event);
+    pointersRef.current.set(event.pointerId, point);
+    const gesture = gestureRef.current;
+    const rect = photoRectRef.current;
+    if (pointersRef.current.size >= 2) {
+      const points = Array.from(pointersRef.current.values());
+      const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+      const ratio = distance / Math.max(1, gesture.distance);
+      const w = Math.min(600, Math.max(100, gesture.w * ratio));
+      const h = Math.min(800, Math.max(130, gesture.h * ratio));
+      const centerX = gesture.x + gesture.w / 2;
+      const centerY = gesture.y + gesture.h / 2;
+      photoRectRef.current = {
+        x: Math.min(720 - w, Math.max(0, centerX - w / 2)),
+        y: Math.min(1280 - h, Math.max(0, centerY - h / 2)),
+        w, h,
+      };
+    } else {
+      photoRectRef.current = {
+        ...rect,
+        x: Math.min(720 - rect.w, Math.max(0, gesture.x + point.x - gesture.startX)),
+        y: Math.min(1280 - rect.h, Math.max(0, gesture.y + point.y - gesture.startY)),
+      };
+    }
+  };
+
+  const handleCanvasPointerUp = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    pointersRef.current.delete(event.pointerId);
+    gestureRef.current = null;
+    const remaining = Array.from(pointersRef.current.values());
+    if (remaining.length === 1) {
+      const rect = photoRectRef.current;
+      gestureRef.current = { mode: "drag", startX: remaining[0].x, startY: remaining[0].y, x: rect.x, y: rect.y, w: rect.w, h: rect.h, distance: 0 };
+    }
+  };
+
+  const togglePhotoVisibility = () => {
+    const next = !photoVisibleRef.current;
+    photoVisibleRef.current = next;
+    setPhotoVisible(next);
+  };
 
   const choosePhoto = async (file?: File) => {
     if (!file) return;
@@ -120,6 +203,9 @@ export default function PhotoReactionRecorder({ onClose, onVideoRecorded }: Prop
       }
       imageUrlRef.current = sourceUrl.startsWith("blob:") ? sourceUrl : "";
       imageRef.current = image;
+      photoRectRef.current = { x: 390, y: 760, w: 270, h: 360 };
+      photoVisibleRef.current = true;
+      setPhotoVisible(true);
       setPhotoReady(true);
     };
     image.onload = () => acceptImage(image.src);
@@ -226,13 +312,14 @@ export default function PhotoReactionRecorder({ onClose, onVideoRecorded }: Prop
         </label>
       </div>
       <div className="relative min-h-0 flex-1 p-3">
-        <canvas ref={canvasRef} className="mx-auto h-full max-h-full w-auto max-w-full rounded-xl object-contain" style={{ aspectRatio: "9 / 16" }} />
+        <canvas ref={canvasRef} onPointerDown={handleCanvasPointerDown} onPointerMove={handleCanvasPointerMove} onPointerUp={handleCanvasPointerUp} onPointerCancel={handleCanvasPointerUp} className="mx-auto h-full max-h-full w-auto max-w-full rounded-xl object-contain touch-none" style={{ aspectRatio: "9 / 16", touchAction: "none" }} />
         {!photoReady && <div className="absolute inset-0 flex items-center justify-center px-8 text-center text-white/70"><p>Choisis une photo dans la galerie pour commencer.</p></div>}
         {photoReady && !cameraReady && <div className="absolute inset-x-4 bottom-4 rounded-lg bg-black/70 p-3 text-center text-sm">Préparation de la caméra…</div>}
       </div>
-      <div className="z-10 space-y-3 bg-neutral-950 px-4 pb-6 pt-4">
+      <div className="z-10 space-y-3 bg-neutral-950 px-4 pb-5 pt-3">
         {recording && <p className="text-center text-sm font-semibold tabular-nums">{Math.floor(elapsed / 60).toString().padStart(2, "0")}:{Math.floor(elapsed % 60).toString().padStart(2, "0")}</p>}
-        <p className="text-center text-xs text-white/60">La photo reste en arrière-plan et ta caméra apparaît dans le cadre. Ton microphone est enregistré.</p>
+        <div className="flex justify-center"><button type="button" onClick={togglePhotoVisibility} disabled={!photoReady} className="rounded-full bg-white/15 px-5 py-2.5 text-sm font-semibold disabled:opacity-40">{photoVisible ? "Masquer la photo" : "Afficher la photo"}</button></div>
+        <p className="text-center text-xs text-white/60">Déplace la photo avec un doigt. Pince avec deux doigts pour l’agrandir ou la réduire. Le bouton ci-dessus masque ou réaffiche la photo pendant l’enregistrement.</p>
         {!recording
           ? <button onClick={startRecording} disabled={!photoReady || !cameraReady} className="flex w-full items-center justify-center gap-2 rounded-full bg-red-500 py-3 font-bold disabled:opacity-40"><Video size={18} /> Enregistrer ma réaction</button>
           : <button onClick={finishRecording} className="flex w-full items-center justify-center gap-2 rounded-full bg-red-500 py-3 font-bold"><Check size={18} /> Terminer</button>}
