@@ -53,7 +53,7 @@ export default function Home() {
                 Create. Share. Earn.
               </h1>
               <p className="text-xl text-purple-200">
-                Afritok is the platform for African creators to share their stories, build communities, and earn money directly from their content.
+                biYaloxi is the platform for African creators to share their stories, build communities, and earn money directly from their content.
               </p>
             </div>
 
@@ -143,7 +143,7 @@ export default function Home() {
       {/* Features Section */}
       <div className="max-w-7xl mx-auto px-4 py-20">
         <h2 className="text-4xl font-bold text-white mb-12 text-center">
-          Why Choose Afritok?
+          Why Choose biYaloxi?
         </h2>
 
         <div className="grid md:grid-cols-3 gap-8">
@@ -189,7 +189,7 @@ export default function Home() {
             Ready to Start Your Journey?
           </h2>
           <p className="text-xl text-purple-200">
-            Join thousands of African creators earning on Afritok today
+            Join thousands of African creators earning on biYaloxi today
           </p>
           <Button
             onClick={() => navigate("/login")}
