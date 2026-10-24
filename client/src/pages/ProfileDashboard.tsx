@@ -5,10 +5,42 @@ import { WalletButton } from "@/components/WalletButton";
 import { Button } from "@/components/ui/button";
 import { LiveStatusBadge } from "@/features/live/LiveStatusBadge";
 import { ArrowLeft, Edit3, Flame, Heart, Lock, MoreVertical, Play, Settings, Share2, UserPlus, UserCheck, BarChart3, Trash2, ChevronUp, ChevronDown, X } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useRoute } from "wouter";
 
 type Video = { id:number; title:string|null; description:string|null; videoUrl:string; thumbnailUrl?:string|null; likes:number|null; comments:number|null; shares:number|null };
+
+function ProfileVideoPreview({ videoUrl, thumbnailUrl }: { videoUrl: string; thumbnailUrl?: string | null }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [posterFailed, setPosterFailed] = useState(false);
+  const hasPoster = Boolean(thumbnailUrl && !posterFailed);
+
+  useEffect(() => {
+    if (hasPoster) return;
+    const video = videoRef.current;
+    if (!video) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        video.muted = true;
+        video.play().catch(() => {
+          // Some iPhones block autoplay; try showing a decoded frame instead.
+          if (video.readyState >= 1 && video.seekable.length) {
+            try { video.currentTime = Math.min(0.1, video.duration / 2); } catch {}
+          }
+        });
+      } else {
+        video.pause();
+      }
+    }, { threshold: 0.15 });
+    observer.observe(video);
+    return () => { observer.disconnect(); video.pause(); };
+  }, [hasPoster, videoUrl]);
+
+  return <video ref={videoRef} src={videoUrl} poster={hasPoster ? thumbnailUrl! : undefined}
+    muted playsInline loop preload={hasPoster ? "none" : "metadata"}
+    onError={() => { /* Playback errors must not hide the profile grid. */ }}
+    className="w-full h-full object-cover pointer-events-none" />;
+}
 
 export default function ProfileDashboard() {
   const { user: currentUser } = useAuth();
@@ -109,7 +141,7 @@ export default function ProfileDashboard() {
     </section>
 
     <div className="flex border-b border-gray-800"><button onClick={()=>setTab("videos")} className={`flex-1 py-3 ${tab==="videos"?"border-b-2 border-red-500":"text-gray-400"}`}>Vidéos</button><button onClick={()=>setTab("likes")} className={`flex-1 py-3 ${tab==="likes"?"border-b-2 border-red-500":"text-gray-400"}`}><Heart size={16} className="inline"/> Likes</button><button onClick={()=>setTab("favorites")} className={`flex-1 py-3 ${tab==="favorites"?"border-b-2 border-red-500":"text-gray-400"}`}>Favoris</button></div>
-    <div className="grid grid-cols-3 gap-2 min-h-11 min-w-11 touch-manipulation p-1">{videos.map((v,i)=><button key={v.id} onPointerDown={()=>handleVideoPointerDown(v)} onPointerUp={()=>handleVideoPointerUp(i)} onPointerCancel={handleVideoPointerCancel} onPointerLeave={handleVideoPointerCancel} onContextMenu={(event)=>event.preventDefault()} className="aspect-square bg-gray-900 overflow-hidden relative select-none touch-manipulation"><video src={v.videoUrl} poster={v.thumbnailUrl || undefined} muted playsInline preload="metadata" onLoadedMetadata={(event)=>{ if (!v.thumbnailUrl) { const video = event.currentTarget; if (video.seekable.length && video.duration > 0) { try { video.currentTime = Math.min(0.1, video.duration / 2); } catch { /* Safari may block seeking before enough data loads */ } } } }} className="w-full h-full object-cover pointer-events-none"/><span className="absolute bottom-1 left-1 text-xs flex items-center gap-2 min-h-11 min-w-11 touch-manipulation"><Heart size={11}/>{v.likes||0}</span></button>)}</div>
+    <div className="grid grid-cols-3 gap-2 min-h-11 min-w-11 touch-manipulation p-1">{videos.map((v,i)=><button key={v.id} onPointerDown={()=>handleVideoPointerDown(v)} onPointerUp={()=>handleVideoPointerUp(i)} onPointerCancel={handleVideoPointerCancel} onPointerLeave={handleVideoPointerCancel} onContextMenu={(event)=>event.preventDefault()} className="aspect-square bg-gray-900 overflow-hidden relative select-none touch-manipulation"><ProfileVideoPreview videoUrl={v.videoUrl} thumbnailUrl={v.thumbnailUrl}/><span className="absolute bottom-1 left-1 text-xs flex items-center gap-2 min-h-11 min-w-11 touch-manipulation"><Heart size={11}/>{v.likes||0}</span></button>)}</div>
 
     {deleteTarget && isOwn && <div className="fixed inset-0 z-[120] bg-black/80 flex items-center justify-center px-5" onClick={()=>!deleteVideo.isPending && setDeleteTarget(null)}><div className="w-full max-w-sm bg-gray-900 rounded-2xl border border-gray-700 p-5 shadow-2xl" onClick={(event)=>event.stopPropagation()}><div className="flex items-center justify-between mb-4"><h2 className="text-lg font-bold">Options de la vidéo</h2><button onClick={()=>setDeleteTarget(null)} disabled={deleteVideo.isPending} aria-label="Fermer"><X size={20}/></button></div><p className="text-gray-300 text-sm mb-5">Que veux-tu faire avec cette vidéo ?</p><Button onClick={()=>handleDeleteVideo(deleteTarget.id)} disabled={deleteVideo.isPending} className="w-full bg-red-600 hover:bg-red-500">{deleteVideo.isPending ? "Suppression…" : "Supprimer"}</Button><Button onClick={()=>setDeleteTarget(null)} disabled={deleteVideo.isPending} variant="outline" className="w-full mt-3">Annuler</Button></div></div>}
 
