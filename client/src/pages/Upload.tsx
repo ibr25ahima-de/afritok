@@ -363,7 +363,8 @@ export default function Upload() {
       cuts.length === 0 &&
       overlays.length === 0 &&
       !editFilter &&
-      !activeEffect
+      !activeEffect &&
+      !selectedMusic?.url
     );
 
     if (
@@ -435,7 +436,8 @@ export default function Upload() {
         if (!musicBuffer.duration) throw new Error("Musique vide");
         const destination = audioContext.createMediaStreamDestination();
         const gain = audioContext.createGain();
-        gain.gain.value = 1;
+        // Add a small level lift for quiet source tracks without hard clipping.
+        gain.gain.value = 1.15;
         gain.connect(destination);
         musicSource = audioContext.createBufferSource();
         musicSource.buffer = musicBuffer;
@@ -448,7 +450,14 @@ export default function Upload() {
         if (audioContext.state !== "running") throw new Error("AudioContext suspendu");
       }
 
+      // Safari on iPhone commonly supports MP4/H.264 but not WebM.
+      // Prefer a recorder format the current browser actually supports.
       const mimeCandidates = [
+        "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+        "video/mp4;codecs=avc1.42E01E",
+        "video/mp4",
+        "video/webm;codecs=vp8,opus",
+        "video/webm;codecs=vp9,opus",
         "video/webm;codecs=vp8",
         "video/webm;codecs=vp9",
         "video/webm",
