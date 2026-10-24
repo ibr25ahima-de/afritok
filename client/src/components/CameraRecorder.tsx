@@ -340,12 +340,16 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       };
       drawRecordingFrame();
 
-      // Record the live camera track directly. On some Android browsers the
-      // canvas capture track can be emitted as a frozen first frame even while
-      // the preview is moving. Cloning the camera stream preserves real motion.
-      // (The canvas above is retained for preview/effect processing, but is not
-      // used as the recorded video source.)
-      const recordingStream = sourceStream.clone();
+      // Record the processed canvas, not the raw camera stream: the AR canvas
+      // already contains the selected live filter and face effect. Keep the
+      // microphone audio track so the creator's voice is preserved.
+      if (typeof canvas.captureStream !== "function") {
+        throw new Error("L'enregistrement des effets n'est pas pris en charge par ce navigateur");
+      }
+      const recordingStream = canvas.captureStream(30);
+      sourceStream.getAudioTracks().forEach((track) => {
+        if (track.readyState === "live") recordingStream.addTrack(track.clone());
+      });
       recordingStreamRef.current = recordingStream;
 
       // Play the selected music for the creator while recording, but do not
@@ -357,6 +361,8 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
           const musicAudio = new Audio(selectedMusic.url);
           musicAudio.preload = "auto";
           musicAudio.loop = false;
+          musicAudio.volume = 1;
+          musicAudio.playsInline = true;
           musicAudioRef.current = musicAudio;
           await musicAudio.play();
         } catch (musicError) {
