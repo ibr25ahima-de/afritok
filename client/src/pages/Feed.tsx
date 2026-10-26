@@ -111,7 +111,7 @@ export default function Feed() {
           if (Math.abs(soundtrack.currentTime - (player.currentTime || 0)) > 0.75) {
             try { soundtrack.currentTime = player.currentTime || 0; } catch { /* wait for audio metadata */ }
           }
-          if (!muted) soundtrack.play().catch(() => console.log("Lecture de la musique en attente d'interaction"));
+          if (!muted && !player.paused && player.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) soundtrack.play().catch(() => console.log("Lecture de la musique en attente d'interaction"));
           else soundtrack.pause();
         }
       } else {
@@ -191,21 +191,48 @@ export default function Feed() {
                 preload={i === currentVideoIndex ? "auto" : "metadata"}
                 muted={muted}
                 autoPlay={i === currentVideoIndex}
-                onPlaying={() => setLoadedVideos(prev => new Set(prev).add(video.id))}
+                onPlaying={e => {
+                  setLoadedVideos(prev => new Set(prev).add(video.id));
+                  const soundtrack = audioRefs.current[video.id];
+                  if (soundtrack) {
+                    if (Math.abs(soundtrack.currentTime - e.currentTarget.currentTime) > 0.25) {
+                      try { soundtrack.currentTime = e.currentTarget.currentTime; } catch {}
+                    }
+                    if (!muted) void soundtrack.play().catch(() => {});
+                  }
+                }}
                 onLoadedMetadata={e => { if (i === currentVideoIndex) { e.currentTarget.muted = !!video.musicUrl || muted; e.currentTarget.play().catch(() => {}); } }}
                 onLoadedData={e => { if (i === currentVideoIndex) { e.currentTarget.muted = !!video.musicUrl || muted; e.currentTarget.play().catch(() => {}); } }}
                 onTimeUpdate={e => {
                   const soundtrack = audioRefs.current[video.id];
                   // Avoid seeking the music repeatedly on tiny timing differences:
                   // frequent currentTime writes can create clicks, skips and crackling.
-                  if (soundtrack && Math.abs(soundtrack.currentTime - e.currentTarget.currentTime) > 0.75) {
+                  if (soundtrack && Math.abs(soundtrack.currentTime - e.currentTarget.currentTime) > 0.35 && soundtrack.readyState >= 1) {
                     try { soundtrack.currentTime = e.currentTarget.currentTime; } catch { /* wait for audio metadata */ }
                   }
                 }}
-                onPlay={() => { const soundtrack = audioRefs.current[video.id]; if (soundtrack && !muted) soundtrack.play().catch(() => {}); }}
+                onPlay={() => {
+                  const soundtrack = audioRefs.current[video.id];
+                  const picture = videoRefs.current[video.id];
+                  if (soundtrack && picture && !muted && picture.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) void soundtrack.play().catch(() => {});
+                }}
+                onWaiting={() => audioRefs.current[video.id]?.pause()}
+                onStalled={() => audioRefs.current[video.id]?.pause()}
+                onSeeking={() => audioRefs.current[video.id]?.pause()}
+                onSeeked={e => {
+                  const soundtrack = audioRefs.current[video.id];
+                  if (soundtrack) {
+                    try { soundtrack.currentTime = e.currentTarget.currentTime; } catch {}
+                    if (!muted && !e.currentTarget.paused && e.currentTarget.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) void soundtrack.play().catch(() => {});
+                  }
+                }}
+                onEnded={() => {
+                  const soundtrack = audioRefs.current[video.id];
+                  if (soundtrack) { soundtrack.pause(); soundtrack.currentTime = 0; }
+                }}
                 onPause={() => audioRefs.current[video.id]?.pause()}
               />
-              {video.musicUrl && <audio ref={el => { audioRefs.current[video.id] = el; }} src={video.musicUrl} preload="auto" loop={false} />}
+              {video.musicUrl && <audio ref={el => { audioRefs.current[video.id] = el; }} src={video.musicUrl} preload="auto" loop />}
             </>)}
             <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60 pointer-events-none" />
             <button onClick={() => {
