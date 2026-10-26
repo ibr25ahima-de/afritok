@@ -8,9 +8,9 @@ import { ArrowLeft, Edit3, Flame, Heart, Lock, MoreVertical, Play, Settings, Sha
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useRoute } from "wouter";
 
-type Video = { id:number; title:string|null; description:string|null; videoUrl:string; thumbnailUrl?:string|null; likes:number|null; comments:number|null; shares:number|null };
+type Video = { id:number; title:string|null; description:string|null; videoUrl:string; thumbnailUrl?:string|null; musicUrl?:string|null; likes:number|null; comments:number|null; shares:number|null };
 
-function ProfileVideoPreview({ videoUrl, thumbnailUrl }: { videoUrl: string; thumbnailUrl?: string | null }) {
+function ProfileVideoPreview({ videoUrl, thumbnailUrl, suspended }: { videoUrl: string; thumbnailUrl?: string | null; suspended?: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [posterFailed, setPosterFailed] = useState(false);
   const hasPoster = Boolean(thumbnailUrl && !posterFailed);
@@ -19,6 +19,7 @@ function ProfileVideoPreview({ videoUrl, thumbnailUrl }: { videoUrl: string; thu
     if (hasPoster) return;
     const video = videoRef.current;
     if (!video) return;
+    if (suspended) { video.pause(); return; }
     const observer = new IntersectionObserver(([entry]) => {
       if (entry.isIntersecting) {
         video.muted = true;
@@ -34,12 +35,48 @@ function ProfileVideoPreview({ videoUrl, thumbnailUrl }: { videoUrl: string; thu
     }, { threshold: 0.15 });
     observer.observe(video);
     return () => { observer.disconnect(); video.pause(); };
-  }, [hasPoster, videoUrl]);
+  }, [hasPoster, videoUrl, suspended]);
 
   return <video ref={videoRef} src={videoUrl} poster={hasPoster ? thumbnailUrl! : undefined}
     muted playsInline loop preload={hasPoster ? "none" : "metadata"}
     onError={() => { /* Playback errors must not hide the profile grid. */ }}
     className="w-full h-full object-cover pointer-events-none" />;
+}
+
+function ProfilePlayback({ video }: { video: Video }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const sync = () => {
+    const picture = videoRef.current;
+    const music = audioRef.current;
+    if (!picture || !music) return;
+    if (music.readyState >= 1 && Math.abs(music.currentTime - picture.currentTime) > 0.35) {
+      try { music.currentTime = picture.currentTime; } catch {}
+    }
+  };
+  useEffect(() => {
+    const picture = videoRef.current;
+    const music = audioRef.current;
+    if (!picture || !music) return;
+    const syncTimer = window.setInterval(() => {
+      if (!picture.paused && !picture.seeking) sync();
+    }, 400);
+    return () => { window.clearInterval(syncTimer); music.pause(); };
+  }, [video.id]);
+  return <div className="w-full h-full flex items-center justify-center">
+    <video ref={videoRef} src={video.videoUrl} autoPlay playsInline controls
+      muted={Boolean(video.musicUrl)} preload="auto"
+      onPlay={() => { sync(); void audioRef.current?.play().catch(() => {}); }}
+      onPause={() => audioRef.current?.pause()}
+      onSeeking={sync}
+      onSeeked={sync}
+      onWaiting={() => audioRef.current?.pause()}
+      onPlaying={() => { sync(); void audioRef.current?.play().catch(() => {}); }}
+      onEnded={() => audioRef.current?.pause()}
+      onTimeUpdate={sync}
+      className="w-full h-full object-contain"/>
+    {video.musicUrl && <audio ref={audioRef} src={video.musicUrl} preload="auto" playsInline />}
+  </div>;
 }
 
 export default function ProfileDashboard() {
@@ -141,11 +178,11 @@ export default function ProfileDashboard() {
     </section>
 
     <div className="flex border-b border-gray-800"><button onClick={()=>setTab("videos")} className={`flex-1 py-3 ${tab==="videos"?"border-b-2 border-red-500":"text-gray-400"}`}>Vidéos</button><button onClick={()=>setTab("likes")} className={`flex-1 py-3 ${tab==="likes"?"border-b-2 border-red-500":"text-gray-400"}`}><Heart size={16} className="inline"/> Likes</button><button onClick={()=>setTab("favorites")} className={`flex-1 py-3 ${tab==="favorites"?"border-b-2 border-red-500":"text-gray-400"}`}>Favoris</button></div>
-    <div className="grid grid-cols-3 gap-2 min-h-11 min-w-11 touch-manipulation p-1">{videos.map((v,i)=><button key={v.id} onPointerDown={()=>handleVideoPointerDown(v)} onPointerUp={()=>handleVideoPointerUp(i)} onPointerCancel={handleVideoPointerCancel} onPointerLeave={handleVideoPointerCancel} onContextMenu={(event)=>event.preventDefault()} className="aspect-square bg-gray-900 overflow-hidden relative select-none touch-manipulation"><ProfileVideoPreview videoUrl={v.videoUrl} thumbnailUrl={v.thumbnailUrl}/><span className="absolute bottom-1 left-1 text-xs flex items-center gap-2 min-h-11 min-w-11 touch-manipulation"><Heart size={11}/>{v.likes||0}</span></button>)}</div>
+    <div className="grid grid-cols-3 gap-2 min-h-11 min-w-11 touch-manipulation p-1">{videos.map((v,i)=><button key={v.id} onPointerDown={()=>handleVideoPointerDown(v)} onPointerUp={()=>handleVideoPointerUp(i)} onPointerCancel={handleVideoPointerCancel} onPointerLeave={handleVideoPointerCancel} onContextMenu={(event)=>event.preventDefault()} className="aspect-square bg-gray-900 overflow-hidden relative select-none touch-manipulation"><ProfileVideoPreview videoUrl={v.videoUrl} thumbnailUrl={v.thumbnailUrl} suspended={selected !== null}/><span className="absolute bottom-1 left-1 text-xs flex items-center gap-2 min-h-11 min-w-11 touch-manipulation"><Heart size={11}/>{v.likes||0}</span></button>)}</div>
 
     {deleteTarget && isOwn && <div className="fixed inset-0 z-[120] bg-black/80 flex items-center justify-center px-5" onClick={()=>!deleteVideo.isPending && setDeleteTarget(null)}><div className="w-full max-w-sm bg-gray-900 rounded-2xl border border-gray-700 p-5 shadow-2xl" onClick={(event)=>event.stopPropagation()}><div className="flex items-center justify-between mb-4"><h2 className="text-lg font-bold">Options de la vidéo</h2><button onClick={()=>setDeleteTarget(null)} disabled={deleteVideo.isPending} aria-label="Fermer"><X size={20}/></button></div><p className="text-gray-300 text-sm mb-5">Que veux-tu faire avec cette vidéo ?</p><Button onClick={()=>handleDeleteVideo(deleteTarget.id)} disabled={deleteVideo.isPending} className="w-full bg-red-600 hover:bg-red-500">{deleteVideo.isPending ? "Suppression…" : "Supprimer"}</Button><Button onClick={()=>setDeleteTarget(null)} disabled={deleteVideo.isPending} variant="outline" className="w-full mt-3">Annuler</Button></div></div>}
 
     {monetization && <div className="fixed inset-0 z-[100] bg-black/80 flex items-end"><div className="w-full bg-gray-900 rounded-t-3xl p-6"><div className="flex justify-between"><h2 className="text-2xl font-bold">🔥 Monétisation</h2><button onClick={()=>setMonetization(false)}>✕</button></div><p className="text-gray-300 mt-5">Total gagné : <b className="text-green-400">${Number(earnings.total||0).toFixed(2)}</b></p><p className="text-gray-400 mt-4">Gagne de l'argent avec tes vidéos, tes Lives et les cadeaux reçus.</p><Button onClick={()=>navigate("/monetization")} className="w-full mt-6">Ouvrir le portail de monétisation</Button></div></div>}
-    {selected!==null && videos[selected] && <div className="fixed inset-0 z-[100] bg-black flex flex-col" onWheel={(event)=>{if (Math.abs(event.deltaY)>20) moveSelected(event.deltaY>0 ? 1 : -1);}} onTouchStart={(event)=>setTouchStartY(event.touches[0].clientY)} onTouchEnd={(event)=>{if (touchStartY !== null) { const delta = touchStartY - event.changedTouches[0].clientY; if (Math.abs(delta)>40) moveSelected(delta>0 ? 1 : -1); } setTouchStartY(null);}}><button onClick={()=>setSelected(null)} className="absolute top-4 left-4 z-10 bg-black/60 rounded-full p-3"><ArrowLeft/></button>{videos.length>1 && <><button onClick={()=>moveSelected(-1)} aria-label="Vidéo précédente" className="absolute top-2 min-h-11 min-w-11 touch-manipulation/2 left-4 z-10 -translate-y-1/2 rounded-full bg-black/60 p-3"><ChevronUp/></button><button onClick={()=>moveSelected(1)} aria-label="Vidéo suivante" className="absolute top-2 min-h-11 min-w-11 touch-manipulation/2 right-4 z-10 -translate-y-1/2 rounded-full bg-black/60 p-3"><ChevronDown/></button></>}<video key={videos[selected].id} src={videos[selected].videoUrl} autoPlay controls className="w-full h-full object-contain"/></div>}
+    {selected!==null && videos[selected] && <div className="fixed inset-0 z-[100] bg-black flex flex-col" onWheel={(event)=>{if (Math.abs(event.deltaY)>20) moveSelected(event.deltaY>0 ? 1 : -1);}} onTouchStart={(event)=>setTouchStartY(event.touches[0].clientY)} onTouchEnd={(event)=>{if (touchStartY !== null) { const delta = touchStartY - event.changedTouches[0].clientY; if (Math.abs(delta)>40) moveSelected(delta>0 ? 1 : -1); } setTouchStartY(null);}}><button onClick={()=>setSelected(null)} className="absolute top-4 left-4 z-10 bg-black/60 rounded-full p-3"><ArrowLeft/></button>{videos.length>1 && <><button onClick={()=>moveSelected(-1)} aria-label="Vidéo précédente" className="absolute top-2 min-h-11 min-w-11 touch-manipulation/2 left-4 z-10 -translate-y-1/2 rounded-full bg-black/60 p-3"><ChevronUp/></button><button onClick={()=>moveSelected(1)} aria-label="Vidéo suivante" className="absolute top-2 min-h-11 min-w-11 touch-manipulation/2 right-4 z-10 -translate-y-1/2 rounded-full bg-black/60 p-3"><ChevronDown/></button></>}<ProfilePlayback key={videos[selected].id} video={videos[selected]}/></div>}
   </div>;
 }
