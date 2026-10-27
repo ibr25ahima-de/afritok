@@ -1,6 +1,6 @@
 import express from "express";
 import crypto from "node:crypto";
-import { queuePremiumHdVideo } from "./premium-hd-trigger";
+import { runLocalFallback } from "./premium-hd-trigger";
 
 const app = express();
 const port = Number(process.env.PORT ?? 10001);
@@ -9,6 +9,23 @@ const maxRequestsPerMinute = 30;
 const requestWindowMs = 60_000;
 const requestCounts = new Map<string, { startedAt: number; count: number }>();
 const MAX_RATE_LIMIT_KEYS = 10_000;
+const MAX_CONCURRENT_JOBS = 2;
+const MAX_QUEUED_JOBS = 20;
+let activeJobs = 0;
+const pendingJobs: Array<{ videoId: number; userId: number; videoUrl: string }> = [];
+const queuedVideoIds = new Set<number>();
+
+function drainJobs(): void {
+  while (activeJobs < MAX_CONCURRENT_JOBS && pendingJobs.length > 0) {
+    const job = pendingJobs.shift()!;
+    activeJobs++;
+    void runLocalFallback(job).finally(() => {
+      activeJobs--;
+      queuedVideoIds.delete(job.videoId);
+      drainJobs();
+    });
+  }
+}
 
 app.disable("x-powered-by");
 app.use(express.json({ limit: "64kb" }));
@@ -77,7 +94,15 @@ app.post("/process", (req, res) => {
     return res.status(400).json({ success: false, message: "Invalid video processing request." });
   }
 
-  queuePremiumHdVideo({ videoId, userId, videoUrl });
+  if (queuedVideoIds.has(videoId)) {
+    return res.status(202).json({ success: true, status: "processing", videoId });
+  }
+  if (pendingJobs.length >= MAX_QUEUED_JOBS) {
+    return res.status(503).json({ success: false, message: "Video worker busy. Retry later." });
+  }
+  queuedVideoIds.add(videoId);
+  pendingJobs.push({ videoId, userId, videoUrl });
+  drainJobs();
   return res.status(202).json({ success: true, status: "processing", videoId });
 });
 

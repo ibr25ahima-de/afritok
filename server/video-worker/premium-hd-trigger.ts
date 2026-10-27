@@ -81,7 +81,7 @@ export function queuePremiumHdVideo(input: {
   void runLocalFallback(input);
 }
 
-async function runLocalFallback(input: { videoId: number; userId: number; videoUrl: string }) {
+export async function runLocalFallback(input: { videoId: number; userId: number; videoUrl: string }) {
   const workDir = join("/tmp/afritok-hd-source", String(input.userId));
   const sourcePath = join(workDir, `${input.videoId}-source`);
 
