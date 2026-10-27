@@ -202,7 +202,7 @@ export default function Feed() {
           const isVisible = Math.abs(i - currentVideoIndex) <= 2;
           const counter = videoCounters[video.id] || { likes: video.likes || 0, comments: video.comments || 0, shares: video.shares || 0, favorites: video.favorites || 0 };
           return <div key={video.id} data-index={i} className="video-item h-[100dvh] min-h-[100dvh] w-full relative snap-start bg-black flex-shrink-0">
-            {video.thumbnailUrl && <img src={video.thumbnailUrl} alt="" className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${loadedVideos.has(video.id) ? "opacity-0" : "opacity-100"}`} />}
+            {isVisible && video.thumbnailUrl && <img src={video.thumbnailUrl} alt="" loading="lazy" decoding="async" className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${loadedVideos.has(video.id) ? "opacity-0" : "opacity-100"}`} />}
             {isVisible && (video.mediaType === "image" ? <img src={video.videoUrl} alt={video.title || "Photo"} className="w-full h-full object-cover" /> : <>
               <video
                 ref={el => { videoRefs.current[video.id] = el; }}
