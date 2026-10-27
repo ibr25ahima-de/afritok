@@ -35,6 +35,7 @@ export default function Feed() {
   const [showGiftSelector, setShowGiftSelector] = useState(false);
   const [selectedVideoId, setSelectedVideoId] = useState<number | null>(null);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
+  const [hasMoreVideos, setHasMoreVideos] = useState(true);
   const [loadedVideos, setLoadedVideos] = useState<Set<number>>(new Set());
   const viewedVideos = useRef(new Set<number>());
   const videoRefs = useRef<Record<number, HTMLVideoElement | null>>({});
@@ -52,6 +53,7 @@ export default function Feed() {
 
   useEffect(() => {
     if (!trpcVideos) return;
+    setHasMoreVideos(trpcVideos.length === 20);
     setVideos(prev => {
       if (offset === 0) return trpcVideos as Video[];
       const next = [...prev];
@@ -158,7 +160,7 @@ export default function Feed() {
   const handleScroll = () => {
     if (!containerRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
-    if (scrollHeight - scrollTop - clientHeight < 1000 && !isFetchingMore) {
+    if (scrollHeight - scrollTop - clientHeight < 1000 && !isFetchingMore && hasMoreVideos && !trpcLoading && !trpcError) {
       setIsFetchingMore(true); setOffset(prev => prev + 20);
     }
   };
