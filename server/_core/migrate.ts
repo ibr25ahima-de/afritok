@@ -132,6 +132,7 @@ async function createTables(pool: Pool) {
     await pool.query(`CREATE INDEX IF NOT EXISTS "videos_visibility_idx" ON videos ("visibility");`);
     // Indexes for the chronological feed and user profile pages.
     await pool.query(`CREATE INDEX IF NOT EXISTS "videos_visibility_created_idx" ON videos ("visibility", "createdAt" DESC);`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS "videos_user_created_idx" ON videos ("userId", "createdAt" DESC);`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS likes (
