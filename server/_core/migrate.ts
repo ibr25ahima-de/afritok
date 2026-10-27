@@ -127,9 +127,6 @@ async function createTables(pool: Pool) {
       ADD COLUMN IF NOT EXISTS "language" VARCHAR(20) NOT NULL DEFAULT 'Français',
       ADD COLUMN IF NOT EXISTS "mediaType" VARCHAR(20) NOT NULL DEFAULT 'video';
 
-      UPDATE videos
-      SET "visibility" = CASE WHEN "isPublic" = false THEN 'private' ELSE 'public' END
-      WHERE "visibility" = 'public';
     `);
 
     await pool.query(`CREATE INDEX IF NOT EXISTS "videos_visibility_idx" ON videos ("visibility");`);
