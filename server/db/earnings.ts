@@ -32,13 +32,16 @@ export async function createEarning(
       return { success: false, reason: "invalid_video" };
     }
 
+    return await db.transaction(async (tx) => {
+      // Serialize reward decisions, including global caps and duplicate checks.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(47821903)`);
     // 🔥 1. LIMITE GLOBALE (anti faillite)
     const GLOBAL_DAILY_LIMIT = 20;
 
     const todayGlobal = new Date();
     todayGlobal.setHours(0, 0, 0, 0);
 
-    const totalTodayResult = await db
+    const totalTodayResult = await tx
       .select({
         total: sql<string>`COALESCE(SUM(CAST(${earnings.amount} AS double precision)), 0)`,
       })
@@ -57,7 +60,7 @@ export async function createEarning(
     const todayUser = new Date();
     todayUser.setHours(0, 0, 0, 0);
 
-    const userTodayResult = await db
+    const userTodayResult = await tx
       .select({
         total: sql<string>`COALESCE(SUM(CAST(${earnings.amount} AS double precision)), 0)`,
       })
@@ -78,7 +81,7 @@ export async function createEarning(
     // 🚨 3. LIMITES PAR TYPE
     const limits = MONETIZATION.dailyLimits;
 
-    const todayEarnings = await db
+    const todayEarnings = await tx
       .select()
       .from(earnings)
       .where(
@@ -100,7 +103,7 @@ export async function createEarning(
       ];
 
     if (delay) {
-      const last = await db
+      const last = await tx
         .select()
         .from(earnings)
         .where(
@@ -122,7 +125,7 @@ export async function createEarning(
 
     // 🚨 4. Anti-replay: une même action ne peut pas être récompensée deux fois.
     if (videoId !== undefined) {
-      const existing = await db
+      const existing = await tx
         .select({ id: earnings.id })
         .from(earnings)
         .where(
@@ -143,7 +146,7 @@ export async function createEarning(
     let isCreator = false;
 
     if (videoId !== undefined) {
-      const video = await db
+      const video = await tx
         .select()
         .from(videos)
         .where(eq(videos.id, videoId))
@@ -158,17 +161,13 @@ export async function createEarning(
 
     // 🚨 6. Vérifier éligibilité créateur réelle
     if (isCreator) {
-      const followersCount = (
-        await db
-          .select()
-          .from(followers)
-          .where(eq(followers.followingId, userId))
-      ).length;
+      const [followerRow] = await tx.select({ count: sql<number>`COUNT(*)` }).from(followers).where(eq(followers.followingId, userId));
+      const followersCount = Number(followerRow?.count ?? 0);
 
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      const viewsResult = await db
+      const viewsResult = await tx
         .select({
           total: sql<number>`SUM(${videos.views})`,
         })
@@ -211,7 +210,7 @@ export async function createEarning(
     const appAmount = (reward * 0.3).toFixed(4);
 
     // 💾 8. Save user
-    await db.insert(earnings).values({
+    await tx.insert(earnings).values({
       userId,
       amount: userAmount,
       source,
@@ -219,14 +218,14 @@ export async function createEarning(
     });
 
     // 💾 9. Save platform share against a real admin account, never a hardcoded user ID.
-    const [platformAdmin] = await db
+    const [platformAdmin] = await tx
       .select({ id: users.id })
       .from(users)
       .where(eq(users.role, "admin"))
       .limit(1);
 
     if (platformAdmin && parseFloat(appAmount) > 0) {
-      await db.insert(earnings).values({
+      await tx.insert(earnings).values({
         userId: platformAdmin.id,
         amount: appAmount,
         source: `${source}_app`,
@@ -234,41 +233,14 @@ export async function createEarning(
       });
     }
 
-    // 📊 10. Update total user
-    const user = (
-      await db.select().from(users).where(eq(users.id, userId)).limit(1)
-    )[0];
-    if (user) {
-      const newTotal = (
-        parseFloat(user.totalEarnings?.toString() || "0") +
-        parseFloat(userAmount)
-      ).toFixed(2);
-
-      await db
-        .update(users)
-        .set({ totalEarnings: newTotal })
-        .where(eq(users.id, userId));
-    }
-
-    // 📊 11. Update platform admin total only when an admin account exists.
+    // Atomic balance increments avoid lost updates under concurrent requests.
+    await tx.update(users).set({ totalEarnings: sql`COALESCE(${users.totalEarnings}, 0) + ${userAmount}` }).where(eq(users.id, userId));
     if (platformAdmin && parseFloat(appAmount) > 0) {
-      const app = (
-        await db.select().from(users).where(eq(users.id, platformAdmin.id)).limit(1)
-      )[0];
-      if (app) {
-        const newTotal = (
-          parseFloat(app.totalEarnings?.toString() || "0") +
-          parseFloat(appAmount)
-        ).toFixed(2);
-
-        await db
-          .update(users)
-          .set({ totalEarnings: newTotal })
-          .where(eq(users.id, platformAdmin.id));
-      }
+      await tx.update(users).set({ totalEarnings: sql`COALESCE(${users.totalEarnings}, 0) + ${appAmount}` }).where(eq(users.id, platformAdmin.id));
     }
 
     return { success: true };
+    });
   } catch (err) {
     console.error("[EARNING ERROR]", err);
     throw err;
