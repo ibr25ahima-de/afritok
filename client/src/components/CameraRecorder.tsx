@@ -353,10 +353,18 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
       const recordingStream = hasVisualEffects
         ? canvasCapture!.call(canvas, 30)
         : sourceStream.clone();
-      if (hasVisualEffects) {
+      if (hasVisualEffects && !selectedMusic?.url) {
         for (const audioTrack of sourceStream.getAudioTracks()) {
           recordingStream.addTrack(audioTrack.clone());
         }
+      }
+      // With selected music, the editor attaches the soundtrack after capture.
+      // Never record microphone audio (including ambient voices) in that case.
+      if (selectedMusic?.url) {
+        recordingStream.getAudioTracks().forEach((track) => {
+          recordingStream.removeTrack(track);
+          track.stop();
+        });
       }
       recordingStreamRef.current = recordingStream;
 
