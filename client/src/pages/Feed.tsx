@@ -132,37 +132,26 @@ export default function Feed() {
     if (nextPlayer) nextPlayer.preload = "auto";
   }, [currentVideoIndex, videos, muted]);
 
-  // On slower Android devices the audio clock can continue while video frames
-  // are stalled. Keep the soundtrack tied to the actual video playback clock.
+  // Avoid repeated audio seeks: on Android they cause audible crackles and cuts.
+  // Only correct substantial drift, and let native media clocks run normally.
   useEffect(() => {
     const active = videos[currentVideoIndex];
     if (!active?.musicUrl || active.mediaType === "image") return;
     const picture = videoRefs.current[active.id];
     const music = audioRefs.current[active.id];
     if (!picture || !music) return;
-    let previousVideoTime = picture.currentTime;
-    let lastProgressAt = performance.now();
     const timer = window.setInterval(() => {
       if (picture.paused || picture.ended || muted || document.hidden) {
         music.pause();
-        previousVideoTime = picture.currentTime;
-        lastProgressAt = performance.now();
         return;
       }
-      const now = performance.now();
-      if (picture.currentTime > previousVideoTime + 0.025) {
-        lastProgressAt = now;
-        previousVideoTime = picture.currentTime;
-      }
-      if (picture.seeking || picture.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || now - lastProgressAt > 550) {
-        music.pause();
-        return;
-      }
-      if (music.readyState >= HTMLMediaElement.HAVE_METADATA && Math.abs(music.currentTime - picture.currentTime) > 0.3) {
+      if (picture.seeking || picture.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
+      if (music.readyState >= HTMLMediaElement.HAVE_METADATA &&
+          Math.abs(music.currentTime - picture.currentTime) > 1.5) {
         try { music.currentTime = picture.currentTime; } catch {}
       }
       if (music.paused) void music.play().catch(() => {});
-    }, 250);
+    }, 2000);
     return () => { window.clearInterval(timer); music.pause(); };
   }, [currentVideoIndex, videos, muted]);
 
@@ -229,7 +218,7 @@ export default function Feed() {
                   setLoadedVideos(prev => new Set(prev).add(video.id));
                   const soundtrack = audioRefs.current[video.id];
                   if (soundtrack) {
-                    if (Math.abs(soundtrack.currentTime - e.currentTarget.currentTime) > 0.25) {
+                    if (Math.abs(soundtrack.currentTime - e.currentTarget.currentTime) > 1.5) {
                       try { soundtrack.currentTime = e.currentTarget.currentTime; } catch {}
                     }
                     if (!muted) void soundtrack.play().catch(() => {});
@@ -237,14 +226,6 @@ export default function Feed() {
                 }}
                 onLoadedMetadata={e => { if (i === currentVideoIndex) { e.currentTarget.muted = !!video.musicUrl || muted; e.currentTarget.play().catch(() => {}); } }}
                 onLoadedData={e => { if (i === currentVideoIndex) { e.currentTarget.muted = !!video.musicUrl || muted; e.currentTarget.play().catch(() => {}); } }}
-                onTimeUpdate={e => {
-                  const soundtrack = audioRefs.current[video.id];
-                  // Avoid seeking the music repeatedly on tiny timing differences:
-                  // frequent currentTime writes can create clicks, skips and crackling.
-                  if (soundtrack && Math.abs(soundtrack.currentTime - e.currentTarget.currentTime) > 0.35 && soundtrack.readyState >= 1) {
-                    try { soundtrack.currentTime = e.currentTarget.currentTime; } catch { /* wait for audio metadata */ }
-                  }
-                }}
                 onPlay={() => {
                   const soundtrack = audioRefs.current[video.id];
                   const picture = videoRefs.current[video.id];
