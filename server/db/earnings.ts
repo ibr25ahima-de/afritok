@@ -257,7 +257,7 @@ export async function getUserEarnings(userId: number) {
 
     return {
       total: parseFloat(user.totalEarnings?.toString() || "0"),
-      available: parseFloat(user.totalEarnings?.toString() || "0"),
+      available: Math.max(0, parseFloat(user.totalEarnings?.toString() || "0") - parseFloat(user.totalWithdrawals?.toString() || "0")),
       pending: 0,
     };
   } catch (error) {
