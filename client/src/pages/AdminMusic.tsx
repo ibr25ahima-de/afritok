@@ -7,7 +7,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 
 export default function AdminMusic() {
   const [syncResult, setSyncResult] = useState<{ addedCount: number } | null>(null);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [artist, setArtist] = useState("");
   const utils = trpc.useContext();
+
+  const uploadMutation = trpc.adminMusic.uploadAudioFile.useMutation({
+    onSuccess: () => {
+      setAudioFile(null);
+      setArtist("");
+      utils.music.getByTab.invalidate();
+      utils.music.getTrending.invalidate();
+    },
+  });
 
   const syncMutation = trpc.adminMusic.syncMusicLibrary.useMutation({
     onSuccess: (data) => {
@@ -17,6 +28,12 @@ export default function AdminMusic() {
       utils.music.getTrending.invalidate();
     },
   });
+
+  const handleUpload = async () => {
+    if (!audioFile) return;
+    const fileBuffer = new Uint8Array(await audioFile.arrayBuffer());
+    uploadMutation.mutate({ fileBuffer, fileName: audioFile.name, fileType: audioFile.type as any, artist: artist.trim() || "Artiste non renseigné" });
+  };
 
   const handleSync = () => {
     setSyncResult(null);
@@ -42,19 +59,32 @@ export default function AdminMusic() {
                   Gestion de la Bibliothèque
                 </CardTitle>
                 <CardDescription className="text-slate-400">
-                  Synchronisez les fichiers audio de Supabase Storage avec la base de données biYaloxi.
+                  Synchronisez les fichiers audio de Supabase Storage avec la base de données Afritok.
                 </CardDescription>
               </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
+            <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700 space-y-3">
+              <h3 className="font-semibold flex items-center"><Music className="w-4 h-4 mr-2 text-purple-400" />Ajouter une musique</h3>
+              <p className="text-sm text-slate-300">Choisissez un fichier audio depuis votre téléphone. Il sera ajouté à la liste « Ajouter une musique » dans Afritok.</p>
+              <input type="file" accept=".mp3,.m4a,.aac,.ogg,.wav,.flac,.webm,audio/*" onChange={(event) => setAudioFile(event.target.files?.[0] ?? null)} className="block w-full text-sm text-slate-300 file:mr-3 file:rounded file:border-0 file:bg-slate-700 file:px-3 file:py-2 file:text-white" />
+              <input value={artist} onChange={(event) => setArtist(event.target.value)} placeholder="Nom de l’artiste (facultatif)" className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-white" />
+              <Button onClick={handleUpload} disabled={!audioFile || uploadMutation.isLoading} className="w-full bg-purple-600 hover:bg-purple-700">
+                {uploadMutation.isLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Ajout en cours...</> : "Ajouter à la bibliothèque"}
+              </Button>
+              {uploadMutation.isError && <p className="text-sm text-red-300">{uploadMutation.error.message}</p>}
+              {uploadMutation.isSuccess && <p className="text-sm text-green-300">Musique ajoutée à la bibliothèque.</p>}
+              <p className="text-xs text-slate-400">Formats acceptés : MP3, M4A, AAC, OGG, WAV, FLAC et WEBM. 30 Mo maximum.</p>
+            </div>
+
             <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
               <h3 className="font-semibold mb-2 flex items-center">
                 <RefreshCw className="w-4 h-4 mr-2 text-blue-400" />
                 Synchronisation automatique
               </h3>
               <p className="text-sm text-slate-300 mb-4">
-                Cette action va scanner le bucket <code className="bg-slate-700 px-1 rounded text-purple-300">musique</code> sur Supabase et ajouter automatiquement tous les nouveaux fichiers dans votre bibliothèque biYaloxi.
+                Cette action va rechercher les fichiers audio déjà présents dans le dossier <code className="bg-slate-700 px-1 rounded text-purple-300">music/</code> du stockage et les ajouter à la bibliothèque.
               </p>
               
               <Button 
@@ -103,7 +133,7 @@ export default function AdminMusic() {
         </Card>
 
         <div className="text-center text-xs text-slate-500">
-          biYaloxi Admin v1.0 • Music Library Sync
+          Afritok Admin v1.0 • Bibliothèque musicale Afritok
         </div>
       </div>
     </div>
