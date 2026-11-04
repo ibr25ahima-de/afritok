@@ -1,8 +1,7 @@
 import { router, publicProcedure } from "./_core/trpc";
-import { storageList } from "./storage";
 import { db } from "./db";
 import { getVideoById } from "./db/videos";
-import { users, videos } from "../drizzle/schema";
+import { users, videos, music } from "../drizzle/schema";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 
@@ -11,65 +10,39 @@ export const musicRouter = router({
     .input(z.object({ videoId: z.number().int().positive() }))
     .query(({ input }) => getVideoById(input.videoId)),
 
-  getTrending: publicProcedure.query(async () => {
-    const files = await storageList("music");
-
-    return files.map((file, index) => ({
-      id: String(index + 1),
-      title: file.name.replace(".mp3", ""),
-      artist: "Afritok",
-      audioUrl: file.url,
-      category: "popular",
-      duration: 0,
-      plays: 0,
-      isActive: true,
-    }));
-  }),
+  getTrending: publicProcedure.query(async () =>
+    db.select().from(music)
+      .where(eq(music.isActive, true))
+      .orderBy(desc(music.plays), desc(music.createdAt))
+      .limit(100)
+  ),
 
   getByTab: publicProcedure
-    .input(
-      z.object({
-        tab: z.enum(["popular", "forYou", "favorites", "recent"]),
-      })
-    )
-    .query(async () => {
-      const files = await storageList("music");
-
-      return files.map((file, index) => ({
-        id: String(index + 1),
-        title: file.name.replace(".mp3", ""),
-        artist: "Afritok",
-        audioUrl: file.url,
-        category: "popular",
-        duration: 0,
-        plays: 0,
-        isActive: true,
-      }));
+    .input(z.object({
+      tab: z.enum(["popular", "forYou", "favorites", "recent"]),
+    }))
+    .query(async ({ input }) => {
+      const order = input.tab === "recent"
+        ? desc(music.createdAt)
+        : desc(music.plays);
+      return db.select().from(music)
+        .where(eq(music.isActive, true))
+        .orderBy(order, desc(music.createdAt))
+        .limit(100);
     }),
 
   search: publicProcedure
-    .input(
-      z.object({
-        query: z.string(),
-      })
-    )
+    .input(z.object({ query: z.string().trim().max(100) }))
     .query(async ({ input }) => {
-      const files = await storageList("music");
-
-      return files
-        .filter((file) =>
-          file.name.toLowerCase().includes(input.query.toLowerCase())
-        )
-        .map((file, index) => ({
-          id: String(index + 1),
-          title: file.name.replace(".mp3", ""),
-          artist: "Afritok",
-          audioUrl: file.url,
-          category: "popular",
-          duration: 0,
-          plays: 0,
-          isActive: true,
-        }));
+      if (!input.query) return [];
+      const term = `%${input.query.toLowerCase()}%`;
+      return db.select().from(music)
+        .where(and(
+          eq(music.isActive, true),
+          sql`(LOWER(${music.title}) LIKE ${term} OR LOWER(${music.artist}) LIKE ${term})`
+        ))
+        .orderBy(desc(music.plays))
+        .limit(100);
     }),
 
   getVideosBySound: publicProcedure
