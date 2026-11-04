@@ -120,7 +120,7 @@ export async function storageList(bucket: string, prefix = "") {
   return (data || [])
     .filter((file) => file.id && file.name)
     .map((file) => {
-      const objectPath = prefix ? `${prefix.replace(/\\/$/, "")}/${file.name}` : file.name;
+      const objectPath = prefix ? `${prefix.replace(/\/$/, "")}/${file.name}` : file.name;
       const { data: publicUrl } = supabase.storage.from(bucket).getPublicUrl(objectPath);
       return { name: file.name, path: objectPath, url: publicUrl.publicUrl };
     });
