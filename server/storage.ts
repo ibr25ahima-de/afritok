@@ -25,6 +25,7 @@ const supabaseAdmin = supabaseAdminKey
 
 const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
+const MAX_AUDIO_BYTES = 30 * 1024 * 1024;
 
 function validateStorageUpload(fileKey: string, fileBuffer: Buffer | Uint8Array, contentType: string): void {
   if (!fileKey || fileKey.length > 512 || fileKey.includes("..") || fileKey.startsWith("/") || fileKey.includes("\\")) {
@@ -42,6 +43,13 @@ function validateStorageUpload(fileKey: string, fileBuffer: Buffer | Uint8Array,
     if (buffer.length > MAX_AVATAR_BYTES || !ALLOWED_AVATAR_TYPES.has(contentType) || !hasValidMediaSignature(buffer, contentType)) {
       throw new Error("Invalid avatar upload");
     }
+  } else if (fileKey.startsWith("music/")) {
+    const allowedAudioTypes = new Set(["audio/mpeg", "audio/mp4", "audio/aac", "audio/ogg", "audio/wav", "audio/x-wav", "audio/flac", "audio/webm"]);
+    if (buffer.length > MAX_AUDIO_BYTES || !allowedAudioTypes.has(contentType)) {
+      throw new Error("Invalid audio upload");
+    }
+  } else {
+    throw new Error("Invalid storage folder");
   }
 }
 
