@@ -38,11 +38,11 @@ export const adminMusicRouter = router({
     const files = await storageList("videos", "music");
     let addedCount = 0;
     for (const file of files) {
-      if (!/\\.(mp3|m4a|aac|ogg|wav|flac)$/i.test(file.name)) continue;
+      if (!/\.(mp3|m4a|aac|ogg|wav|flac)$/i.test(file.name)) continue;
       const [existing] = await db.select({ id: music.id }).from(music)
         .where(eq(music.audioUrl, file.url)).limit(1);
       if (existing) continue;
-      const title = file.name.replace(/\\.[^.]+$/, "").replace(/[-_]+/g, " ").trim();
+      const title = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim();
       await db.insert(music).values({
         title: title || "Musique sans titre",
         artist: "Artiste non renseigné",
