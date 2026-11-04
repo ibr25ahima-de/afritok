@@ -21,7 +21,7 @@ export const adminMusicRouter = router({
       const safeName = input.fileName.normalize("NFKD").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-").slice(-180);
       const key = `music/${Date.now()}-${safeName}`;
       const uploaded = await storagePut(key, Buffer.from(input.fileBuffer), input.fileType);
-      const title = input.fileName.replace(/\\.[^.]+$/, "").replace(/[-_]+/g, " ").trim();
+      const title = input.fileName.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim();
       const [created] = await db.insert(music).values({
         title: title || "Musique sans titre",
         artist: input.artist || "Artiste non renseigné",
@@ -63,7 +63,7 @@ export const adminMusicRouter = router({
     }),
 
   syncMusicLibrary: adminProcedure.mutation(async () => {
-    // Music audio files are stored under videos/music/ in the current Supabase project.
+    // Music audio files are stored under music/ in the videos bucket of the current Supabase project.
     const files = await storageList("videos", "music");
     let addedCount = 0;
     for (const file of files) {
