@@ -109,19 +109,19 @@ export async function storageDeleteVideo(videoUrl: string): Promise<void> {
   console.log("🗑️ Supabase video delete requested:", { fileKey, result: data });
 }
 
-export async function storageList(bucket: string) {
-  const { data, error } = await supabase.storage.from(bucket).list("Untitled folder", {
+export async function storageList(bucket: string, prefix = "") {
+  const { data, error } = await supabase.storage.from(bucket).list(prefix, {
     limit: 1000,
     sortBy: { column: "name", order: "asc" },
   });
 
   if (error) throw error;
 
-  return (data || []).map((file) => {
-    const { data: publicUrl } = supabase.storage
-      .from(bucket)
-      .getPublicUrl(`Untitled folder/${file.name}`);
-
-    return { name: file.name, url: publicUrl.publicUrl };
-  });
+  return (data || [])
+    .filter((file) => file.id && file.name)
+    .map((file) => {
+      const objectPath = prefix ? `${prefix.replace(/\\/$/, "")}/${file.name}` : file.name;
+      const { data: publicUrl } = supabase.storage.from(bucket).getPublicUrl(objectPath);
+      return { name: file.name, path: objectPath, url: publicUrl.publicUrl };
+    });
 }
