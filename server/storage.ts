@@ -62,7 +62,15 @@ export async function storagePut(
     validateStorageUpload(fileKey, fileBuffer, contentType);
     console.log("📤 Uploading:", fileKey);
 
-    const { error } = await supabase.storage
+    // Audio is uploaded only through the authenticated admin endpoint.
+    // Use the server-side service-role client so Storage RLS does not reject
+    // legitimate admin uploads; never expose this key to the browser.
+    const uploadClient = fileKey.startsWith("music/") ? supabaseAdmin : supabase;
+    if (!uploadClient) {
+      throw new Error("La clé Supabase de service (SUPABASE_SERVICE_ROLE_KEY) est absente sur Render.");
+    }
+
+    const { error } = await uploadClient.storage
       .from("videos")
       .upload(fileKey, fileBuffer, { contentType, upsert: false });
 
@@ -71,7 +79,7 @@ export async function storagePut(
       throw error;
     }
 
-    const { data } = supabase.storage.from("videos").getPublicUrl(fileKey);
+    const { data } = uploadClient.storage.from("videos").getPublicUrl(fileKey);
     return { key: fileKey, url: data.publicUrl };
   } catch (error) {
     console.error("[Storage] Upload failed:", error);
