@@ -34,25 +34,9 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     setPreviewState(url);
   }, []);
 
-  // Upload.tsx previously called video.load() from inside loadedmetadata.
-  // load() resets the media element and starts a new load cycle; doing that
-  // from the metadata event can repeatedly interrupt a freshly recorded blob.
-  // Recorded previews are blob URLs, so the explicit reload is unnecessary.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const prototype = HTMLMediaElement.prototype;
-    const originalLoad = prototype.load;
-
-    prototype.load = function afritokSafeLoad(this: HTMLMediaElement) {
-      if (this.src.startsWith("blob:")) return;
-      return originalLoad.call(this);
-    };
-
-    return () => {
-      prototype.load = originalLoad;
-    };
-  }, []);
+  // Ne pas remplacer HTMLMediaElement.prototype.load globalement :
+  // les vidéos choisies dans la galerie utilisent des URL blob et doivent
+  // pouvoir être chargées normalement par le navigateur.
 
   return (
     <UploadContext.Provider
