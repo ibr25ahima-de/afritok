@@ -6,16 +6,10 @@ export default function Music() {
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [artist, setArtist] = useState("");
   const [syncResult, setSyncResult] = useState<{ addedCount: number } | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const [uploadSuccess, setUploadSuccess] = useState(false);
   const utils = trpc.useContext();
-
-  const uploadMutation = trpc.adminMusic.uploadAudioFile.useMutation({
-    onSuccess: () => {
-      setAudioFile(null);
-      setArtist("");
-      utils.music.getByTab.invalidate();
-      utils.music.getTrending.invalidate();
-    },
-  });
 
   const syncMutation = trpc.adminMusic.syncMusicLibrary.useMutation({
     onSuccess: (data) => {
@@ -26,16 +20,39 @@ export default function Music() {
   });
 
   const handleUpload = async () => {
-    if (!audioFile) return;
-    const fileBuffer = new Uint8Array(await audioFile.arrayBuffer());
-    const acceptedTypes = ["audio/mpeg", "audio/mp4", "audio/aac", "audio/ogg", "audio/wav", "audio/x-wav", "audio/flac", "audio/webm"];
-    const fileType = acceptedTypes.includes(audioFile.type) ? audioFile.type : "audio/mpeg";
-    uploadMutation.mutate({
-      fileBuffer,
-      fileName: audioFile.name,
-      fileType: fileType as any,
-      artist: artist.trim() || "Artiste non renseigné",
-    });
+    if (!audioFile || isUploading) return;
+    setIsUploading(true);
+    setUploadError("");
+    setUploadSuccess(false);
+    try {
+      const formData = new FormData();
+      formData.append("file", audioFile);
+      formData.append("artist", artist.trim());
+      const response = await fetch("/api/admin/upload-music", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      const raw = await response.text();
+      let result: { error?: string; success?: boolean };
+      try {
+        result = raw ? JSON.parse(raw) : {};
+      } catch {
+        throw new Error("Le serveur a interrompu l’envoi. Réessaie dans un instant.");
+      }
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Impossible d’ajouter cette musique.");
+      }
+      setAudioFile(null);
+      setArtist("");
+      setUploadSuccess(true);
+      utils.music.getByTab.invalidate();
+      utils.music.getTrending.invalidate();
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Erreur pendant l’ajout de la musique.");
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleSync = () => {
@@ -64,11 +81,12 @@ export default function Music() {
             placeholder="Nom de l’artiste (facultatif)"
             className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-white"
           />
-          <button onClick={handleUpload} disabled={!audioFile || uploadMutation.isLoading} className="w-full rounded-lg bg-purple-600 px-5 py-3 font-semibold text-white disabled:opacity-50">
-            {uploadMutation.isLoading ? <span className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Ajout en cours...</span> : "Ajouter à la bibliothèque"}
+          <button onClick={handleUpload} disabled={!audioFile || isUploading} className="w-full rounded-lg bg-purple-600 px-5 py-3 font-semibold text-white disabled:opacity-50">
+            {isUploading ? <span className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Ajout en cours...</span> : "Ajouter à la bibliothèque"}
           </button>
-          {uploadMutation.isError && <p className="text-sm text-red-300">{uploadMutation.error.message}</p>}
-          {uploadMutation.isSuccess && <p className="text-sm text-green-300">Musique ajoutée à la bibliothèque.</p>}
+          {uploadError && <p className="text-sm text-red-300">{uploadError}</p>}
+          {uploadSuccess && <p className="text-sm text-green-300">Musique ajoutée à la bibliothèque.</p>}
+          
           <p className="text-xs text-slate-400">Formats acceptés : MP3, M4A, AAC, OGG, WAV, FLAC et WEBM. 30 Mo maximum.</p>
         </section>
 
