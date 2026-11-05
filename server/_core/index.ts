@@ -55,8 +55,9 @@ const audioUpload = multer({
 });
 
 function allowedOrigins(): string[] {
-  return (process.env.FRONTEND_URL || process.env.APP_URL || "")
-    .split(",")
+  return [process.env.FRONTEND_URL, process.env.APP_URL, process.env.RENDER_EXTERNAL_URL]
+    .filter(Boolean)
+    .flatMap(value => (value as string).split(","))
     .map(value => value.trim())
     .filter(Boolean);
 }
