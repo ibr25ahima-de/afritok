@@ -15,6 +15,8 @@ import { handleStripeWebhook } from "../webhook-endpoint";
 import { runMigrations } from "./migrate";
 import { uploadVideoToSupabase } from "../supabase-storage";
 import { uploadAdvertisingMedia } from "../advertising/ad-media-upload-service";
+import { db } from "../db";
+import { music } from "../../drizzle/schema";
 import { registerLiveSocket } from "../live-socket";
 import paymentWebhookRouter from "../payments/payment-webhook-router";
 import paymentTestRouter from "../payments/payment-test-router";
@@ -44,6 +46,12 @@ const avatarUpload = multer({
 const mediaUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 100 * 1024 * 1024, files: 1, fields: 20 },
+});
+
+// Multipart audio upload avoids base64/JSON expansion and large in-memory copies.
+const audioUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 30 * 1024 * 1024, files: 1, fields: 5 },
 });
 
 function allowedOrigins(): string[] {
@@ -123,6 +131,46 @@ async function startServer() {
     } catch (error) {
       console.error("Avatar upload error:", error);
       return res.status(500).json({ error: "Upload impossible." });
+    }
+  });
+
+  app.post("/api/admin/upload-music", uploadRateLimiter, audioUpload.single("file"), async (req: Request, res: Response) => {
+    try {
+      const user = await getAuthenticatedUser(req, res);
+      if (!user) return res.status(401).json({ error: "Utilisateur non authentifié." });
+      if (user.role !== "admin") return res.status(403).json({ error: "Accès refusé." });
+      if (!req.file) return res.status(400).json({ error: "Aucun fichier fourni." });
+
+      const originalName = req.file.originalname || "musique.mp3";
+      const extension = originalName.split(".").pop()?.toLowerCase() || "";
+      const mimeByExtension: Record<string, string> = {
+        mp3: "audio/mpeg", m4a: "audio/mp4", mp4: "audio/mp4", aac: "audio/aac",
+        ogg: "audio/ogg", wav: "audio/wav", flac: "audio/flac", webm: "audio/webm",
+      };
+      const mimeType = mimeByExtension[extension];
+      if (!mimeType) return res.status(400).json({ error: "Format audio non accepté." });
+
+      const safeName = originalName.normalize("NFKD").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-").slice(-180);
+      const fileKey = `music/${Date.now()}-${safeName}`;
+      const uploaded = await storagePut(fileKey, req.file.buffer, mimeType);
+      const artist = typeof req.body?.artist === "string" ? req.body.artist.trim().slice(0, 200) : "";
+      const title = originalName.replace(/\\.[^.]+$/, "").replace(/[-_]+/g, " ").trim();
+
+      const [created] = await db.insert(music).values({
+        title: title || "Musique sans titre",
+        artist: artist || "Artiste non renseigné",
+        audioUrl: uploaded.url,
+        duration: 0,
+        category: "Afritok",
+        plays: 0,
+        isActive: true,
+        createdAt: new Date().toISOString(),
+      }).returning({ id: music.id });
+
+      return res.json({ success: true, id: created.id, audioUrl: uploaded.url });
+    } catch (error) {
+      console.error("[Admin music upload] Error:", error);
+      return res.status(500).json({ error: error instanceof Error ? error.message : "Ajout de la musique impossible." });
     }
   });
 
