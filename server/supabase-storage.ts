@@ -78,7 +78,7 @@ export async function uploadVideoToSupabase(
   const safeUserId = validateUserId(userId);
   const safeFileName = sanitizeFileName(fileName);
   const safeContentType = validateContentType(contentType);
-  const filePath = `${STORAGE_BUCKET}/${safeUserId}/${Date.now()}-${randomUUID()}-${safeFileName}`;
+  const filePath = `${safeUserId}/${Date.now()}-${randomUUID()}-${safeFileName}`;
 
   try {
     const { error } = await supabase.storage
