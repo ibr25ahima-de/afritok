@@ -15,6 +15,7 @@ interface CameraRecorderProps {
   onOpenEffects?: () => void;
   onPublish?: () => void;
   onOpenReaction?: () => void;
+  onPickFromGallery?: () => void;
   selectedMusic?: { name: string; url: string } | null;
 }
 
@@ -30,6 +31,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
   onOpenEffects,
   onPublish,
   onOpenReaction,
+  onPickFromGallery,
   selectedMusic,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -662,7 +664,7 @@ export const CameraRecorder: React.FC<CameraRecorderProps> = ({
 
         <div className="flex items-center justify-center gap-7">
           <div className="w-16 flex justify-center">
-            {recording && <button onClick={pauseRecording} disabled={paused} className="h-11 w-11 rounded-full bg-black/60 flex items-center justify-center disabled:opacity-40" aria-label="Mettre en pause"><Pause size={20} /></button>}
+            {recording ? <button onClick={pauseRecording} disabled={paused} className="h-11 w-11 rounded-full bg-black/60 flex items-center justify-center disabled:opacity-40" aria-label="Mettre en pause"><Pause size={20} /></button> : <button type="button" onClick={onPickFromGallery} className="flex flex-col items-center gap-1 text-white/90" aria-label="Choisir une vidéo dans la galerie"><ImagePlus size={25} /><span className="text-[10px]">Galerie</span></button>}
           </div>
 
           <button onClick={capture} disabled={timer > 0} aria-label={!recording ? "Enregistrer" : paused ? "Continuer" : "Mettre en pause"} className="relative h-20 w-20 rounded-full border-4 border-white p-1.5 disabled:opacity-70">
