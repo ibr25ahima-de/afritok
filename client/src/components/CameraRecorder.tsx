@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Music, Pause, Play, RefreshCw, Sparkles, X, Sun, Timer as TimerIcon, LayoutGrid, ChevronUp, Video } from "lucide-react";
+import { Check, ImagePlus, Music, Pause, Play, RefreshCw, Sparkles, X, Sun, Timer as TimerIcon, LayoutGrid, ChevronUp, Video } from "lucide-react";
 import { toast } from "sonner";
 import AREngineMobile from "./AREngineMobile";
 import EffectsPanel, { AR_EFFECTS, type AREffect } from "./EffectsPanel";
