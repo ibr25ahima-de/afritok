@@ -134,7 +134,10 @@ export const csrfProtection = (req: Request, res: Response, next: NextFunction) 
 };
 
 export const validateInput = (req: Request, res: Response, next: NextFunction) => {
-  if (req.path === "/api/upload-video") {
+  // Audio uploads use the dedicated admin tRPC mutation and are validated
+  // there with a strict 30 MB file limit. Do not apply the generic 10 MB
+  // JSON limit to this endpoint, because serialized audio bytes expand in JSON.
+  if (req.path === "/api/upload-video" || req.path.includes("/api/trpc/adminMusic.uploadAudioFile")) {
     return next();
   }
 
