@@ -8,6 +8,14 @@ function ascii(buffer: Buffer, start: number, length: number): string {
   return buffer.subarray(start, start + length).toString("ascii");
 }
 
+function hasFtypBox(buffer: Buffer): boolean {
+  const limit = Math.min(buffer.length - 8, 64);
+  for (let offset = 4; offset <= limit; offset += 1) {
+    if (ascii(buffer, offset, 4) === "ftyp") return true;
+  }
+  return false;
+}
+
 /**
  * Verify the bytes match the claimed media type. Client-provided MIME types
  * and extensions are not trusted because they can be forged.
@@ -26,7 +34,7 @@ export function hasValidMediaSignature(buffer: Buffer, mimeType: string): boolea
       return ascii(buffer, 0, 4) === "RIFF" && ascii(buffer, 8, 4) === "WEBP";
     case "video/mp4":
     case "video/quicktime":
-      return buffer.length >= 12 && ascii(buffer, 4, 4) === "ftyp";
+      return buffer.length >= 12 && hasFtypBox(buffer);
     case "video/webm":
       return buffer.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]));
     default:
@@ -48,8 +56,9 @@ export function detectVideoMimeType(buffer: Buffer): string | null {
   }
 
   // ISO Base Media File Format used by MP4 and QuickTime MOV.
-  if (ascii(buffer, 4, 4) === "ftyp") {
-    return ascii(buffer, 8, 4) === "qt  " ? "video/quicktime" : "video/mp4";
+  if (hasFtypBox(buffer)) {
+    const ftypOffset = buffer.indexOf(Buffer.from("ftyp"), 4);
+    return ftypOffset >= 0 && ascii(buffer, ftypOffset + 4, 4) === "qt  " ? "video/quicktime" : "video/mp4";
   }
 
   // Do not accept a video based on its claimed MIME type alone.
