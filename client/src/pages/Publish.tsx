@@ -77,6 +77,7 @@ export default function Publish() {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api/upload-video", true);
     xhr.withCredentials = true;
+    xhr.timeout = 120000;
     xhr.upload.onprogress = event => {
       if (event.lengthComputable) setUploadProgress(Math.min(75, 10 + Math.round((event.loaded / event.total) * 65)));
     };
@@ -89,6 +90,7 @@ export default function Publish() {
     };
     xhr.onerror = () => reject(new Error("Connexion impossible pendant l'envoi de la vidéo"));
     xhr.onabort = () => reject(new Error("Envoi de la vidéo interrompu"));
+    xhr.ontimeout = () => reject(new Error("L'envoi de la vidéo a dépassé le délai autorisé"));
     const form = new FormData();
     const extensionByType: Record<string, string> = {
       "video/quicktime": ".mov",

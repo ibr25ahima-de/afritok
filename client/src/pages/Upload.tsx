@@ -471,7 +471,12 @@ export default function Upload() {
         try { return typeof MediaRecorder.isTypeSupported !== "function" || MediaRecorder.isTypeSupported(type); }
         catch { return false; }
       });
-      const recorderOptions: MediaRecorderOptions = { audioBitsPerSecond: 192000 };
+      // Keep browser-generated filter exports comfortably below the server limit.
+      // Some Android browsers otherwise choose an excessively high default bitrate.
+      const recorderOptions: MediaRecorderOptions = {
+        audioBitsPerSecond: 128000,
+        videoBitsPerSecond: 2500000,
+      };
       if (supportedMime) recorderOptions.mimeType = supportedMime;
       const recorder = new MediaRecorder(stream, recorderOptions);
 

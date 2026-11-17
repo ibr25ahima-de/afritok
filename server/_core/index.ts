@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { storagePut } from "../storage";
 import "dotenv/config";
-import express, { Request, Response } from "express";
+import express, { NextFunction, Request, Response } from "express";
 import { createServer } from "http";
 import multer from "multer";
 import cors from "cors";
@@ -47,6 +47,17 @@ const mediaUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 100 * 1024 * 1024, files: 1, fields: 20 },
 });
+
+const handleVideoUpload = (req: Request, res: Response, next: NextFunction) => {
+  mediaUpload.single("file")(req, res, (error: unknown) => {
+    if (!error) return next();
+    if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
+      return res.status(413).json({ error: "La vidéo exportée dépasse la limite de 100 Mo." });
+    }
+    console.error("[Upload] Multipart error:", error);
+    return res.status(400).json({ error: "Le fichier vidéo n’a pas pu être reçu." });
+  });
+};
 
 // Multipart audio upload avoids base64/JSON expansion and large in-memory copies.
 const audioUpload = multer({
@@ -175,7 +186,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/upload-video", uploadRateLimiter, mediaUpload.single("file"), async (req: Request, res: Response) => {
+  app.post("/api/upload-video", uploadRateLimiter, handleVideoUpload, async (req: Request, res: Response) => {
     try {
       const user = await getAuthenticatedUser(req, res);
       if (!user) return res.status(401).json({ error: "Utilisateur non authentifié." });
