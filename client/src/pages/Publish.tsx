@@ -11,7 +11,7 @@ type VideoVisibility = "public" | "followers" | "private";
 export default function Publish() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
-  const { file, preview, selectedMusic } = useUpload();
+  const { file, preview, selectedMusic, clearUpload } = useUpload();
   const [caption, setCaption] = useState("");
   const [title, setTitle] = useState("");
   const [loading, setLoading] = useState(false);
@@ -132,6 +132,7 @@ export default function Publish() {
       const result = await uploadMutation.mutateAsync({ title: title.trim(), description: caption.trim(), videoUrl, thumbnailUrl, musicUrl: selectedMusic?.url || null, musicName: selectedMusic?.name || null, visibility, language: contentLanguage, mediaType, premiumOptions: premiumStatus?.isPremium ? premiumOptions : undefined });
       setUploadProgress(100);
       alert(result.success ? (premiumOptions.scheduledAt ? "Vidéo programmée avec succès ! ✅" : "Vidéo publiée avec succès ! ✅") : "Publication impossible");
+      if (result.success) clearUpload();
       setTitle(""); setCaption(""); setVisibility("public"); setUploadProgress(0); navigate("/feed");
     } catch (err: any) {
       console.error("Erreur publication:", err);

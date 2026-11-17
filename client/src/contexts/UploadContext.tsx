@@ -5,6 +5,7 @@ type UploadContextType = {
   setFile: (file: File | null) => void;
   preview: string | null;
   setPreview: (url: string | null) => void;
+  clearUpload: () => void;
   selectedMusic: {
     url: string;
     name: string;
@@ -34,6 +35,15 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     setPreviewState(url);
   }, []);
 
+  const clearUpload = useCallback(() => {
+    setFile(null);
+    setPreviewState((currentPreview) => {
+      if (currentPreview?.startsWith("blob:")) URL.revokeObjectURL(currentPreview);
+      return null;
+    });
+    setSelectedMusic(null);
+  }, []);
+
   // Ne pas remplacer HTMLMediaElement.prototype.load globalement :
   // les vidéos choisies dans la galerie utilisent des URL blob et doivent
   // pouvoir être chargées normalement par le navigateur.
@@ -45,6 +55,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
         setFile,
         preview,
         setPreview,
+        clearUpload,
         selectedMusic,
         setSelectedMusic,
       }}
