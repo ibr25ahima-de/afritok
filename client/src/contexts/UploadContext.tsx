@@ -2,6 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 
 type UploadContextType = {
   file: File | null;
+  uploadSource: "gallery" | "camera" | "other";
+  setUploadSource: (source: "gallery" | "camera" | "other") => void;
   setFile: (file: File | null) => void;
   preview: string | null;
   setPreview: (url: string | null) => void;
@@ -24,6 +26,7 @@ const UploadContext = createContext<UploadContextType | undefined>(undefined);
 
 export function UploadProvider({ children }: { children: React.ReactNode }) {
   const [file, setFile] = useState<File | null>(null);
+  const [uploadSource, setUploadSource] = useState<"gallery" | "camera" | "other">("other");
   const [preview, setPreviewState] = useState<string | null>(null);
   const [selectedMusic, setSelectedMusic] = useState<{
     url: string;
@@ -37,6 +40,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
 
   const clearUpload = useCallback(() => {
     setFile(null);
+    setUploadSource("other");
     setPreviewState((currentPreview) => {
       if (currentPreview?.startsWith("blob:")) URL.revokeObjectURL(currentPreview);
       return null;
@@ -53,6 +57,8 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       value={{
         file,
         setFile,
+        uploadSource,
+        setUploadSource,
         preview,
         setPreview,
         clearUpload,
