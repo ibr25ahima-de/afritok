@@ -196,7 +196,7 @@ export default function Publish() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white flex flex-col p-4">
       <h1 className="text-2xl font-bold mb-6">Publier {file?.type.startsWith("image/") ? "une photo" : "une vidéo"}</h1>
-      {preview && (file?.type.startsWith("image/") ? <img src={preview} alt="Aperçu de la publication" className="w-full h-60 object-cover rounded-lg mb-6" /> : <video src={preview} className="w-full h-60 object-cover rounded-lg mb-6" autoPlay loop muted />)}
+      {preview && (file?.type.startsWith("image/") ? <img src={preview} alt="Aperçu de la publication" className="w-full h-60 object-cover rounded-lg mb-6" /> : <video src={preview} className="w-full h-60 object-contain bg-black rounded-lg mb-6" autoPlay loop muted playsInline controls preload="auto" onError={(event) => console.error("[Publish preview] Video could not be loaded", { fileType: file?.type, fileName: file?.name, fileSize: file?.size, mediaError: event.currentTarget.error?.code })} />)}
       <input type="text" placeholder="Titre de la vidéo..." value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-slate-800 border border-purple-800/50 rounded-lg px-4 py-2 text-white mb-4" />
       <textarea placeholder="Description..." value={caption} onChange={e => setCaption(e.target.value)} className="w-full bg-slate-800 border border-purple-800/50 rounded-lg px-3 py-3 text-white mb-4 resize-none" rows={4} />
 
