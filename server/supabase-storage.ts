@@ -62,10 +62,6 @@ function validateContentType(contentType: string): string {
 }
 
 /**
- * Upload a video file to Supabase Storage using the server-only service key.
- * Returns the public URL of the uploaded file.
- */
-/**
  * Create a short-lived, one-use upload URL for a browser to send a gallery
  * video directly to Supabase Storage. The large file never passes through
  * the Render web service memory.
