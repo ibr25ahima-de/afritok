@@ -13,7 +13,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { handleStripeWebhook } from "../webhook-endpoint";
 import { runMigrations } from "./migrate";
-import { uploadVideoToSupabase } from "../supabase-storage";
+import { createSignedVideoUpload, uploadVideoToSupabase } from "../supabase-storage";
 import { uploadAdvertisingMedia } from "../advertising/ad-media-upload-service";
 import { db } from "../db";
 import { music } from "../../drizzle/schema";
@@ -183,6 +183,35 @@ async function startServer() {
     } catch (error) {
       console.error("[Admin music upload] Error:", error);
       return res.status(500).json({ error: error instanceof Error ? error.message : "Ajout de la musique impossible." });
+    }
+  });
+
+  // Gallery videos are uploaded directly from the browser to Supabase using a
+  // short-lived signed URL. This avoids buffering large gallery files in the
+  // 512 MiB Render web-service memory. The existing camera upload route below
+  // is intentionally unchanged.
+  app.post("/api/upload-video/sign", uploadRateLimiter, async (req: Request, res: Response) => {
+    try {
+      const user = await getAuthenticatedUser(req, res);
+      if (!user) return res.status(401).json({ error: "Utilisateur non authentifié." });
+
+      const mimeType = typeof req.body?.mimeType === "string"
+        ? req.body.mimeType.toLowerCase().split(";")[0].trim()
+        : "";
+      const fileSize = Number(req.body?.fileSize);
+
+      if (!ALLOWED_VIDEO_TYPES.has(mimeType)) {
+        return res.status(400).json({ error: "Format vidéo non pris en charge." });
+      }
+      if (!Number.isSafeInteger(fileSize) || fileSize < 1 || fileSize > 100 * 1024 * 1024) {
+        return res.status(413).json({ error: "La vidéo doit peser au maximum 100 Mo." });
+      }
+
+      const ticket = await createSignedVideoUpload(user.id, mimeType);
+      return res.json(ticket);
+    } catch (error) {
+      console.error("[Gallery video upload] Signed URL error:", error);
+      return res.status(500).json({ error: "Impossible de préparer l'envoi de la vidéo." });
     }
   });
 
