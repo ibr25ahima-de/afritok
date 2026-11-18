@@ -11,7 +11,7 @@ type VideoVisibility = "public" | "followers" | "private";
 export default function Publish() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
-  const { file, preview, selectedMusic, clearUpload } = useUpload();
+  const { file, preview, selectedMusic, clearUpload, uploadSource } = useUpload();
   const [caption, setCaption] = useState("");
   const [title, setTitle] = useState("");
   const [loading, setLoading] = useState(false);
@@ -104,6 +104,51 @@ export default function Publish() {
     xhr.send(form);
   });
 
+  // Gallery uploads use a short-lived Supabase signed URL so large files
+  // bypass the Render server's in-memory multipart buffer. Camera uploads keep
+  // using the existing endpoint and behavior.
+  const uploadGalleryVideoDirect = async (videoFile: File): Promise<string> => {
+    const ticketResponse = await fetch("/api/upload-video/sign", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mimeType: videoFile.type, fileSize: videoFile.size }),
+    });
+
+    const ticket = await ticketResponse.json().catch(() => ({}));
+    if (!ticketResponse.ok || !ticket.signedUrl || !ticket.videoUrl) {
+      throw new Error(ticket.error || "Impossible de préparer l'envoi de la vidéo.");
+    }
+
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", ticket.signedUrl, true);
+      xhr.timeout = 180000;
+      xhr.setRequestHeader("Content-Type", videoFile.type || "video/mp4");
+      xhr.upload.onprogress = event => {
+        if (event.lengthComputable) {
+          setUploadProgress(Math.min(75, 10 + Math.round((event.loaded / event.total) * 65)));
+        }
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(ticket.videoUrl);
+          return;
+        }
+        let message = "Le stockage vidéo a refusé le fichier.";
+        try {
+          const body = JSON.parse(xhr.responseText || "{}");
+          message = body.message || body.error || message;
+        } catch { /* use the fallback message */ }
+        reject(new Error(message));
+      };
+      xhr.onerror = () => reject(new Error("Connexion interrompue pendant l'envoi vers le stockage vidéo."));
+      xhr.onabort = () => reject(new Error("Envoi de la vidéo interrompu."));
+      xhr.ontimeout = () => reject(new Error("L'envoi de la vidéo a dépassé le délai autorisé."));
+      xhr.send(videoFile);
+    });
+  };
+
   const handlePublish = async () => {
     if (!file) return alert("Pas de fichier sélectionné");
     if (!user) return alert("Utilisateur non connecté");
@@ -117,7 +162,7 @@ export default function Publish() {
             new Promise<null>(resolve => window.setTimeout(() => resolve(null), 2000)),
           ])
         : Promise.resolve(null);
-      const videoUrl = await uploadVideoDirect(file);
+      const videoUrl = uploadSource === "gallery" ? await uploadGalleryVideoDirect(file) : await uploadVideoDirect(file);
       const thumbnailDataUrl = await thumbPromise;
       setUploadProgress(80);
       let thumbnailUrl: string | null = null;
