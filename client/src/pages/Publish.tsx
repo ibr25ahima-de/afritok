@@ -122,7 +122,7 @@ export default function Publish() {
 
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open("POST", ticket.signedUrl, true);
+      xhr.open("PUT", ticket.signedUrl, true);
       xhr.timeout = 180000;
       xhr.setRequestHeader("Content-Type", videoFile.type || "video/mp4");
       xhr.upload.onprogress = event => {
