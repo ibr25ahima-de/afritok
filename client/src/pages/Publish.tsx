@@ -16,6 +16,7 @@ export default function Publish() {
   const [title, setTitle] = useState("");
   const [loading, setLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [publishPreviewError, setPublishPreviewError] = useState<string | null>(null);
   const [visibility, setVisibility] = useState<VideoVisibility>("public");
   const [contentLanguage, setContentLanguage] = useState("Français");
   const [premiumOptions, setPremiumOptions] = useState<PremiumPublishOptionsValue>({ quality: "standard", scheduledAt: null, commentsMode: "all" });
@@ -196,7 +197,8 @@ export default function Publish() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white flex flex-col p-4">
       <h1 className="text-2xl font-bold mb-6">Publier {file?.type.startsWith("image/") ? "une photo" : "une vidéo"}</h1>
-      {preview && (file?.type.startsWith("image/") ? <img src={preview} alt="Aperçu de la publication" className="w-full h-60 object-cover rounded-lg mb-6" /> : <video src={preview} className="w-full h-60 object-cover rounded-lg mb-6" autoPlay loop muted />)}
+      {preview && (file?.type.startsWith("image/") ? <img src={preview} alt="Aperçu de la publication" className="w-full h-60 object-cover rounded-lg mb-6" /> : <video src={preview} className="w-full h-60 object-contain bg-black rounded-lg mb-6" autoPlay loop muted playsInline controls preload="auto" onLoadedData={(event) => { const v=event.currentTarget; console.info("[Publish preview] loadeddata", { type:file?.type, name:file?.name, size:file?.size, duration:v.duration, width:v.videoWidth, height:v.videoHeight, readyState:v.readyState, networkState:v.networkState }); setPublishPreviewError(null); }} onError={(event) => { const v=event.currentTarget; const err=v.error; const code=err?.code ?? 0; const message=code===1?"Lecture interrompue":code===2?"Erreur réseau":code===3?"Codec ou format non décodable":code===4?"Source vidéo non prise en charge":"Erreur inconnue"; const details={ type:file?.type, name:file?.name, size:file?.size, code, message:err?.message || "", networkState:v.networkState, readyState:v.readyState }; console.error("[Publish preview] PLAYBACK ERROR", details); setPublishPreviewError(message+" (code "+code+")"); }} />)}
+      {publishPreviewError && <p role="alert" className="mb-4 rounded-lg border border-red-500 bg-red-950 p-3 text-sm text-red-100">Erreur de lecture : {publishPreviewError}</p>}
       <input type="text" placeholder="Titre de la vidéo..." value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-slate-800 border border-purple-800/50 rounded-lg px-4 py-2 text-white mb-4" />
       <textarea placeholder="Description..." value={caption} onChange={e => setCaption(e.target.value)} className="w-full bg-slate-800 border border-purple-800/50 rounded-lg px-3 py-3 text-white mb-4 resize-none" rows={4} />
 
