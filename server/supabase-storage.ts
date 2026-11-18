@@ -62,9 +62,42 @@ function validateContentType(contentType: string): string {
 }
 
 /**
- * Upload a video file to Supabase Storage using the server-only service key.
- * Returns the public URL of the uploaded file.
+ * Create a short-lived, one-use upload URL for a browser to send a gallery
+ * video directly to Supabase Storage. The large file never passes through
+ * the Render web service memory.
  */
+export async function createSignedVideoUpload(
+  userId: number,
+  contentType: string,
+): Promise<{ signedUrl: string; videoUrl: string }> {
+  const safeUserId = validateUserId(userId);
+  const safeContentType = validateContentType(contentType);
+  const extensionByType: Record<string, string> = {
+    "video/mp4": "mp4",
+    "video/webm": "webm",
+    "video/quicktime": "mov",
+  };
+  const extension = extensionByType[safeContentType];
+  if (!extension) {
+    throw new Error("Unsupported video content type");
+  }
+
+  const filePath = `${safeUserId}/${Date.now()}-${randomUUID()}.${extension}`;
+  const { data, error } = await supabase.storage
+    .from(STORAGE_BUCKET)
+    .createSignedUploadUrl(filePath, { upsert: false });
+
+  if (error || !data?.signedUrl) {
+    throw new Error(`Unable to create signed video upload: ${error?.message || "missing signed URL"}`);
+  }
+
+  const { data: publicData } = supabase.storage
+    .from(STORAGE_BUCKET)
+    .getPublicUrl(filePath);
+
+  return { signedUrl: data.signedUrl, videoUrl: publicData.publicUrl };
+}
+
 export async function uploadVideoToSupabase(
   fileBuffer: Buffer,
   fileName: string,
