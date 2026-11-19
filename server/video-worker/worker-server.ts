@@ -1,6 +1,7 @@
 import express from "express";
 import crypto from "node:crypto";
 import { runLocalFallback } from "./premium-hd-trigger";
+import { normalizeGalleryVideo } from "./gallery-normalizer";
 
 const app = express();
 const port = Number(process.env.PORT ?? 10001);
@@ -78,6 +79,30 @@ function isSafeSourceUrl(value: unknown): value is string {
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true, service: "afritok-video-worker" });
+});
+
+app.post("/normalize-gallery", async (req, res) => {
+  if (!safeTokenEquals(req.header("x-afritok-worker-token"))) {
+    return res.status(401).json({ success: false, message: "Unauthorized" });
+  }
+  const ip = req.ip || "unknown";
+  if (!allowRequest(ip)) {
+    return res.status(429).json({ success: false, message: "Too many requests." });
+  }
+  const { userId, videoUrl } = req.body ?? {};
+  if (!Number.isSafeInteger(userId) || userId <= 0 || !isSafeSourceUrl(videoUrl)) {
+    return res.status(400).json({ success: false, message: "Invalid gallery normalization request." });
+  }
+  try {
+    const result = await normalizeGalleryVideo(videoUrl, userId);
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    console.error("[Gallery normalization] Failed:", error);
+    return res.status(422).json({
+      success: false,
+      message: error instanceof Error ? error.message : "Video compatibility conversion failed.",
+    });
+  }
 });
 
 app.post("/process", (req, res) => {
