@@ -215,6 +215,46 @@ async function startServer() {
     }
   });
 
+  app.post("/api/upload-video/normalize-gallery", uploadRateLimiter, async (req: Request, res: Response) => {
+    try {
+      const user = await getAuthenticatedUser(req, res);
+      if (!user) return res.status(401).json({ error: "Utilisateur non authentifié." });
+      const videoUrl = typeof req.body?.videoUrl === "string" ? req.body.videoUrl : "";
+      const workerUrl = process.env.AFRITOK_VIDEO_WORKER_URL?.replace(/\/$/, "");
+      const workerToken = process.env.AFRITOK_VIDEO_WORKER_TOKEN;
+      if (!videoUrl || videoUrl.length > 2048) {
+        return res.status(400).json({ error: "Adresse de la vidéo source invalide." });
+      }
+      if (!workerUrl || !workerToken) {
+        return res.status(503).json({ error: "Le service de conversion vidéo est momentanément indisponible." });
+      }
+      const workerResponse = await fetch(`${workerUrl}/normalize-gallery`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-afritok-worker-token": workerToken,
+        },
+        body: JSON.stringify({ userId: user.id, videoUrl }),
+        signal: AbortSignal.timeout(5 * 60 * 1000),
+      });
+      const result = await workerResponse.json().catch(() => ({}));
+      if (!workerResponse.ok || !result.success) {
+        console.error("[Gallery video normalization] Worker rejected request:", workerResponse.status, result);
+        return res.status(workerResponse.status === 401 ? 503 : 422).json({
+          error: result.message || "Impossible de convertir cette vidéo pour la lecture sur mobile.",
+        });
+      }
+      return res.json({ success: true, videoUrl: result.videoUrl, size: result.size });
+    } catch (error) {
+      console.error("[Gallery video normalization] Error:", error);
+      return res.status(502).json({
+        error: error instanceof Error && error.name === "TimeoutError"
+          ? "La conversion vidéo a pris trop de temps. Réessaie avec une vidéo plus courte."
+          : "La conversion vidéo a échoué. Le fichier original n'a pas été supprimé.",
+      });
+    }
+  });
+
   app.post("/api/upload-video", uploadRateLimiter, handleVideoUpload, async (req: Request, res: Response) => {
     try {
       const user = await getAuthenticatedUser(req, res);
