@@ -614,7 +614,73 @@ export default function Upload() {
   };
 
   if (!isAuthenticated) return <div className="h-screen bg-black flex items-center justify-center text-white">Connexion requise</div>;
-  if (step === "capture") return reactionMode ? <ReactionCameraRecorder onClose={() => setReactionMode(false)} onVideoRecorded={(blob, recordedDuration) => { if (blob.size < 1024) return toast.error("La vidéo enregistrée est vide. Réessaie."); const mimeType = blob.type || "video/webm"; const recordedFile = new File([blob], `reaction${recordedVideoExtension(mimeType)}`, { type: mimeType }); setFile(recordedFile); setReactionMode(false); setStep("edit"); toast.success(`Réaction prête pour le montage · ${recordedDuration}s`); }} /> : photoReactionMode ? <PhotoReactionRecorder onClose={() => setPhotoReactionMode(false)} onVideoRecorded={(blob, recordedDuration) => { if (blob.size < 1024) return toast.error("La réaction enregistrée est vide. Réessaie."); const mimeType = blob.type || "video/webm"; const recordedFile = new File([blob], `photo-reaction${recordedVideoExtension(mimeType)}`, { type: mimeType }); setFile(recordedFile); setPhotoReactionMode(false); setStep("edit"); toast.success(`Réaction photo prête pour le montage · ${recordedDuration}s`); }} /> : showReactionChoice ? <div className="flex h-[100dvh] flex-col items-center justify-center gap-4 bg-black px-5 text-white"><button onClick={() => setShowReactionChoice(false)} className="absolute left-4 top-5 flex items-center gap-2 text-sm text-white/80"><ArrowLeft size={20} /> Retour</button><h1 className="text-2xl font-bold">Réagir</h1><p className="text-center text-sm text-white/60">Choisis le type de réaction</p><button onClick={() => { setShowReactionChoice(false); setReactionMode(true); }} className="flex w-full max-w-sm items-center gap-4 rounded-2xl border border-white/20 bg-white/10 p-5 text-left"><Video size={28} /><span><strong className="block">Réagir avec une vidéo</strong><span className="text-sm text-white/60">Utiliser le système vidéo existant</span></span></button><button onClick={() => { setShowReactionChoice(false); setPhotoReactionMode(true); }} className="flex w-full max-w-sm items-center gap-4 rounded-2xl border border-white/20 bg-white/10 p-5 text-left"><ImagePlus size={28} /><span><strong className="block">Réagir avec une photo</strong><span className="text-sm text-white/60">Utiliser le nouveau système photo</span></span></button></div> : <><input ref={galleryInputRef} type="file" accept="video/*,.mp4,.mov,.webm,.m4v,.3gp,.3g2" className="hidden" aria-label="Choisir une vidéo dans la galerie" onChange={(event) => { const selected = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (!selected) return; const normalized = normalizeGalleryVideo(selected); console.info("[GalleryPreview] selected", { name:selected.name, type:selected.type, size:selected.size, normalizedType:normalized?.type, normalizedSize:normalized?.size }); setGalleryPreviewError(null); if (!normalized) { toast.error("Choisis un fichier vidéo compatible"); return; } if (normalized.size > 100 * 1024 * 1024) { toast.error("La vidéo ne doit pas dépasser 100 Mo"); return; } if (preview?.startsWith("blob:")) URL.revokeObjectURL(preview); const galleryPreviewUrl = URL.createObjectURL(normalized); previewAssignedForFileRef.current = normalized; setPreview(galleryPreviewUrl); setFile(normalized); setUploadSource("gallery"); setStep("edit"); setDuration(0); setTrimStart(0); setTrimEnd(0); setCuts([]); setOverlays([]); toast.success("Vidéo de la galerie prête pour le montage"); }} /><CameraRecorder onPickFromGallery={() => galleryInputRef.current?.click()} onOpenReaction={() => setShowReactionChoice(true)} onVideoRecorded={(blob, recordedDuration) => { if (blob.size < 1024) return toast.error("La vidéo enregistrée est vide. Réessaie."); const mimeType = blob.type || "video/mp4"; const recordedFile = new File([blob], `video${recordedVideoExtension(mimeType)}`, { type: mimeType }); setFile(recordedFile); setUploadSource("camera"); setStep("edit"); toast.success(`Vidéo prête pour le montage · ${recordedDuration}s`); }} onPhotoTaken={(blob) => { setFile(new File([blob], "photo.jpg", { type: "image/jpeg" })); setStep("edit"); }} onClose={() => navigate("/feed")} onOpenMusic={() => setShowAudio(true)} selectedMusic={selectedMusic} />{showAudio && <AudioSelector onClose={() => setShowAudio(false)} onSelectAudio={(url, name, id) => { setSelectedMusic({ url, name, id }); setShowAudio(false); }} />}</>;
+  if (step === "capture") return reactionMode ? <ReactionCameraRecorder onClose={() => setReactionMode(false)} onVideoRecorded={(blob, recordedDuration) => { if (blob.size < 1024) return toast.error("La vidéo enregistrée est vide. Réessaie."); const mimeType = blob.type || "video/webm"; const recordedFile = new File([blob], `reaction${recordedVideoExtension(mimeType)}`, { type: mimeType }); setFile(recordedFile); setReactionMode(false); setStep("edit"); toast.success(`Réaction prête pour le montage · ${recordedDuration}s`); }} /> : photoReactionMode ? <PhotoReactionRecorder onClose={() => setPhotoReactionMode(false)} onVideoRecorded={(blob, recordedDuration) => { if (blob.size < 1024) return toast.error("La réaction enregistrée est vide. Réessaie."); const mimeType = blob.type || "video/webm"; const recordedFile = new File([blob], `photo-reaction${recordedVideoExtension(mimeType)}`, { type: mimeType }); setFile(recordedFile); setPhotoReactionMode(false); setStep("edit"); toast.success(`Réaction photo prête pour le montage · ${recordedDuration}s`); }} /> : showReactionChoice ? <div className="flex h-[100dvh] flex-col items-center justify-center gap-4 bg-black px-5 text-white"><button onClick={() => setShowReactionChoice(false)} className="absolute left-4 top-5 flex items-center gap-2 text-sm text-white/80"><ArrowLeft size={20} /> Retour</button><h1 className="text-2xl font-bold">Réagir</h1><p className="text-center text-sm text-white/60">Choisis le type de réaction</p><button onClick={() => { setShowReactionChoice(false); setReactionMode(true); }} className="flex w-full max-w-sm items-center gap-4 rounded-2xl border border-white/20 bg-white/10 p-5 text-left"><Video size={28} /><span><strong className="block">Réagir avec une vidéo</strong><span className="text-sm text-white/60">Utiliser le système vidéo existant</span></span></button><button onClick={() => { setShowReactionChoice(false); setPhotoReactionMode(true); }} className="flex w-full max-w-sm items-center gap-4 rounded-2xl border border-white/20 bg-white/10 p-5 text-left"><ImagePlus size={28} /><span><strong className="block">Réagir avec une photo</strong><span className="text-sm text-white/60">Utiliser le nouveau système photo</span></span></button></div> : <><input ref={galleryInputRef} type="file" accept="video/*,.mp4,.mov,.webm,.m4v,.3gp,.3g2" className="hidden" aria-label="Choisir une vidéo dans la galerie" onChange={async (event) => {
+        const selected = event.currentTarget.files?.[0];
+        event.currentTarget.value = "";
+        if (!selected) return;
+        const normalized = normalizeGalleryVideo(selected);
+        console.info("[GalleryPreview] selected", { name: selected.name, type: selected.type, size: selected.size, normalizedType: normalized?.type, normalizedSize: normalized?.size });
+        setGalleryPreviewError(null);
+        if (!normalized) { toast.error("Choisis un fichier vidéo compatible"); return; }
+        if (normalized.size > 100 * 1024 * 1024) { toast.error("La vidéo ne doit pas dépasser 100 Mo"); return; }
+
+        const toastId = "gallery-video-prepare";
+        try {
+          toast.loading("Préparation de la vidéo pour le montage…", { id: toastId });
+          const ticketResponse = await fetch("/api/upload-video/sign", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mimeType: normalized.type, fileSize: normalized.size }),
+          });
+          const ticket = await ticketResponse.json().catch(() => ({}));
+          if (!ticketResponse.ok || !ticket.signedUrl || !ticket.videoUrl) {
+            throw new Error(ticket.error || "Impossible de préparer le fichier vidéo.");
+          }
+
+          const storageResponse = await fetch(ticket.signedUrl, {
+            method: "PUT",
+            headers: { "Content-Type": normalized.type },
+            body: normalized,
+          });
+          if (!storageResponse.ok) throw new Error("Le stockage a refusé la vidéo source.");
+
+          const conversionResponse = await fetch("/api/upload-video/normalize-gallery", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ videoUrl: ticket.videoUrl }),
+          });
+          const conversion = await conversionResponse.json().catch(() => ({}));
+          if (!conversionResponse.ok || !conversion.success) {
+            throw new Error(conversion.error || "La conversion de compatibilité a échoué.");
+          }
+
+          const playableResponse = await fetch(`${ticket.videoUrl}${ticket.videoUrl.includes("?") ? "&" : "?"}galleryPreview=${Date.now()}`, { cache: "no-store" });
+          if (!playableResponse.ok) throw new Error("Impossible de récupérer la vidéo convertie.");
+          const playableBlob = await playableResponse.blob();
+          if (!playableBlob.size) throw new Error("La vidéo convertie est vide.");
+          const compatibleName = selected.name.replace(/\.[^.]+$/, "") + ".mp4";
+          const compatibleFile = new File([playableBlob], compatibleName, { type: "video/mp4", lastModified: Date.now() });
+
+          if (preview?.startsWith("blob:")) URL.revokeObjectURL(preview);
+          const galleryPreviewUrl = URL.createObjectURL(compatibleFile);
+          previewAssignedForFileRef.current = compatibleFile;
+          setPreview(galleryPreviewUrl);
+          setFile(compatibleFile);
+          setUploadSource("gallery");
+          setStep("edit");
+          setDuration(0);
+          setTrimStart(0);
+          setTrimEnd(0);
+          setCuts([]);
+          setOverlays([]);
+          toast.success("Vidéo compatible prête pour le montage", { id: toastId });
+        } catch (error) {
+          console.error("[GalleryPreview] preparation failed:", error);
+          toast.error(error instanceof Error ? error.message : "Impossible de préparer cette vidéo.", { id: toastId });
+        }
+      }} /><CameraRecorder onPickFromGallery={() => galleryInputRef.current?.click()} onOpenReaction={() => setShowReactionChoice(true)} onVideoRecorded={(blob, recordedDuration) => { if (blob.size < 1024) return toast.error("La vidéo enregistrée est vide. Réessaie."); const mimeType = blob.type || "video/mp4"; const recordedFile = new File([blob], `video${recordedVideoExtension(mimeType)}`, { type: mimeType }); setFile(recordedFile); setUploadSource("camera"); setStep("edit"); toast.success(`Vidéo prête pour le montage · ${recordedDuration}s`); }} onPhotoTaken={(blob) => { setFile(new File([blob], "photo.jpg", { type: "image/jpeg" })); setStep("edit"); }} onClose={() => navigate("/feed")} onOpenMusic={() => setShowAudio(true)} selectedMusic={selectedMusic} />{showAudio && <AudioSelector onClose={() => setShowAudio(false)} onSelectAudio={(url, name, id) => { setSelectedMusic({ url, name, id }); setShowAudio(false); }} />}</>;
   if (step === "edit") {
     const isImage = isImageFile(file);
     const selectedOverlay = overlays.find((item) => item.id === selectedOverlayId) || null;
