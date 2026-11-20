@@ -58,7 +58,7 @@ function transcodeForMobile(inputPath: string, outputPath: string): Promise<void
       "-y", "-i", inputPath,
       "-map", "0:v:0", "-map", "0:a?",
       "-c:v", "libx264", "-profile:v", "baseline", "-pix_fmt", "yuv420p",
-      "-preset", "veryfast", "-crf", "23",
+      "-preset", "ultrafast", "-crf", "23",
       "-c:a", "aac", "-b:a", "128k",
       "-movflags", "+faststart", outputPath,
     ];
