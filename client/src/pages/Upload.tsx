@@ -64,7 +64,7 @@ const STICKERS = ["❤️", "😂", "🔥", "😍", "✨", "👏", "🇨🇮", "
 export default function Upload() {
   const [, navigate] = useLocation();
   const { isAuthenticated } = useAuth();
-  const { file, setFile, preview, setPreview, selectedMusic, setSelectedMusic, setUploadSource } = useUpload();
+  const { file, setFile, preview, setPreview, selectedMusic, setSelectedMusic, setUploadSource, uploadSource } = useUpload();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -106,10 +106,79 @@ export default function Upload() {
   const overlayMediaInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const previewAssignedForFileRef = useRef<File | null>(null);
+  const gallerySelectedFileRef = useRef<File | null>(null);
+  const galleryNormalizationPromiseRef = useRef<Promise<void> | null>(null);
   const musicRef = useRef<HTMLAudioElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef<{ id: string; offsetX: number; offsetY: number } | null>(null);
   const resizingRef = useRef<{ id: string; centerX: number; centerY: number; startDist: number; startSize: number } | null>(null);
+
+  const prepareGalleryCompatibility = (sourceFile: File): Promise<void> => {
+    if (galleryNormalizationPromiseRef.current) return galleryNormalizationPromiseRef.current;
+
+    const task = (async () => {
+      const toastId = "gallery-video-background-prepare";
+      let stage = "envoi vers le stockage";
+      try {
+        toast.loading("Préparation de la vidéo en arrière-plan…", { id: toastId });
+        const formData = new FormData();
+        formData.append("file", sourceFile, sourceFile.name);
+        const uploadResponse = await fetch("/api/upload-video", {
+          method: "POST",
+          credentials: "include",
+          body: formData,
+        });
+        const uploaded = await uploadResponse.json().catch(() => ({}));
+        if (!uploadResponse.ok || !uploaded.videoUrl) {
+          throw new Error(uploaded.error || "Le serveur n'a pas reçu la vidéo.");
+        }
+
+        stage = "conversion de compatibilité";
+        const conversionResponse = await fetch("/api/upload-video/normalize-gallery", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ videoUrl: uploaded.videoUrl }),
+        });
+        const conversion = await conversionResponse.json().catch(() => ({}));
+        if (!conversionResponse.ok || !conversion.success) {
+          throw new Error(conversion.error || "La conversion de compatibilité a échoué.");
+        }
+
+        stage = "récupération de la vidéo convertie";
+        const playableUrl = conversion.videoUrl || uploaded.videoUrl;
+        const playableResponse = await fetch(`${playableUrl}${playableUrl.includes("?") ? "&" : "?"}galleryPreview=${Date.now()}`, { cache: "no-store" });
+        if (!playableResponse.ok) throw new Error("Impossible de récupérer la vidéo convertie.");
+        const playableBlob = await playableResponse.blob();
+        if (!playableBlob.size) throw new Error("La vidéo convertie est vide.");
+
+        const compatibleName = sourceFile.name.replace(/\\.[^.]+$/, "") + ".mp4";
+        const compatibleFile = new File([playableBlob], compatibleName, { type: "video/mp4", lastModified: Date.now() });
+        // Do not overwrite a newer gallery selection if the user changed files
+        // while this background job was running.
+        if (gallerySelectedFileRef.current !== sourceFile) return;
+
+        const nextPreview = URL.createObjectURL(compatibleFile);
+        if (preview?.startsWith("blob:")) URL.revokeObjectURL(preview);
+        previewAssignedForFileRef.current = compatibleFile;
+        setPreview(nextPreview);
+        setFile(compatibleFile);
+        setGalleryPreviewError(null);
+        toast.success("Vidéo compatible prête pour le montage", { id: toastId });
+      } catch (error) {
+        console.error("[GalleryPreview] background preparation failed at:", stage, error);
+        const detail = error instanceof Error ? error.message : "Erreur inconnue";
+        toast.error(`Échec de la préparation en arrière-plan (${stage}) : ${detail}`, { id: toastId, duration: 12000 });
+        throw error;
+      }
+    })();
+
+    galleryNormalizationPromiseRef.current = task;
+    void task.finally(() => {
+      if (galleryNormalizationPromiseRef.current === task) galleryNormalizationPromiseRef.current = null;
+    }).catch(() => {});
+    return task;
+  };
 
   useEffect(() => {
     if (!file) return;
@@ -606,6 +675,16 @@ export default function Upload() {
 
   const handleNextToPublish = async () => {
     if (isExporting) return;
+    // If an unsupported gallery codec triggered background preparation,
+    // finish it before exporting/publishing the selected source file.
+    if (galleryNormalizationPromiseRef.current) {
+      try {
+        await galleryNormalizationPromiseRef.current;
+      } catch {
+        toast.error("La préparation de compatibilité n'est pas terminée. Réessaie avant de continuer.");
+        return;
+      }
+    }
     const exported = await exportMontage();
     if (!exported) {
       toast.warning("Le montage n’a pas pu être exporté. La vidéo originale sera publiée avec le son sélectionné.");
@@ -614,7 +693,7 @@ export default function Upload() {
   };
 
   if (!isAuthenticated) return <div className="h-screen bg-black flex items-center justify-center text-white">Connexion requise</div>;
-  if (step === "capture") return reactionMode ? <ReactionCameraRecorder onClose={() => setReactionMode(false)} onVideoRecorded={(blob, recordedDuration) => { if (blob.size < 1024) return toast.error("La vidéo enregistrée est vide. Réessaie."); const mimeType = blob.type || "video/webm"; const recordedFile = new File([blob], `reaction${recordedVideoExtension(mimeType)}`, { type: mimeType }); setFile(recordedFile); setReactionMode(false); setStep("edit"); toast.success(`Réaction prête pour le montage · ${recordedDuration}s`); }} /> : photoReactionMode ? <PhotoReactionRecorder onClose={() => setPhotoReactionMode(false)} onVideoRecorded={(blob, recordedDuration) => { if (blob.size < 1024) return toast.error("La réaction enregistrée est vide. Réessaie."); const mimeType = blob.type || "video/webm"; const recordedFile = new File([blob], `photo-reaction${recordedVideoExtension(mimeType)}`, { type: mimeType }); setFile(recordedFile); setPhotoReactionMode(false); setStep("edit"); toast.success(`Réaction photo prête pour le montage · ${recordedDuration}s`); }} /> : showReactionChoice ? <div className="flex h-[100dvh] flex-col items-center justify-center gap-4 bg-black px-5 text-white"><button onClick={() => setShowReactionChoice(false)} className="absolute left-4 top-5 flex items-center gap-2 text-sm text-white/80"><ArrowLeft size={20} /> Retour</button><h1 className="text-2xl font-bold">Réagir</h1><p className="text-center text-sm text-white/60">Choisis le type de réaction</p><button onClick={() => { setShowReactionChoice(false); setReactionMode(true); }} className="flex w-full max-w-sm items-center gap-4 rounded-2xl border border-white/20 bg-white/10 p-5 text-left"><Video size={28} /><span><strong className="block">Réagir avec une vidéo</strong><span className="text-sm text-white/60">Utiliser le système vidéo existant</span></span></button><button onClick={() => { setShowReactionChoice(false); setPhotoReactionMode(true); }} className="flex w-full max-w-sm items-center gap-4 rounded-2xl border border-white/20 bg-white/10 p-5 text-left"><ImagePlus size={28} /><span><strong className="block">Réagir avec une photo</strong><span className="text-sm text-white/60">Utiliser le nouveau système photo</span></span></button></div> : <><input ref={galleryInputRef} type="file" accept="video/*,.mp4,.mov,.webm,.m4v,.3gp,.3g2" className="hidden" aria-label="Choisir une vidéo dans la galerie" onChange={async (event) => {
+  if (step === "capture") return reactionMode ? <ReactionCameraRecorder onClose={() => setReactionMode(false)} onVideoRecorded={(blob, recordedDuration) => { if (blob.size < 1024) return toast.error("La vidéo enregistrée est vide. Réessaie."); const mimeType = blob.type || "video/webm"; const recordedFile = new File([blob], `reaction${recordedVideoExtension(mimeType)}`, { type: mimeType }); setFile(recordedFile); setReactionMode(false); setStep("edit"); toast.success(`Réaction prête pour le montage · ${recordedDuration}s`); }} /> : photoReactionMode ? <PhotoReactionRecorder onClose={() => setPhotoReactionMode(false)} onVideoRecorded={(blob, recordedDuration) => { if (blob.size < 1024) return toast.error("La réaction enregistrée est vide. Réessaie."); const mimeType = blob.type || "video/webm"; const recordedFile = new File([blob], `photo-reaction${recordedVideoExtension(mimeType)}`, { type: mimeType }); setFile(recordedFile); setPhotoReactionMode(false); setStep("edit"); toast.success(`Réaction photo prête pour le montage · ${recordedDuration}s`); }} /> : showReactionChoice ? <div className="flex h-[100dvh] flex-col items-center justify-center gap-4 bg-black px-5 text-white"><button onClick={() => setShowReactionChoice(false)} className="absolute left-4 top-5 flex items-center gap-2 text-sm text-white/80"><ArrowLeft size={20} /> Retour</button><h1 className="text-2xl font-bold">Réagir</h1><p className="text-center text-sm text-white/60">Choisis le type de réaction</p><button onClick={() => { setShowReactionChoice(false); setReactionMode(true); }} className="flex w-full max-w-sm items-center gap-4 rounded-2xl border border-white/20 bg-white/10 p-5 text-left"><Video size={28} /><span><strong className="block">Réagir avec une vidéo</strong><span className="text-sm text-white/60">Utiliser le système vidéo existant</span></span></button><button onClick={() => { setShowReactionChoice(false); setPhotoReactionMode(true); }} className="flex w-full max-w-sm items-center gap-4 rounded-2xl border border-white/20 bg-white/10 p-5 text-left"><ImagePlus size={28} /><span><strong className="block">Réagir avec une photo</strong><span className="text-sm text-white/60">Utiliser le nouveau système photo</span></span></button></div> : <><input ref={galleryInputRef} type="file" accept="video/*,.mp4,.mov,.webm,.m4v,.3gp,.3g2" className="hidden" aria-label="Choisir une vidéo dans la galerie" onChange={(event) => {
         const selected = event.currentTarget.files?.[0];
         event.currentTarget.value = "";
         if (!selected) return;
@@ -624,66 +703,24 @@ export default function Upload() {
         if (!normalized) { toast.error("Choisis un fichier vidéo compatible"); return; }
         if (normalized.size > 100 * 1024 * 1024) { toast.error("La vidéo ne doit pas dépasser 100 Mo"); return; }
 
-        const toastId = "gallery-video-prepare";
-        let preparationStage = "envoi du fichier vers le stockage";
-        try {
-          toast.loading("Préparation de la vidéo pour le montage…", { id: toastId });
-
-          // Reuse the same authenticated, same-origin upload endpoint already
-          // used by the working camera publishing flow. This avoids a direct
-          // browser PUT to Supabase, which was failing before normalization.
-          const formData = new FormData();
-          formData.append("file", normalized, normalized.name);
-          const uploadResponse = await fetch("/api/upload-video", {
-            method: "POST",
-            credentials: "include",
-            body: formData,
-          });
-          const uploaded = await uploadResponse.json().catch(() => ({}));
-          if (!uploadResponse.ok || !uploaded.videoUrl) {
-            throw new Error(uploaded.error || "Le serveur n'a pas reçu la vidéo de la galerie.");
-          }
-
-          preparationStage = "conversion de compatibilité";
-          const conversionResponse = await fetch("/api/upload-video/normalize-gallery", {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ videoUrl: uploaded.videoUrl }),
-          });
-          const conversion = await conversionResponse.json().catch(() => ({}));
-          if (!conversionResponse.ok || !conversion.success) {
-            throw new Error(conversion.error || "La conversion de compatibilité a échoué.");
-          }
-
-          preparationStage = "récupération de la vidéo convertie";
-          const playableUrl = conversion.videoUrl || uploaded.videoUrl;
-          const playableResponse = await fetch(`${playableUrl}${playableUrl.includes("?") ? "&" : "?"}galleryPreview=${Date.now()}`, { cache: "no-store" });
-          if (!playableResponse.ok) throw new Error("Impossible de récupérer la vidéo convertie.");
-          const playableBlob = await playableResponse.blob();
-          if (!playableBlob.size) throw new Error("La vidéo convertie est vide.");
-          const compatibleName = selected.name.replace(/\\.[^.]+$/, "") + ".mp4";
-          const compatibleFile = new File([playableBlob], compatibleName, { type: "video/mp4", lastModified: Date.now() });
-
-          if (preview?.startsWith("blob:")) URL.revokeObjectURL(preview);
-          const galleryPreviewUrl = URL.createObjectURL(compatibleFile);
-          previewAssignedForFileRef.current = compatibleFile;
-          setPreview(galleryPreviewUrl);
-          setFile(compatibleFile);
-          setUploadSource("gallery");
-          setStep("edit");
-          setDuration(0);
-          setTrimStart(0);
-          setTrimEnd(0);
-          setCuts([]);
-          setOverlays([]);
-          toast.success("Vidéo compatible prête pour le montage", { id: toastId });
-        } catch (error) {
-          console.error("[GalleryPreview] preparation failed at stage:", preparationStage, error);
-          const detail = error instanceof Error ? error.message : "Erreur inconnue";
-          toast.error(`Échec pendant ${preparationStage} : ${detail}`, { id: toastId, duration: 12000 });
-        }
-      }} /><CameraRecorder onPickFromGallery={() => galleryInputRef.current?.click()} onOpenReaction={() => setShowReactionChoice(true)} onVideoRecorded={(blob, recordedDuration) => { if (blob.size < 1024) return toast.error("La vidéo enregistrée est vide. Réessaie."); const mimeType = blob.type || "video/mp4"; const recordedFile = new File([blob], `video${recordedVideoExtension(mimeType)}`, { type: mimeType }); setFile(recordedFile); setUploadSource("camera"); setStep("edit"); toast.success(`Vidéo prête pour le montage · ${recordedDuration}s`); }} onPhotoTaken={(blob) => { setFile(new File([blob], "photo.jpg", { type: "image/jpeg" })); setStep("edit"); }} onClose={() => navigate("/feed")} onOpenMusic={() => setShowAudio(true)} selectedMusic={selectedMusic} />{showAudio && <AudioSelector onClose={() => setShowAudio(false)} onSelectAudio={(url, name, id) => { setSelectedMusic({ url, name, id }); setShowAudio(false); }} />}</>;
+        // Open the editor immediately with the local gallery file. Do not wait
+        // for a network upload or a full-length server transcode just to show it.
+        if (preview?.startsWith("blob:")) URL.revokeObjectURL(preview);
+        gallerySelectedFileRef.current = normalized;
+        galleryNormalizationPromiseRef.current = null;
+        const localPreviewUrl = URL.createObjectURL(normalized);
+        previewAssignedForFileRef.current = normalized;
+        setPreview(localPreviewUrl);
+        setFile(normalized);
+        setUploadSource("gallery");
+        setStep("edit");
+        setDuration(0);
+        setTrimStart(0);
+        setTrimEnd(0);
+        setCuts([]);
+        setOverlays([]);
+        toast.success("Vidéo ajoutée au montage");
+      } /><CameraRecorder onPickFromGallery={() => galleryInputRef.current?.click()} onOpenReaction={() => setShowReactionChoice(true)} onVideoRecorded={(blob, recordedDuration) => { if (blob.size < 1024) return toast.error("La vidéo enregistrée est vide. Réessaie."); const mimeType = blob.type || "video/mp4"; const recordedFile = new File([blob], `video${recordedVideoExtension(mimeType)}`, { type: mimeType }); setFile(recordedFile); setUploadSource("camera"); setStep("edit"); toast.success(`Vidéo prête pour le montage · ${recordedDuration}s`); }} onPhotoTaken={(blob) => { setFile(new File([blob], "photo.jpg", { type: "image/jpeg" })); setStep("edit"); }} onClose={() => navigate("/feed")} onOpenMusic={() => setShowAudio(true)} selectedMusic={selectedMusic} />{showAudio && <AudioSelector onClose={() => setShowAudio(false)} onSelectAudio={(url, name, id) => { setSelectedMusic({ url, name, id }); setShowAudio(false); }} />}</>;
   if (step === "edit") {
     const isImage = isImageFile(file);
     const selectedOverlay = overlays.find((item) => item.id === selectedOverlayId) || null;
@@ -704,7 +741,7 @@ export default function Upload() {
               ? Math.min(value, rawDuration)
               : rawDuration
           );
-        }} onLoadedData={(e) => { const v=e.currentTarget; console.info("[GalleryPreview] loadeddata", { name:file?.name, type:file?.type, size:file?.size, duration:v.duration, width:v.videoWidth, height:v.videoHeight, readyState:v.readyState, networkState:v.networkState }); setGalleryPreviewError(null); }} onCanPlay={(e) => { const v=e.currentTarget; console.info("[GalleryPreview] canplay", { readyState:v.readyState, duration:v.duration }); }} onError={(e) => { const v=e.currentTarget; const err=v.error; const code=err?.code ?? 0; const message=code===1?"Lecture interrompue":code===2?"Erreur réseau":code===3?"Codec ou format non décodable":code===4?"Source vidéo non prise en charge":"Erreur inconnue"; const details={ name:file?.name, type:file?.type, size:file?.size, code, message:err?.message || "", networkState:v.networkState, readyState:v.readyState, currentSrc:v.currentSrc.slice(0,100) }; console.error("[GalleryPreview] PLAYBACK ERROR", details); const diagnostics={ fileName:file?.name ?? "inconnu", fileType:file?.type ?? "inconnu", fileSize:file?.size ?? 0, extension:file?.name?.split(".").pop()?.toLowerCase() ?? "inconnue", source:v.currentSrc.startsWith("blob:")?"blob":v.currentSrc.startsWith("data:")?"data":v.currentSrc?"autre":"vide", mp4Support:v.canPlayType("video/mp4"), quicktimeSupport:v.canPlayType("video/quicktime"), webmSupport:v.canPlayType("video/webm"), networkState:v.networkState, readyState:v.readyState, browserMessage:err?.message || "aucun détail fourni" }; setGalleryPreviewError(message+" (code "+code+") · "+JSON.stringify(diagnostics)); }} onClick={togglePlayback} />}
+        }} onLoadedData={(e) => { const v=e.currentTarget; console.info("[GalleryPreview] loadeddata", { name:file?.name, type:file?.type, size:file?.size, duration:v.duration, width:v.videoWidth, height:v.videoHeight, readyState:v.readyState, networkState:v.networkState }); setGalleryPreviewError(null); }} onCanPlay={(e) => { const v=e.currentTarget; console.info("[GalleryPreview] canplay", { readyState:v.readyState, duration:v.duration }); }} onError={(e) => { const v=e.currentTarget; const err=v.error; if (uploadSource === "gallery" && file && gallerySelectedFileRef.current === file && !galleryNormalizationPromiseRef.current) { void prepareGalleryCompatibility(file).catch(() => {}); } const code=err?.code ?? 0; const message=code===1?"Lecture interrompue":code===2?"Erreur réseau":code===3?"Codec ou format non décodable":code===4?"Source vidéo non prise en charge":"Erreur inconnue"; const details={ name:file?.name, type:file?.type, size:file?.size, code, message:err?.message || "", networkState:v.networkState, readyState:v.readyState, currentSrc:v.currentSrc.slice(0,100) }; console.error("[GalleryPreview] PLAYBACK ERROR", details); const diagnostics={ fileName:file?.name ?? "inconnu", fileType:file?.type ?? "inconnu", fileSize:file?.size ?? 0, extension:file?.name?.split(".").pop()?.toLowerCase() ?? "inconnue", source:v.currentSrc.startsWith("blob:")?"blob":v.currentSrc.startsWith("data:")?"data":v.currentSrc?"autre":"vide", mp4Support:v.canPlayType("video/mp4"), quicktimeSupport:v.canPlayType("video/quicktime"), webmSupport:v.canPlayType("video/webm"), networkState:v.networkState, readyState:v.readyState, browserMessage:err?.message || "aucun détail fourni" }; setGalleryPreviewError(message+" (code "+code+") · "+JSON.stringify(diagnostics)); }} onClick={togglePlayback} />}
         {galleryPreviewError && <div className="absolute z-40 top-3 left-3 right-3 rounded-lg border border-red-400 bg-red-950 p-3 text-sm text-white">Erreur de lecture : {galleryPreviewError}. Le fichier a été sélectionné, mais le lecteur ne parvient pas à le décoder.</div>}
         {visibleOverlays.map((item) => (
           <div key={item.id} onPointerDown={(event) => startDrag(event, item)} onClick={(event) => { event.stopPropagation(); setSelectedOverlayId(item.id); }} className={`absolute select-none font-bold text-center cursor-move ${selectedOverlayId === item.id ? "ring-2 ring-white/80 rounded-lg px-2 py-1" : ""}`} style={{ left: `${item.x}%`, top: `${item.y}%`, transform: "translate(-50%, -50%)", fontSize: item.size, color: item.color, textShadow: item.kind === "media" ? "none" : "0 2px 6px #000, 0 0 2px #000", whiteSpace: "pre-wrap", width: item.kind === "media" ? `${Math.min(85, Math.max(12, item.size))}%` : undefined, maxWidth: "85%", zIndex: 10, touchAction: "none" }}>
