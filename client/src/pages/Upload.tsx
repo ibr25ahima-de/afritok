@@ -625,42 +625,44 @@ export default function Upload() {
         if (normalized.size > 100 * 1024 * 1024) { toast.error("La vidéo ne doit pas dépasser 100 Mo"); return; }
 
         const toastId = "gallery-video-prepare";
+        let preparationStage = "envoi du fichier vers le stockage";
         try {
           toast.loading("Préparation de la vidéo pour le montage…", { id: toastId });
-          const ticketResponse = await fetch("/api/upload-video/sign", {
+
+          // Reuse the same authenticated, same-origin upload endpoint already
+          // used by the working camera publishing flow. This avoids a direct
+          // browser PUT to Supabase, which was failing before normalization.
+          const formData = new FormData();
+          formData.append("file", normalized, normalized.name);
+          const uploadResponse = await fetch("/api/upload-video", {
             method: "POST",
             credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ mimeType: normalized.type, fileSize: normalized.size }),
+            body: formData,
           });
-          const ticket = await ticketResponse.json().catch(() => ({}));
-          if (!ticketResponse.ok || !ticket.signedUrl || !ticket.videoUrl) {
-            throw new Error(ticket.error || "Impossible de préparer le fichier vidéo.");
+          const uploaded = await uploadResponse.json().catch(() => ({}));
+          if (!uploadResponse.ok || !uploaded.videoUrl) {
+            throw new Error(uploaded.error || "Le serveur n'a pas reçu la vidéo de la galerie.");
           }
 
-          const storageResponse = await fetch(ticket.signedUrl, {
-            method: "PUT",
-            headers: { "Content-Type": normalized.type },
-            body: normalized,
-          });
-          if (!storageResponse.ok) throw new Error("Le stockage a refusé la vidéo source.");
-
+          preparationStage = "conversion de compatibilité";
           const conversionResponse = await fetch("/api/upload-video/normalize-gallery", {
             method: "POST",
             credentials: "include",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ videoUrl: ticket.videoUrl }),
+            body: JSON.stringify({ videoUrl: uploaded.videoUrl }),
           });
           const conversion = await conversionResponse.json().catch(() => ({}));
           if (!conversionResponse.ok || !conversion.success) {
             throw new Error(conversion.error || "La conversion de compatibilité a échoué.");
           }
 
-          const playableResponse = await fetch(`${ticket.videoUrl}${ticket.videoUrl.includes("?") ? "&" : "?"}galleryPreview=${Date.now()}`, { cache: "no-store" });
+          preparationStage = "récupération de la vidéo convertie";
+          const playableUrl = conversion.videoUrl || uploaded.videoUrl;
+          const playableResponse = await fetch(`${playableUrl}${playableUrl.includes("?") ? "&" : "?"}galleryPreview=${Date.now()}`, { cache: "no-store" });
           if (!playableResponse.ok) throw new Error("Impossible de récupérer la vidéo convertie.");
           const playableBlob = await playableResponse.blob();
           if (!playableBlob.size) throw new Error("La vidéo convertie est vide.");
-          const compatibleName = selected.name.replace(/\.[^.]+$/, "") + ".mp4";
+          const compatibleName = selected.name.replace(/\\.[^.]+$/, "") + ".mp4";
           const compatibleFile = new File([playableBlob], compatibleName, { type: "video/mp4", lastModified: Date.now() });
 
           if (preview?.startsWith("blob:")) URL.revokeObjectURL(preview);
@@ -677,8 +679,9 @@ export default function Upload() {
           setOverlays([]);
           toast.success("Vidéo compatible prête pour le montage", { id: toastId });
         } catch (error) {
-          console.error("[GalleryPreview] preparation failed:", error);
-          toast.error(error instanceof Error ? error.message : "Impossible de préparer cette vidéo.", { id: toastId });
+          console.error("[GalleryPreview] preparation failed at stage:", preparationStage, error);
+          const detail = error instanceof Error ? error.message : "Erreur inconnue";
+          toast.error(`Échec pendant ${preparationStage} : ${detail}`, { id: toastId, duration: 12000 });
         }
       }} /><CameraRecorder onPickFromGallery={() => galleryInputRef.current?.click()} onOpenReaction={() => setShowReactionChoice(true)} onVideoRecorded={(blob, recordedDuration) => { if (blob.size < 1024) return toast.error("La vidéo enregistrée est vide. Réessaie."); const mimeType = blob.type || "video/mp4"; const recordedFile = new File([blob], `video${recordedVideoExtension(mimeType)}`, { type: mimeType }); setFile(recordedFile); setUploadSource("camera"); setStep("edit"); toast.success(`Vidéo prête pour le montage · ${recordedDuration}s`); }} onPhotoTaken={(blob) => { setFile(new File([blob], "photo.jpg", { type: "image/jpeg" })); setStep("edit"); }} onClose={() => navigate("/feed")} onOpenMusic={() => setShowAudio(true)} selectedMusic={selectedMusic} />{showAudio && <AudioSelector onClose={() => setShowAudio(false)} onSelectAudio={(url, name, id) => { setSelectedMusic({ url, name, id }); setShowAudio(false); }} />}</>;
   if (step === "edit") {
