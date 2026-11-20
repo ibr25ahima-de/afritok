@@ -85,13 +85,15 @@ app.post("/normalize-gallery", async (req, res) => {
   if (!safeTokenEquals(req.header("x-afritok-worker-token"))) {
     return res.status(401).json({ success: false, message: "Unauthorized" });
   }
-  const ip = req.ip || "unknown";
-  if (!allowRequest(ip)) {
-    return res.status(429).json({ success: false, message: "Too many requests." });
-  }
   const { userId, videoUrl } = req.body ?? {};
   if (!Number.isSafeInteger(userId) || userId <= 0 || !isSafeSourceUrl(videoUrl)) {
     return res.status(400).json({ success: false, message: "Invalid gallery normalization request." });
+  }
+  // Render proxies requests through shared internal IPs. Rate-limit gallery
+  // conversion by authenticated user ID, not req.ip, so one user's retries
+  // or another service behind the same proxy cannot block everyone.
+  if (!allowRequest(`gallery-user:${userId}`)) {
+    return res.status(429).json({ success: false, message: "Too many gallery conversions. Please retry shortly." });
   }
   try {
     const result = await normalizeGalleryVideo(videoUrl, userId);
