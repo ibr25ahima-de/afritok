@@ -240,8 +240,15 @@ async function startServer() {
       const result = await workerResponse.json().catch(() => ({}));
       if (!workerResponse.ok || !result.success) {
         console.error("[Gallery video normalization] Worker rejected request:", workerResponse.status, result);
-        return res.status(workerResponse.status === 401 ? 503 : 422).json({
-          error: result.message || "Impossible de convertir cette vidéo pour la lecture sur mobile.",
+        const status = workerResponse.status === 429
+          ? 429
+          : workerResponse.status === 401
+            ? 503
+            : 422;
+        return res.status(status).json({
+          error: result.message || (workerResponse.status === 429
+            ? "Trop de demandes de conversion rapprochées. Attends une minute avant de réessayer."
+            : "Impossible de convertir cette vidéo pour la lecture sur mobile."),
         });
       }
       return res.json({ success: true, videoUrl: result.videoUrl, size: result.size });
