@@ -663,12 +663,23 @@ export default function Upload() {
         // Show the editor immediately with the local file (no upload, no server
         // conversion, no re-download). If the browser turns out to be unable to
         // decode it, the <video> onError handler runs the conversion fallback.
+        // Copy the picked file into memory first. On Android WebViews a File
+        // returned by the gallery picker is lazily backed by the system content
+        // provider, and a blob: URL built from it can fail to decode. A local
+        // in-memory copy is fast (milliseconds to ~1 s) and plays reliably.
+        let localFile: File = normalized;
+        try {
+          const bytes = await normalized.arrayBuffer();
+          localFile = new File([bytes], normalized.name, { type: normalized.type, lastModified: Date.now() });
+        } catch (copyError) {
+          console.warn("[GalleryPreview] in-memory copy failed, using picker file", copyError);
+        }
         if (preview?.startsWith("blob:")) URL.revokeObjectURL(preview);
-        const galleryPreviewUrl = URL.createObjectURL(normalized);
-        previewAssignedForFileRef.current = normalized;
+        const galleryPreviewUrl = URL.createObjectURL(localFile);
+        previewAssignedForFileRef.current = localFile;
         galleryFallbackTriedRef.current = null;
         setPreview(galleryPreviewUrl);
-        setFile(normalized);
+        setFile(localFile);
         setUploadSource("gallery");
         setStep("edit");
         setDuration(0);
