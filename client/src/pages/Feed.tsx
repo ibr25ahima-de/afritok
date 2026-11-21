@@ -34,7 +34,9 @@ const INITIAL_LANE_STATE: FeedLaneState = { videos: [], offset: 0, hasMoreVideos
 export default function Feed() {
   const { isAuthenticated, user } = useAuth();
   const [, navigate] = useLocation();
-  const isAndroid = Capacitor.getPlatform() === "android";
+  // The Render-hosted app may run in Chrome on Android (Capacitor reports "web" there).
+  // Keep this feature enabled on Android devices in both browser and native app builds.
+  const isAndroid = Capacitor.getPlatform() === "android" || (typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent));
   const [activeLaneId, setActiveLaneId] = useState<FeedLaneId>("forYou");
   const [laneStates, setLaneStates] = useState<Record<FeedLaneId, FeedLaneState>>({ forYou: { ...INITIAL_LANE_STATE }, latest: { ...INITIAL_LANE_STATE } });
   const [laneSlideDirection, setLaneSlideDirection] = useState<"from-left" | "from-right" | null>(null);
