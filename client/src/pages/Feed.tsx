@@ -1,4 +1,5 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, type TouchEvent } from "react";
+import { Capacitor } from "@capacitor/core";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
@@ -19,13 +20,32 @@ interface Video {
 
 type Counters = { likes: number; comments: number; shares: number; favorites: number };
 
+type FeedLaneId = "forYou" | "latest";
+type FeedLane = { id: FeedLaneId; label: string; kind: "forYou" | "latest" };
+type FeedLaneState = { videos: Video[]; offset: number; hasMoreVideos: boolean; currentVideoIndex: number; isFetchingMore: boolean };
+
+// Future language/country lanes can be added here without changing swipe handling.
+const FEED_LANES: FeedLane[] = [
+  { id: "forYou", label: "Pour toi", kind: "forYou" },
+  { id: "latest", label: "Nouveautés", kind: "latest" },
+];
+const INITIAL_LANE_STATE: FeedLaneState = { videos: [], offset: 0, hasMoreVideos: true, currentVideoIndex: 0, isFetchingMore: false };
+
 export default function Feed() {
   const { isAuthenticated, user } = useAuth();
   const [, navigate] = useLocation();
-  const [offset, setOffset] = useState(0);
-  const { data: trpcVideos, isLoading: trpcLoading, isError: trpcError } = trpc.feed.getFeed.useQuery({ limit: 20, offset }, { keepPreviousData: true, staleTime: 5000 });
-  const [videos, setVideos] = useState<Video[]>([]);
-  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
+  const isAndroid = Capacitor.getPlatform() === "android";
+  const [activeLaneId, setActiveLaneId] = useState<FeedLaneId>("forYou");
+  const [laneStates, setLaneStates] = useState<Record<FeedLaneId, FeedLaneState>>({ forYou: { ...INITIAL_LANE_STATE }, latest: { ...INITIAL_LANE_STATE } });
+  const [laneSlideDirection, setLaneSlideDirection] = useState<"from-left" | "from-right" | null>(null);
+  const laneScrollPositions = useRef<Record<FeedLaneId, number>>({ forYou: 0, latest: 0 });
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const activeLane = FEED_LANES.find(lane => lane.id === activeLaneId)!;
+  const activeLaneState = laneStates[activeLaneId];
+  const { videos, offset, currentVideoIndex, hasMoreVideos, isFetchingMore } = activeLaneState;
+  const updateLane = (id: FeedLaneId, updater: (current: FeedLaneState) => FeedLaneState) => setLaneStates(prev => ({ ...prev, [id]: updater(prev[id]) }));
+  const setCurrentVideoIndex = (value: number | ((previous: number) => number)) => updateLane(activeLaneId, current => ({ ...current, currentVideoIndex: typeof value === "function" ? value(current.currentVideoIndex) : value }));
+  const { data: trpcVideos, isLoading: trpcLoading, isFetching: trpcFetching, isError: trpcError } = trpc.feed.getFeed.useQuery({ limit: 20, offset, kind: activeLane.kind }, { staleTime: 5000 });
   const [likedVideos, setLikedVideos] = useState<Set<number>>(new Set());
   const [favoritedVideos, setFavoritedVideos] = useState<Set<number>>(new Set());
   const [videoCounters, setVideoCounters] = useState<Record<number, Counters>>({});
@@ -34,8 +54,6 @@ export default function Feed() {
   const [showShare, setShowShare] = useState(false);
   const [showGiftSelector, setShowGiftSelector] = useState(false);
   const [selectedVideoId, setSelectedVideoId] = useState<number | null>(null);
-  const [isFetchingMore, setIsFetchingMore] = useState(false);
-  const [hasMoreVideos, setHasMoreVideos] = useState(true);
   const [loadedVideos, setLoadedVideos] = useState<Set<number>>(new Set());
   const viewedVideos = useRef(new Set<number>());
   const videoRefs = useRef<Record<number, HTMLVideoElement | null>>({});
@@ -52,13 +70,11 @@ export default function Feed() {
   );
 
   useEffect(() => {
-    if (!trpcVideos) return;
-    setHasMoreVideos(trpcVideos.length === 20);
-    setVideos(prev => {
-      if (offset === 0) return trpcVideos as Video[];
-      const next = [...prev];
-      trpcVideos.forEach(v => { if (!next.some(x => x.id === v.id)) next.push(v as Video); });
-      return next;
+    if (!trpcVideos || trpcFetching) return;
+    updateLane(activeLaneId, current => {
+      const nextVideos = offset === 0 ? trpcVideos as Video[] : [...current.videos];
+      if (offset !== 0) (trpcVideos as Video[]).forEach(video => { if (!nextVideos.some(existing => existing.id === video.id)) nextVideos.push(video); });
+      return { ...current, videos: nextVideos, hasMoreVideos: trpcVideos.length === 20, isFetchingMore: false };
     });
     setVideoCounters(prev => {
       const next = { ...prev };
@@ -67,8 +83,13 @@ export default function Feed() {
       });
       return next;
     });
-    setIsFetchingMore(false);
-  }, [trpcVideos, offset]);
+  }, [trpcVideos, trpcFetching, offset, activeLaneId]);
+
+  useEffect(() => {
+    if (trpcError && isFetchingMore) {
+      updateLane(activeLaneId, current => ({ ...current, offset: Math.max(0, current.offset - 20), isFetchingMore: false }));
+    }
+  }, [trpcError, activeLaneId, isFetchingMore]);
 
   useEffect(() => {
     if (!interactionsQuery.data) return;
@@ -87,7 +108,12 @@ export default function Feed() {
     }, { threshold: 0.6 });
     containerRef.current?.querySelectorAll(".video-item").forEach(el => observer.observe(el));
     return () => observer.disconnect();
-  }, [videos]);
+  }, [videos, activeLaneId]);
+
+  useEffect(() => {
+    const savedPosition = laneScrollPositions.current[activeLaneId] || 0;
+    if (containerRef.current) containerRef.current.scrollTop = savedPosition;
+  }, [activeLaneId]);
 
   useEffect(() => {
     videos.forEach((video, index) => {
@@ -157,11 +183,42 @@ export default function Feed() {
     return () => { window.clearInterval(timer); music.pause(); };
   }, [currentVideoIndex, videos, muted]);
 
+  const pauseLane = (id: FeedLaneId) => {
+    laneStates[id].videos.forEach(video => { videoRefs.current[video.id]?.pause(); audioRefs.current[video.id]?.pause(); });
+  };
+  const switchLane = (nextId: FeedLaneId, direction: "from-left" | "from-right") => {
+    if (!isAndroid || nextId === activeLaneId) return;
+    if (containerRef.current) laneScrollPositions.current[activeLaneId] = containerRef.current.scrollTop;
+    pauseLane(activeLaneId);
+    setLaneSlideDirection(direction);
+    setActiveLaneId(nextId);
+    window.setTimeout(() => setLaneSlideDirection(null), 260);
+  };
+  const handleTouchStart = (event: TouchEvent<HTMLDivElement>) => {
+    if (!isAndroid) return;
+    const target = event.target as HTMLElement;
+    if (target.closest("button, a, input, textarea, select, [role=button]")) { touchStart.current = null; return; }
+    const touch = event.touches[0];
+    touchStart.current = { x: touch.clientX, y: touch.clientY };
+  };
+  const handleTouchEnd = (event: TouchEvent<HTMLDivElement>) => {
+    if (!isAndroid || !touchStart.current) return;
+    const start = touchStart.current;
+    touchStart.current = null;
+    const touch = event.changedTouches[0];
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    if (Math.abs(dx) < 60 || Math.abs(dx) <= Math.abs(dy) * 1.5) return;
+    const index = FEED_LANES.findIndex(lane => lane.id === activeLaneId);
+    const next = dx < 0 ? Math.min(FEED_LANES.length - 1, index + 1) : Math.max(0, index - 1);
+    if (next !== index) switchLane(FEED_LANES[next].id, dx < 0 ? "from-right" : "from-left");
+  };
   const handleScroll = () => {
     if (!containerRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
+    laneScrollPositions.current[activeLaneId] = scrollTop;
     if (scrollHeight - scrollTop - clientHeight < 1000 && !isFetchingMore && hasMoreVideos && !trpcLoading && !trpcError) {
-      setIsFetchingMore(true); setOffset(prev => prev + 20);
+      updateLane(activeLaneId, current => ({ ...current, isFetchingMore: true, offset: current.offset + 20 }));
     }
   };
 
@@ -192,12 +249,17 @@ export default function Feed() {
   if (trpcLoading && videos.length === 0) return <div className="h-[100dvh] min-h-[100dvh] bg-black flex items-center justify-center"><Loader2 className="animate-spin text-amber-400" size={40} /></div>;
 
   return (
-    <div className="bg-black text-white h-[100dvh] min-h-[100dvh] overflow-hidden flex flex-col relative">
+    <div className="bg-black text-white h-[100dvh] min-h-[100dvh] overflow-hidden flex flex-col relative" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+      <style>{`@keyframes feedLaneSlideFromLeft { from { opacity: .72; transform: translateX(-22px); } to { opacity: 1; transform: translateX(0); } } @keyframes feedLaneSlideFromRight { from { opacity: .72; transform: translateX(22px); } to { opacity: 1; transform: translateX(0); } }`}</style>
       <header className="absolute top-0 left-0 right-0 z-50 bg-gradient-to-b from-black/80 to-transparent px-4 py-4 flex items-center justify-between pointer-events-none">
         <h1 className="text-2xl font-black text-amber-400 tracking-tighter pointer-events-auto">biYaloxi</h1>
         <div className="flex items-center gap-4 pointer-events-auto"><button className="p-2 bg-black/20 rounded-full backdrop-blur-sm"><SearchIcon size={22} /></button><button className="p-2 bg-black/20 rounded-full backdrop-blur-sm"><BellIcon size={22} /></button></div>
       </header>
+      {isAndroid && <div className="absolute top-[68px] left-1/2 -translate-x-1/2 z-[60] flex items-center gap-1 rounded-full border border-white/15 bg-black/65 p-1 backdrop-blur-md">
+        {FEED_LANES.map(lane => <button key={lane.id} type="button" aria-pressed={activeLaneId === lane.id} onClick={() => switchLane(lane.id, lane.id === "latest" ? "from-right" : "from-left")} className={"rounded-full px-4 py-2 text-xs font-bold transition-colors " + (activeLaneId === lane.id ? "bg-amber-400 text-black" : "text-white/75")}>{lane.label}</button>)}
+      </div>}
       <div ref={containerRef} onScroll={handleScroll} className="flex-1 min-h-0 overflow-y-auto snap-y snap-mandatory scrollbar-hide" style={{ scrollbarWidth: "none", msOverflowStyle: "none", touchAction: "pan-y", WebkitOverflowScrolling: "touch" }}>
+        <div key={activeLaneId} style={{ animation: laneSlideDirection === "from-left" ? "feedLaneSlideFromLeft 220ms ease-out" : laneSlideDirection === "from-right" ? "feedLaneSlideFromRight 220ms ease-out" : undefined }}>
         {trpcError && videos.length === 0 && <div className="h-full min-h-[100dvh] flex items-center justify-center px-8 text-center"><div><p className="text-amber-400 font-bold text-lg">Impossible de charger les vidéos</p><p className="text-gray-400 text-sm mt-2">Le fil principal n’a pas reçu les vidéos. Réessaie dans quelques secondes.</p></div></div>}
         {!trpcError && !trpcLoading && videos.length === 0 && <div className="h-full min-h-[100dvh] flex items-center justify-center px-8 text-center"><div><p className="text-white font-bold text-lg">Aucune vidéo dans le fil</p><p className="text-gray-400 text-sm mt-2">Les vidéos publiques apparaîtront ici.</p></div></div>}
         {videos.map((video, i) => {
@@ -276,6 +338,7 @@ export default function Feed() {
             <div className="absolute bottom-24 left-4 right-16 z-40"><h3 className="font-black text-lg text-amber-400 drop-shadow-md">@{video.user?.name || "Utilisateur"}</h3><p className="text-sm font-medium text-white line-clamp-2 mt-1 drop-shadow-sm">{video.description}</p><div className="mt-3 flex items-center gap-2"><div className="bg-amber-500/20 backdrop-blur-md border border-amber-500/30 px-3 py-1 rounded-full flex items-center gap-2"><div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" /><span className="text-[10px] font-black uppercase tracking-widest text-amber-200">Musique Originale</span></div></div></div>
           </div>;
         })}
+        </div>
       </div>
       <nav className="fixed inset-x-0 bottom-0 z-[200] min-h-[68px] bg-black/95 backdrop-blur-lg border-t border-white/20 px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2">
         <div className="mx-auto flex w-full max-w-md items-end justify-between gap-1">

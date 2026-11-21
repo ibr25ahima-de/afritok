@@ -13,8 +13,16 @@ export const feedRouter = router({
     .input(z.object({
       limit: z.number().int().min(1).max(MAX_FEED_LIMIT).default(20),
       offset: z.number().int().min(0).max(1000000).default(0),
+      kind: z.enum(["forYou", "latest"]).default("forYou"),
+      // Reserved for future language/country lanes; filtering is intentionally not active yet.
+      language: z.string().optional(),
+      countryCode: z.string().optional(),
     }))
     .query(async ({ input, ctx }) => {
+      if (input.kind === "latest") {
+        // Future language/country filters can be applied here without changing the lane API.
+        return getFeedVideos(input.limit, input.offset, ctx.user?.id ?? null);
+      }
       if (!ctx.user) return getFeedVideos(input.limit, input.offset, null);
       const engine = getRecommendationEngine();
       const ids = await engine.generatePersonalizedFeed(ctx.user.id, input.limit, input.offset);
